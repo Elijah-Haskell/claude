@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exam Countdown &amp; Study Hours Planner | Semester Toolkit</title>
+<meta name="description" content="Count the days until your exam and spread your study hours across the days you have left, skipping your days off.">
+<link rel="canonical" href="https://elijah-haskell.github.io/claude/study-planner/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Exam Countdown &amp; Study Hours Planner | Semester Toolkit">
+<meta property="og:description" content="Count the days until your exam and spread your study hours across the days you have left, skipping your days off.">
+<meta property="og:url" content="https://elijah-haskell.github.io/claude/study-planner/">
+<meta property="og:site_name" content="Semester Toolkit">
+<meta name="theme-color" content="#2f5bd3">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Exam Countdown & Study Planner", "url": "https://elijah-haskell.github.io/claude/study-planner/", "description": "Count the days until your exam and spread your study hours across the days you have left, skipping your days off.", "applicationCategory": "EducationalApplication", "operatingSystem": "Any", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
+</head>
+<body>
+<header class="site-header"><div class="wrap">
+  <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">ST</span>Semester Toolkit</a>
+  <nav class="site-nav" aria-label="Main"><a href="../#tools">All tools</a><a href="../about/">About</a></nav>
+</div></header>
+<main><div class="wrap">
+<div class="crumbs"><a href="../">Semester Toolkit</a> › Study</div>
+<h1>Exam Countdown &amp; Study Planner</h1>
+<p class="lede">Count the days until your exam and spread your study hours across the days you have left, skipping your days off.</p>
+<section class="card tool" id="sp-tool">
+  <div class="row">
+    <div class="field"><label for="sp-start">Start studying on</label><input type="date" id="sp-start"></div>
+    <div class="field"><label for="sp-exam">Exam date</label><input type="date" id="sp-exam"></div>
+    <div class="field"><label for="sp-hours">Total study hours needed</label><input type="number" id="sp-hours" min="0" step="0.5" inputmode="decimal" placeholder="e.g. 20"></div>
+  </div>
+  <fieldset style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin:0 0 6px">
+    <legend class="hint" style="padding:0 6px">Days off (no studying)</legend>
+    <div class="btn-group">
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="1"> Mon</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="2"> Tue</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="3"> Wed</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="4"> Thu</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="5"> Fri</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="6"> Sat</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="0"> Sun</label>
+    </div>
+  </fieldset>
+
+  <div class="result" aria-live="polite">
+    <div class="stats">
+      <div class="stat"><b id="sp-days">—</b><span>Days until exam</span></div>
+      <div class="stat"><b id="sp-study">—</b><span>Study days</span></div>
+      <div class="stat"><b id="sp-per">—</b><span>Study per day</span></div>
+    </div>
+    <p id="sp-note" class="hint" style="margin:10px 0 0"></p>
+  </div>
+
+  <h3>Your schedule</h3>
+  <table>
+    <thead><tr><th>#</th><th>Date</th><th>Study</th></tr></thead>
+    <tbody id="sp-table"></tbody>
+  </table>
+</section>
+
+<div class="prose">
+  <h2>How to use the study planner</h2>
+  <ol>
+    <li>Set the exam date. The start date defaults to today.</li>
+    <li>Estimate the total hours you need. A rough guide: add up the chapters or topics and give each a realistic amount of time.</li>
+    <li>Tick any days you won't study. The hours are spread evenly over the days that are left.</li>
+  </ol>
+  <p>The exam day itself isn't counted as a study day.</p>
+
+  <h2>Tips for spacing your studying</h2>
+  <ul>
+    <li><strong>Start early and spread it out.</strong> Several shorter sessions on different days usually beat one long cram session for remembering material.</li>
+    <li><strong>Test yourself.</strong> Practice questions and flashcards work better than re-reading notes.</li>
+    <li><strong>Leave a buffer.</strong> Plan to finish a day or two before the exam so a busy day doesn't sink the plan.</li>
+  </ul>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>Can I plan several exams at once?</dt>
+    <dd>Not yet — plan each one separately and add the daily hours together.</dd>
+    <dt>Is my plan saved?</dt>
+    <dd>Your exam date, hours and days off are saved in this browser only.</dd>
+  </dl>
+</div>
+
+<section class="related"><h2>More free tools</h2><ul><li><a href="../pomodoro-timer/">Pomodoro Study Timer</a> — Focus sessions and breaks with an alarm.</li><li><a href="../gpa-calculator/">GPA Calculator</a> — Semester and cumulative GPA on a 4.0 scale.</li><li><a href="../final-grade-calculator/">Final Grade Calculator</a> — The score you need on the final to hit your target grade.</li><li><a href="../weighted-grade-calculator/">Weighted Grade Calculator</a> — Your course grade from weighted categories.</li></ul></section>
+</div></main>
+<footer class="site-footer"><div class="wrap">
+  <a href="../about/">About</a><a href="../privacy/">Privacy</a><a href="../contact/">Contact</a>
+  <p style="margin:10px 0 0">© 2026 Semester Toolkit. Free tools that run in your browser.</p>
+</div></footer>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/study-planner.js"></script>
+</body>
+</html>

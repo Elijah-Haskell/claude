@@ -1,0 +1,59 @@
+<section class="card tool" id="sp-tool">
+  <div class="row">
+    <div class="field"><label for="sp-start">Start studying on</label><input type="date" id="sp-start"></div>
+    <div class="field"><label for="sp-exam">Exam date</label><input type="date" id="sp-exam"></div>
+    <div class="field"><label for="sp-hours">Total study hours needed</label><input type="number" id="sp-hours" min="0" step="0.5" inputmode="decimal" placeholder="e.g. 20"></div>
+  </div>
+  <fieldset style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin:0 0 6px">
+    <legend class="hint" style="padding:0 6px">Days off (no studying)</legend>
+    <div class="btn-group">
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="1"> Mon</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="2"> Tue</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="3"> Wed</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="4"> Thu</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="5"> Fri</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="6"> Sat</label>
+      <label style="font-weight:400"><input type="checkbox" name="sp-off" value="0"> Sun</label>
+    </div>
+  </fieldset>
+
+  <div class="result" aria-live="polite">
+    <div class="stats">
+      <div class="stat"><b id="sp-days">—</b><span>Days until exam</span></div>
+      <div class="stat"><b id="sp-study">—</b><span>Study days</span></div>
+      <div class="stat"><b id="sp-per">—</b><span>Study per day</span></div>
+    </div>
+    <p id="sp-note" class="hint" style="margin:10px 0 0"></p>
+  </div>
+
+  <h3>Your schedule</h3>
+  <table>
+    <thead><tr><th>#</th><th>Date</th><th>Study</th></tr></thead>
+    <tbody id="sp-table"></tbody>
+  </table>
+</section>
+
+<div class="prose">
+  <h2>How to use the study planner</h2>
+  <ol>
+    <li>Set the exam date. The start date defaults to today.</li>
+    <li>Estimate the total hours you need. A rough guide: add up the chapters or topics and give each a realistic amount of time.</li>
+    <li>Tick any days you won't study. The hours are spread evenly over the days that are left.</li>
+  </ol>
+  <p>The exam day itself isn't counted as a study day.</p>
+
+  <h2>Tips for spacing your studying</h2>
+  <ul>
+    <li><strong>Start early and spread it out.</strong> Several shorter sessions on different days usually beat one long cram session for remembering material.</li>
+    <li><strong>Test yourself.</strong> Practice questions and flashcards work better than re-reading notes.</li>
+    <li><strong>Leave a buffer.</strong> Plan to finish a day or two before the exam so a busy day doesn't sink the plan.</li>
+  </ul>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>Can I plan several exams at once?</dt>
+    <dd>Not yet — plan each one separately and add the daily hours together.</dd>
+    <dt>Is my plan saved?</dt>
+    <dd>Your exam date, hours and days off are saved in this browser only.</dd>
+  </dl>
+</div>

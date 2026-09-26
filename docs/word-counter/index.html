@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Word Counter with Reading &amp; Speaking Time | Semester Toolkit</title>
+<meta name="description" content="Count words, characters, sentences and paragraphs, and estimate reading and speaking time for essays and speeches.">
+<link rel="canonical" href="https://elijah-haskell.github.io/claude/word-counter/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Word Counter with Reading &amp; Speaking Time | Semester Toolkit">
+<meta property="og:description" content="Count words, characters, sentences and paragraphs, and estimate reading and speaking time for essays and speeches.">
+<meta property="og:url" content="https://elijah-haskell.github.io/claude/word-counter/">
+<meta property="og:site_name" content="Semester Toolkit">
+<meta name="theme-color" content="#2f5bd3">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Word Counter", "url": "https://elijah-haskell.github.io/claude/word-counter/", "description": "Count words, characters, sentences and paragraphs, and estimate reading and speaking time for essays and speeches.", "applicationCategory": "EducationalApplication", "operatingSystem": "Any", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
+</head>
+<body>
+<header class="site-header"><div class="wrap">
+  <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">ST</span>Semester Toolkit</a>
+  <nav class="site-nav" aria-label="Main"><a href="../#tools">All tools</a><a href="../about/">About</a></nav>
+</div></header>
+<main><div class="wrap">
+<div class="crumbs"><a href="../">Semester Toolkit</a> › Writing</div>
+<h1>Word Counter</h1>
+<p class="lede">Count words, characters, sentences and paragraphs, and estimate reading and speaking time for essays and speeches.</p>
+<section class="card tool" id="wc-tool">
+  <label for="wc-text">Paste or type your text</label>
+  <textarea id="wc-text" placeholder="Start typing or paste your essay here…"></textarea>
+  <div class="btn-group" style="margin-top:10px">
+    <button type="button" class="btn btn-quiet" id="wc-clear">Clear</button>
+  </div>
+
+  <div class="result" aria-live="polite">
+    <div class="stats">
+      <div class="stat"><b id="wc-words">0</b><span>Words</span></div>
+      <div class="stat"><b id="wc-chars">0</b><span>Characters</span></div>
+      <div class="stat"><b id="wc-chars-ns">0</b><span>Characters (no spaces)</span></div>
+      <div class="stat"><b id="wc-sent">0</b><span>Sentences</span></div>
+      <div class="stat"><b id="wc-para">0</b><span>Paragraphs</span></div>
+      <div class="stat"><b id="wc-read">0 sec</b><span>Reading time</span></div>
+      <div class="stat"><b id="wc-speak">0 sec</b><span>Speaking time</span></div>
+    </div>
+    <p style="margin:12px 0 0"><span class="result-label">Most repeated words:</span> <span id="wc-top">—</span></p>
+  </div>
+
+  <div class="row" style="margin-top:16px">
+    <div class="field">
+      <label for="wc-read-wpm">Reading speed <span class="hint">(words/min)</span></label>
+      <input type="number" id="wc-read-wpm" value="238" min="50" max="1000" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label for="wc-speak-wpm">Speaking speed <span class="hint">(words/min)</span></label>
+      <input type="number" id="wc-speak-wpm" value="140" min="50" max="400" inputmode="numeric">
+    </div>
+  </div>
+</section>
+
+<div class="prose">
+  <h2>What this word counter measures</h2>
+  <ul>
+    <li><strong>Words:</strong> anything separated by spaces that contains a letter or number, so stray dashes and symbols aren't counted.</li>
+    <li><strong>Characters:</strong> every character including spaces, and a second count without spaces — useful for applications with character limits.</li>
+    <li><strong>Sentences and paragraphs:</strong> sentences end in . ! or ?; paragraphs are separated by a blank line.</li>
+    <li><strong>Most repeated words:</strong> words of three or more letters you've used more than once (common words like “the” are skipped) — handy for spotting repetition in an essay.</li>
+  </ul>
+
+  <h2>How reading and speaking time are estimated</h2>
+  <p>Reading time uses 238 words per minute by default. That's the average silent reading rate for English non-fiction found in a review of 190 studies (Brysbaert, 2019, <em>Journal of Memory and Language</em>). Speaking time defaults to 140 words per minute, a steady presentation pace. Change either number to match how fast you read or talk.</p>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>Does my text get uploaded?</dt>
+    <dd>No. Counting happens entirely in your browser, and your text isn't saved.</dd>
+    <dt>Why is my count different from Word or Google Docs?</dt>
+    <dd>Tools treat hyphenated words, numbers and symbols slightly differently. The difference is usually a handful of words.</dd>
+  </dl>
+</div>
+
+<section class="related"><h2>More free tools</h2><ul><li><a href="../citation-generator/">Citation Generator</a> — APA 7 and MLA 9 citations for books, articles and websites.</li><li><a href="../gpa-calculator/">GPA Calculator</a> — Semester and cumulative GPA on a 4.0 scale.</li><li><a href="../final-grade-calculator/">Final Grade Calculator</a> — The score you need on the final to hit your target grade.</li><li><a href="../weighted-grade-calculator/">Weighted Grade Calculator</a> — Your course grade from weighted categories.</li></ul></section>
+</div></main>
+<footer class="site-footer"><div class="wrap">
+  <a href="../about/">About</a><a href="../privacy/">Privacy</a><a href="../contact/">Contact</a>
+  <p style="margin:10px 0 0">© 2026 Semester Toolkit. Free tools that run in your browser.</p>
+</div></footer>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/word-counter.js"></script>
+</body>
+</html>

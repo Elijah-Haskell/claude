@@ -1,0 +1,43 @@
+<section class="card tool" id="pt-tool">
+  <div class="timer-face" id="pt-face" role="timer" aria-live="off">25:00</div>
+  <div class="timer-phase"><span id="pt-phase">Focus</span> · <span id="pt-done">0</span> focus sessions done</div>
+  <div class="center">
+    <div class="btn-group">
+      <button type="button" class="btn btn-primary" id="pt-start" style="min-width:120px">Start</button>
+      <button type="button" class="btn" id="pt-skip">Skip</button>
+      <button type="button" class="btn btn-quiet" id="pt-reset">Reset</button>
+    </div>
+  </div>
+
+  <h3>Settings <span class="hint">(minutes)</span></h3>
+  <div class="row">
+    <div class="field"><label for="pt-focus">Focus</label><input type="number" id="pt-focus" value="25" min="1" max="180" inputmode="numeric"></div>
+    <div class="field"><label for="pt-short">Short break</label><input type="number" id="pt-short" value="5" min="1" max="60" inputmode="numeric"></div>
+    <div class="field"><label for="pt-long">Long break</label><input type="number" id="pt-long" value="15" min="1" max="120" inputmode="numeric"></div>
+    <div class="field"><label for="pt-every">Long break every</label><input type="number" id="pt-every" value="4" min="1" max="12" inputmode="numeric"></div>
+  </div>
+  <p class="hint" style="margin:0">Keep this tab open — the time also shows in the tab title, and a short alarm plays when a session ends.</p>
+</section>
+
+<div class="prose">
+  <h2>What is the Pomodoro Technique?</h2>
+  <p>The Pomodoro Technique is a time-management method created by Francesco Cirillo in the late 1980s. You work in short, focused blocks — traditionally 25 minutes — with a short break after each one and a longer break after every four. Knowing a break is coming makes it easier to start hard work and to ignore distractions until then.</p>
+
+  <h2>How to study with this timer</h2>
+  <ol>
+    <li>Pick one task — a problem set, a chapter, a draft section.</li>
+    <li>Press <strong>Start</strong> and work only on that task until the alarm.</li>
+    <li>Take the break. Stand up, get water, look away from the screen.</li>
+    <li>After four focus sessions, take the long break.</li>
+  </ol>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>Can I change the lengths?</dt>
+    <dd>Yes. Many students prefer 50-minute focus blocks with 10-minute breaks for deep work. Your settings are remembered in this browser.</dd>
+    <dt>Does the timer keep running in a background tab?</dt>
+    <dd>Yes. It tracks the actual end time, so it stays accurate even if your browser slows down background tabs.</dd>
+    <dt>I don't hear the alarm.</dt>
+    <dd>Browsers only allow sound after you've clicked on the page, and your device must not be muted.</dd>
+  </dl>
+</div>

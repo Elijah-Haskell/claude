@@ -1,0 +1,123 @@
+<section class="card tool" id="cite-tool">
+  <div class="tabs" role="tablist" aria-label="Source type">
+    <button type="button" role="tab" data-type="book" aria-selected="true">Book</button>
+    <button type="button" role="tab" data-type="journal" aria-selected="false">Journal article</button>
+    <button type="button" role="tab" data-type="web" aria-selected="false">Web page</button>
+  </div>
+
+  <div class="field" style="margin-bottom:14px">
+    <label for="c-authors">Author(s) <span class="hint">— one per line, like “Jane Q. Smith” or “Smith, Jane Q.”</span></label>
+    <textarea id="c-authors" data-f="authors" style="min-height:84px" placeholder="Jane Q. Smith&#10;Rahul Patel"></textarea>
+    <label style="font-weight:400;margin-top:6px"><input type="checkbox" data-f="isOrg"> The author is an organization (e.g. World Health Organization)</label>
+  </div>
+
+  <div class="field" style="margin-bottom:14px">
+    <label for="c-title">Title</label>
+    <input type="text" id="c-title" data-f="title" placeholder="Title of the book, article or page">
+    <p class="hint" style="margin:4px 0 0">APA uses sentence case (only the first word and proper nouns capitalized); MLA uses title case. Type the title the way your style needs it.</p>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label for="c-year">Year published</label>
+      <input type="text" id="c-year" data-f="year" inputmode="numeric" placeholder="2024">
+    </div>
+    <div class="field" data-types="web">
+      <label for="c-month">Month</label>
+      <select id="c-month" data-f="month">
+        <option value="">—</option>
+        <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+        <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+        <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+        <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+      </select>
+    </div>
+    <div class="field" data-types="web">
+      <label for="c-day">Day</label>
+      <input type="text" id="c-day" data-f="day" inputmode="numeric" placeholder="14">
+    </div>
+  </div>
+
+  <div class="row" data-types="book">
+    <div class="field">
+      <label for="c-publisher">Publisher</label>
+      <input type="text" id="c-publisher" data-f="publisher" placeholder="Penguin Books">
+    </div>
+  </div>
+
+  <div data-types="journal">
+    <div class="row">
+      <div class="field">
+        <label for="c-journal">Journal name</label>
+        <input type="text" id="c-journal" data-f="journal" placeholder="Journal of Applied Psychology">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="c-volume">Volume</label><input type="text" id="c-volume" data-f="volume" placeholder="12"></div>
+      <div class="field"><label for="c-issue">Issue</label><input type="text" id="c-issue" data-f="issue" placeholder="3"></div>
+      <div class="field"><label for="c-pages">Pages</label><input type="text" id="c-pages" data-f="pages" placeholder="45-67"></div>
+    </div>
+  </div>
+
+  <div class="row" data-types="web">
+    <div class="field">
+      <label for="c-site">Website name</label>
+      <input type="text" id="c-site" data-f="site" placeholder="BBC News">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="field" data-types="book journal">
+      <label for="c-doi">DOI <span class="hint">(if it has one)</span></label>
+      <input type="text" id="c-doi" data-f="doi" placeholder="10.1037/xyz0000123">
+    </div>
+    <div class="field">
+      <label for="c-url">URL</label>
+      <input type="url" id="c-url" data-f="url" placeholder="https://…">
+    </div>
+    <div class="field" data-types="web">
+      <label for="c-accessed">Date you accessed it <span class="hint">(MLA)</span></label>
+      <input type="date" id="c-accessed" data-f="accessed">
+    </div>
+  </div>
+
+  <div class="result" aria-live="polite">
+    <h3 style="margin-top:0">APA 7th edition</h3>
+    <div class="citation-out" id="cite-apa"></div>
+    <button type="button" class="btn" id="copy-apa">Copy APA</button>
+    <h3>MLA 9th edition</h3>
+    <div class="citation-out" id="cite-mla"></div>
+    <button type="button" class="btn" id="copy-mla">Copy MLA</button>
+  </div>
+</section>
+
+<div class="prose">
+  <h2>How to use the citation generator</h2>
+  <ol>
+    <li>Pick the source type: book, journal article or web page.</li>
+    <li>Fill in what you know. Leave blank anything the source doesn't have — for example, a web page with no date gets “n.d.” in APA.</li>
+    <li>Copy the citation. Italics are kept when you paste into Google Docs or Word.</li>
+  </ol>
+  <p>Nothing you type leaves your browser.</p>
+
+  <h2>APA vs. MLA at a glance</h2>
+  <table>
+    <thead><tr><th></th><th>APA 7</th><th>MLA 9</th></tr></thead>
+    <tbody>
+      <tr><td>Common in</td><td>Psychology, education, sciences</td><td>English, languages, humanities</td></tr>
+      <tr><td>Author names</td><td>Last name and initials</td><td>Full first name</td></tr>
+      <tr><td>Date position</td><td>Right after the author</td><td>Near the end</td></tr>
+      <tr><td>3+ authors</td><td>List up to 20</td><td>First author “et al.”</td></tr>
+    </tbody>
+  </table>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>Why do I need to fix capitalization myself?</dt>
+    <dd>Automatic case changes break proper nouns and acronyms (“NASA”, “Shakespeare”), so the generator keeps your title exactly as typed.</dd>
+    <dt>Should I include the DOI?</dt>
+    <dd>Yes, when a source has one. Both APA and MLA prefer a DOI over a URL; the generator formats it as https://doi.org/….</dd>
+    <dt>Is this always 100% correct?</dt>
+    <dd>It follows the published rules for these source types, but instructors sometimes have their own preferences. Check your assignment guidelines, especially for unusual sources.</dd>
+  </dl>
+</div>

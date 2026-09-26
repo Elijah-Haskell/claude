@@ -1,0 +1,54 @@
+<section class="card tool" id="fg-tool">
+  <div class="row">
+    <div class="field">
+      <label for="fg-current">Current grade (%)</label>
+      <input type="number" id="fg-current" inputmode="decimal" min="0" step="0.1" placeholder="e.g. 84">
+    </div>
+    <div class="field">
+      <label for="fg-weight">Final exam weight (%)</label>
+      <input type="number" id="fg-weight" inputmode="decimal" min="0" max="100" step="0.1" placeholder="e.g. 25">
+    </div>
+    <div class="field">
+      <label for="fg-target">Grade you want (%)</label>
+      <input type="number" id="fg-target" inputmode="decimal" min="0" step="0.1" placeholder="e.g. 90">
+    </div>
+  </div>
+
+  <div class="result" aria-live="polite">
+    <div class="result-label">You need on the final:</div>
+    <div class="result-big" id="fg-needed">—</div>
+    <div id="fg-note" class="hint"></div>
+  </div>
+
+  <h3>Score needed for each letter grade</h3>
+  <table>
+    <thead><tr><th>Course grade</th><th>Score needed on final</th></tr></thead>
+    <tbody id="fg-table"></tbody>
+  </table>
+</section>
+
+<div class="prose">
+  <h2>How to use it</h2>
+  <ol>
+    <li><strong>Current grade:</strong> your grade in the class right now, before the final. Most online gradebooks show this.</li>
+    <li><strong>Final exam weight:</strong> how much the final counts toward your course grade. Look for it in the syllabus.</li>
+    <li><strong>Grade you want:</strong> the overall course percentage you're aiming for.</li>
+  </ol>
+
+  <h2>The formula</h2>
+  <p>Your course grade after the final is a weighted mix of your current grade and your final exam score:</p>
+  <p><strong>Course grade = current × (1 − w) + final × w</strong>, where <em>w</em> is the final's weight as a decimal.</p>
+  <p>Solving for the final score gives:</p>
+  <p><strong>Final needed = (target − current × (1 − w)) ÷ w</strong></p>
+  <p>Example: with an 84% now, a final worth 25% and a target of 90%, you need (90 − 84 × 0.75) ÷ 0.25 = <strong>108%</strong> — out of reach without extra credit, but an 80% target only needs 68%.</p>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>What if the result is over 100%?</dt>
+    <dd>That target can't be reached with the final alone. Ask whether there's extra credit, or aim for the next grade down — the table shows every letter grade at once.</dd>
+    <dt>What if it's below 0%?</dt>
+    <dd>You'll reach that grade even with a zero on the final. (Still take it — many classes require it to pass.)</dd>
+    <dt>My class uses points, not percentages.</dt>
+    <dd>Divide the points you have by the points possible so far to get your current percentage, and use the final's share of total points as its weight.</dd>
+  </dl>
+</div>

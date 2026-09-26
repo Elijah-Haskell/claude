@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weighted Grade Calculator | Semester Toolkit</title>
+<meta name="description" content="Work out your course grade from weighted categories like homework, quizzes and exams. Handles weights that don&#x27;t add up to 100% yet.">
+<link rel="canonical" href="https://elijah-haskell.github.io/claude/weighted-grade-calculator/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Weighted Grade Calculator | Semester Toolkit">
+<meta property="og:description" content="Work out your course grade from weighted categories like homework, quizzes and exams. Handles weights that don&#x27;t add up to 100% yet.">
+<meta property="og:url" content="https://elijah-haskell.github.io/claude/weighted-grade-calculator/">
+<meta property="og:site_name" content="Semester Toolkit">
+<meta name="theme-color" content="#2f5bd3">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Weighted Grade Calculator", "url": "https://elijah-haskell.github.io/claude/weighted-grade-calculator/", "description": "Work out your course grade from weighted categories like homework, quizzes and exams. Handles weights that don't add up to 100% yet.", "applicationCategory": "EducationalApplication", "operatingSystem": "Any", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
+</head>
+<body>
+<header class="site-header"><div class="wrap">
+  <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">ST</span>Semester Toolkit</a>
+  <nav class="site-nav" aria-label="Main"><a href="../#tools">All tools</a><a href="../about/">About</a></nav>
+</div></header>
+<main><div class="wrap">
+<div class="crumbs"><a href="../">Semester Toolkit</a> › Grades</div>
+<h1>Weighted Grade Calculator</h1>
+<p class="lede">Work out your course grade from weighted categories like homework, quizzes and exams. Handles weights that don&#x27;t add up to 100% yet.</p>
+<section class="card tool" id="wg-tool">
+  <table class="rows-table" aria-label="Grade categories">
+    <thead>
+      <tr><th scope="col">Category</th><th scope="col">Weight (%)</th><th scope="col">Your score (%)</th><th scope="col"><span class="sr-only">Remove</span></th></tr>
+    </thead>
+    <tbody id="wg-rows"></tbody>
+  </table>
+  <div class="btn-group" style="margin-top:12px">
+    <button type="button" class="btn" id="wg-add">+ Add category</button>
+    <button type="button" class="btn btn-quiet" id="wg-reset">Reset</button>
+  </div>
+
+  <div class="result" aria-live="polite">
+    <div class="stats">
+      <div class="stat"><b id="wg-grade">—</b><span>Weighted grade</span></div>
+      <div class="stat"><b id="wg-letter">—</b><span>Letter grade</span></div>
+      <div class="stat"><b id="wg-weight">0%</b><span>Weight entered</span></div>
+    </div>
+    <p id="wg-note" class="hint" style="margin:10px 0 0"></p>
+  </div>
+</section>
+
+<div class="prose">
+  <h2>How to use it</h2>
+  <p>Add one row per category from your syllabus — for example Homework 20%, Quizzes 15%, Midterm 25%, Final 40% — and type your average score in each. Leave the score blank for categories you haven't been graded on yet.</p>
+
+  <h2>How a weighted grade is calculated</h2>
+  <p>Multiply each category's score by its weight, add them up, and divide by the total weight of the categories you've been graded in:</p>
+  <p><strong>Weighted grade = Σ (score × weight) ÷ Σ weight</strong></p>
+  <p>Dividing by the weight you've actually completed means the result is your grade <em>so far</em>. Once every category has a score and the weights total 100%, it's your final course grade.</p>
+
+  <h3>Letter grades</h3>
+  <p>The letter uses a common scale: A 93+, A− 90, B+ 87, B 83, B− 80, C+ 77, C 73, C− 70, D+ 67, D 63, D− 60, F below 60. Your instructor's cutoffs may differ.</p>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>My weights add up to more than 100%.</dt>
+    <dd>Double-check the syllabus — some classes list bonus categories separately. The calculator still divides by the total weight, so the result stays on a 0–100 scale.</dd>
+    <dt>My class uses points instead of weights.</dt>
+    <dd>Then every point counts equally: divide total points earned by total points possible. You don't need weights at all.</dd>
+  </dl>
+</div>
+
+<section class="related"><h2>More free tools</h2><ul><li><a href="../gpa-calculator/">GPA Calculator</a> — Semester and cumulative GPA on a 4.0 scale.</li><li><a href="../final-grade-calculator/">Final Grade Calculator</a> — The score you need on the final to hit your target grade.</li><li><a href="../citation-generator/">Citation Generator</a> — APA 7 and MLA 9 citations for books, articles and websites.</li><li><a href="../word-counter/">Word Counter</a> — Words, characters, reading and speaking time.</li></ul></section>
+</div></main>
+<footer class="site-footer"><div class="wrap">
+  <a href="../about/">About</a><a href="../privacy/">Privacy</a><a href="../contact/">Contact</a>
+  <p style="margin:10px 0 0">© 2026 Semester Toolkit. Free tools that run in your browser.</p>
+</div></footer>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/weighted-grade-calculator.js"></script>
+</body>
+</html>

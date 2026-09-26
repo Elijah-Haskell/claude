@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pomodoro Study Timer | Semester Toolkit</title>
+<meta name="description" content="A free Pomodoro timer for studying: focus sessions, short breaks and long breaks, with adjustable lengths and a sound when time is up.">
+<link rel="canonical" href="https://elijah-haskell.github.io/claude/pomodoro-timer/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Pomodoro Study Timer | Semester Toolkit">
+<meta property="og:description" content="A free Pomodoro timer for studying: focus sessions, short breaks and long breaks, with adjustable lengths and a sound when time is up.">
+<meta property="og:url" content="https://elijah-haskell.github.io/claude/pomodoro-timer/">
+<meta property="og:site_name" content="Semester Toolkit">
+<meta name="theme-color" content="#2f5bd3">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Pomodoro Study Timer", "url": "https://elijah-haskell.github.io/claude/pomodoro-timer/", "description": "A free Pomodoro timer for studying: focus sessions, short breaks and long breaks, with adjustable lengths and a sound when time is up.", "applicationCategory": "EducationalApplication", "operatingSystem": "Any", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
+</head>
+<body>
+<header class="site-header"><div class="wrap">
+  <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">ST</span>Semester Toolkit</a>
+  <nav class="site-nav" aria-label="Main"><a href="../#tools">All tools</a><a href="../about/">About</a></nav>
+</div></header>
+<main><div class="wrap">
+<div class="crumbs"><a href="../">Semester Toolkit</a> › Study</div>
+<h1>Pomodoro Study Timer</h1>
+<p class="lede">A free Pomodoro timer for studying: focus sessions, short breaks and long breaks, with adjustable lengths and a sound when time is up.</p>
+<section class="card tool" id="pt-tool">
+  <div class="timer-face" id="pt-face" role="timer" aria-live="off">25:00</div>
+  <div class="timer-phase"><span id="pt-phase">Focus</span> · <span id="pt-done">0</span> focus sessions done</div>
+  <div class="center">
+    <div class="btn-group">
+      <button type="button" class="btn btn-primary" id="pt-start" style="min-width:120px">Start</button>
+      <button type="button" class="btn" id="pt-skip">Skip</button>
+      <button type="button" class="btn btn-quiet" id="pt-reset">Reset</button>
+    </div>
+  </div>
+
+  <h3>Settings <span class="hint">(minutes)</span></h3>
+  <div class="row">
+    <div class="field"><label for="pt-focus">Focus</label><input type="number" id="pt-focus" value="25" min="1" max="180" inputmode="numeric"></div>
+    <div class="field"><label for="pt-short">Short break</label><input type="number" id="pt-short" value="5" min="1" max="60" inputmode="numeric"></div>
+    <div class="field"><label for="pt-long">Long break</label><input type="number" id="pt-long" value="15" min="1" max="120" inputmode="numeric"></div>
+    <div class="field"><label for="pt-every">Long break every</label><input type="number" id="pt-every" value="4" min="1" max="12" inputmode="numeric"></div>
+  </div>
+  <p class="hint" style="margin:0">Keep this tab open — the time also shows in the tab title, and a short alarm plays when a session ends.</p>
+</section>
+
+<div class="prose">
+  <h2>What is the Pomodoro Technique?</h2>
+  <p>The Pomodoro Technique is a time-management method created by Francesco Cirillo in the late 1980s. You work in short, focused blocks — traditionally 25 minutes — with a short break after each one and a longer break after every four. Knowing a break is coming makes it easier to start hard work and to ignore distractions until then.</p>
+
+  <h2>How to study with this timer</h2>
+  <ol>
+    <li>Pick one task — a problem set, a chapter, a draft section.</li>
+    <li>Press <strong>Start</strong> and work only on that task until the alarm.</li>
+    <li>Take the break. Stand up, get water, look away from the screen.</li>
+    <li>After four focus sessions, take the long break.</li>
+  </ol>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>Can I change the lengths?</dt>
+    <dd>Yes. Many students prefer 50-minute focus blocks with 10-minute breaks for deep work. Your settings are remembered in this browser.</dd>
+    <dt>Does the timer keep running in a background tab?</dt>
+    <dd>Yes. It tracks the actual end time, so it stays accurate even if your browser slows down background tabs.</dd>
+    <dt>I don't hear the alarm.</dt>
+    <dd>Browsers only allow sound after you've clicked on the page, and your device must not be muted.</dd>
+  </dl>
+</div>
+
+<section class="related"><h2>More free tools</h2><ul><li><a href="../study-planner/">Exam Countdown &amp; Study Planner</a> — Days until your exam and hours to study per day.</li><li><a href="../gpa-calculator/">GPA Calculator</a> — Semester and cumulative GPA on a 4.0 scale.</li><li><a href="../final-grade-calculator/">Final Grade Calculator</a> — The score you need on the final to hit your target grade.</li><li><a href="../weighted-grade-calculator/">Weighted Grade Calculator</a> — Your course grade from weighted categories.</li></ul></section>
+</div></main>
+<footer class="site-footer"><div class="wrap">
+  <a href="../about/">About</a><a href="../privacy/">Privacy</a><a href="../contact/">Contact</a>
+  <p style="margin:10px 0 0">© 2026 Semester Toolkit. Free tools that run in your browser.</p>
+</div></footer>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/pomodoro-timer.js"></script>
+</body>
+</html>

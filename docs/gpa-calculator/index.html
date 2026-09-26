@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPA Calculator (Semester &amp; Cumulative) | Semester Toolkit</title>
+<meta name="description" content="Calculate your semester GPA and cumulative GPA on a 4.0 scale. Add your courses, credits and letter grades — results update instantly.">
+<link rel="canonical" href="https://elijah-haskell.github.io/claude/gpa-calculator/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="GPA Calculator (Semester &amp; Cumulative) | Semester Toolkit">
+<meta property="og:description" content="Calculate your semester GPA and cumulative GPA on a 4.0 scale. Add your courses, credits and letter grades — results update instantly.">
+<meta property="og:url" content="https://elijah-haskell.github.io/claude/gpa-calculator/">
+<meta property="og:site_name" content="Semester Toolkit">
+<meta name="theme-color" content="#2f5bd3">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "GPA Calculator", "url": "https://elijah-haskell.github.io/claude/gpa-calculator/", "description": "Calculate your semester GPA and cumulative GPA on a 4.0 scale. Add your courses, credits and letter grades — results update instantly.", "applicationCategory": "EducationalApplication", "operatingSystem": "Any", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
+</head>
+<body>
+<header class="site-header"><div class="wrap">
+  <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">ST</span>Semester Toolkit</a>
+  <nav class="site-nav" aria-label="Main"><a href="../#tools">All tools</a><a href="../about/">About</a></nav>
+</div></header>
+<main><div class="wrap">
+<div class="crumbs"><a href="../">Semester Toolkit</a> › Grades</div>
+<h1>GPA Calculator</h1>
+<p class="lede">Calculate your semester GPA and cumulative GPA on a 4.0 scale. Add your courses, credits and letter grades — results update instantly.</p>
+<section class="card tool" id="gpa-tool">
+  <table class="rows-table" aria-label="Courses">
+    <thead>
+      <tr><th scope="col">Course <span class="hint">(optional)</span></th><th scope="col">Credits</th><th scope="col">Grade</th><th scope="col"><span class="sr-only">Remove</span></th></tr>
+    </thead>
+    <tbody id="gpa-rows"></tbody>
+  </table>
+  <div class="btn-group" style="margin-top:12px">
+    <button type="button" class="btn" id="gpa-add">+ Add course</button>
+    <button type="button" class="btn btn-quiet" id="gpa-reset">Reset</button>
+  </div>
+
+  <h3>Include past semesters <span class="hint">(optional, for cumulative GPA)</span></h3>
+  <div class="row">
+    <div class="field">
+      <label for="gpa-prior">Current cumulative GPA</label>
+      <input type="number" id="gpa-prior" inputmode="decimal" min="0" max="4.3" step="0.01" placeholder="e.g. 3.25">
+    </div>
+    <div class="field">
+      <label for="gpa-prior-credits">Credits already completed</label>
+      <input type="number" id="gpa-prior-credits" inputmode="decimal" min="0" step="0.5" placeholder="e.g. 45">
+    </div>
+  </div>
+
+  <div class="result" aria-live="polite">
+    <div class="stats">
+      <div class="stat"><b id="gpa-sem">—</b><span>Semester GPA</span></div>
+      <div class="stat"><b id="gpa-cum">—</b><span>Cumulative GPA</span></div>
+      <div class="stat"><b id="gpa-credits">0</b><span>Credits this semester</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="prose">
+  <h2>How to use the GPA calculator</h2>
+  <ol>
+    <li>Enter each course's credit hours and the letter grade you earned (or expect).</li>
+    <li>Your semester GPA updates as you type.</li>
+    <li>To see your cumulative GPA, add your current GPA and how many credits you've already completed.</li>
+  </ol>
+  <p>Your courses are saved in this browser only, so they'll still be here if you come back.</p>
+
+  <h2>How GPA is calculated</h2>
+  <p>Each letter grade is worth a number of grade points. Multiply each course's grade points by its credits, add those up, then divide by the total credits:</p>
+  <p><strong>GPA = Σ (grade points × credits) ÷ Σ credits</strong></p>
+  <p>Cumulative GPA works the same way, combining the grade points from your past credits (current GPA × credits completed) with this semester's.</p>
+
+  <h3>Grade point scale used</h3>
+  <table>
+    <thead><tr><th>Letter</th><th>Points</th><th>Letter</th><th>Points</th></tr></thead>
+    <tbody>
+      <tr><td>A+ / A</td><td>4.0</td><td>C</td><td>2.0</td></tr>
+      <tr><td>A−</td><td>3.7</td><td>C−</td><td>1.7</td></tr>
+      <tr><td>B+</td><td>3.3</td><td>D+</td><td>1.3</td></tr>
+      <tr><td>B</td><td>3.0</td><td>D</td><td>1.0</td></tr>
+      <tr><td>B−</td><td>2.7</td><td>D−</td><td>0.7</td></tr>
+      <tr><td>C+</td><td>2.3</td><td>F</td><td>0.0</td></tr>
+    </tbody>
+  </table>
+  <p class="hint">This is the most common U.S. 4.0 scale. Some schools count an A+ as 4.3 or don't use minus grades — check your school's catalog if your numbers look different from your transcript.</p>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>Do pass/fail courses count?</dt>
+    <dd>Usually not. Pass/fail (or credit/no-credit) courses earn credits but no grade points at most schools, so leave them out.</dd>
+    <dt>What about retaken courses?</dt>
+    <dd>Policies differ. Many schools replace the old grade with the new one; others average both. Enter only the grades your school counts.</dd>
+    <dt>Is a weighted (5.0) high-school GPA supported?</dt>
+    <dd>Not yet — this calculator uses the unweighted 4.0 scale.</dd>
+  </dl>
+</div>
+
+<section class="related"><h2>More free tools</h2><ul><li><a href="../final-grade-calculator/">Final Grade Calculator</a> — The score you need on the final to hit your target grade.</li><li><a href="../weighted-grade-calculator/">Weighted Grade Calculator</a> — Your course grade from weighted categories.</li><li><a href="../citation-generator/">Citation Generator</a> — APA 7 and MLA 9 citations for books, articles and websites.</li><li><a href="../word-counter/">Word Counter</a> — Words, characters, reading and speaking time.</li></ul></section>
+</div></main>
+<footer class="site-footer"><div class="wrap">
+  <a href="../about/">About</a><a href="../privacy/">Privacy</a><a href="../contact/">Contact</a>
+  <p style="margin:10px 0 0">© 2026 Semester Toolkit. Free tools that run in your browser.</p>
+</div></footer>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/gpa-calculator.js"></script>
+</body>
+</html>

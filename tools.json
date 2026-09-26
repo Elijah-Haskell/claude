@@ -1,0 +1,74 @@
+[
+  {
+    "slug": "gpa-calculator",
+    "title": "GPA Calculator (Semester & Cumulative)",
+    "h1": "GPA Calculator",
+    "description": "Calculate your semester GPA and cumulative GPA on a 4.0 scale. Add your courses, credits and letter grades — results update instantly.",
+    "blurb": "Semester and cumulative GPA on a 4.0 scale.",
+    "category": "Grades",
+    "added": "2026-09-26"
+  },
+  {
+    "slug": "final-grade-calculator",
+    "title": "Final Grade Calculator — What Do I Need on My Final?",
+    "h1": "Final Grade Calculator",
+    "description": "Find out exactly what score you need on your final exam to reach the course grade you want, based on your current grade and the final's weight.",
+    "blurb": "The score you need on the final to hit your target grade.",
+    "category": "Grades",
+    "added": "2026-09-26"
+  },
+  {
+    "slug": "weighted-grade-calculator",
+    "title": "Weighted Grade Calculator",
+    "h1": "Weighted Grade Calculator",
+    "description": "Work out your course grade from weighted categories like homework, quizzes and exams. Handles weights that don't add up to 100% yet.",
+    "blurb": "Your course grade from weighted categories.",
+    "category": "Grades",
+    "added": "2026-09-26"
+  },
+  {
+    "slug": "citation-generator",
+    "title": "APA & MLA Citation Generator (Books, Articles, Websites)",
+    "h1": "Citation Generator",
+    "description": "Create APA 7th edition and MLA 9th edition citations for books, journal articles and web pages. Copy with italics intact.",
+    "blurb": "APA 7 and MLA 9 citations for books, articles and websites.",
+    "category": "Writing",
+    "added": "2026-09-26"
+  },
+  {
+    "slug": "word-counter",
+    "title": "Word Counter with Reading & Speaking Time",
+    "h1": "Word Counter",
+    "description": "Count words, characters, sentences and paragraphs, and estimate reading and speaking time for essays and speeches.",
+    "blurb": "Words, characters, reading and speaking time.",
+    "category": "Writing",
+    "added": "2026-09-26"
+  },
+  {
+    "slug": "pomodoro-timer",
+    "title": "Pomodoro Study Timer",
+    "h1": "Pomodoro Study Timer",
+    "description": "A free Pomodoro timer for studying: focus sessions, short breaks and long breaks, with adjustable lengths and a sound when time is up.",
+    "blurb": "Focus sessions and breaks with an alarm.",
+    "category": "Study",
+    "added": "2026-09-26"
+  },
+  {
+    "slug": "study-planner",
+    "title": "Exam Countdown & Study Hours Planner",
+    "h1": "Exam Countdown & Study Planner",
+    "description": "Count the days until your exam and spread your study hours across the days you have left, skipping your days off.",
+    "blurb": "Days until your exam and hours to study per day.",
+    "category": "Study",
+    "added": "2026-09-26"
+  },
+  {
+    "slug": "percentage-calculator",
+    "title": "Percentage Calculator",
+    "h1": "Percentage Calculator",
+    "description": "Three percentage calculators in one: X% of Y, X is what percent of Y, and percentage increase or decrease.",
+    "blurb": "Percent of, percent change and more.",
+    "category": "Math",
+    "added": "2026-09-26"
+  }
+]

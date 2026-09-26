@@ -1,0 +1,46 @@
+<section class="card tool" id="pc-tool">
+  <h3 style="margin-top:0">What is X% of Y?</h3>
+  <div class="row">
+    <div class="field"><label for="pc-a-p">Percent (%)</label><input type="number" id="pc-a-p" inputmode="decimal" step="any" placeholder="15"></div>
+    <div class="field"><label for="pc-a-y">of</label><input type="number" id="pc-a-y" inputmode="decimal" step="any" placeholder="80"></div>
+  </div>
+  <div class="result" aria-live="polite" style="margin-top:0"><span class="result-label">Answer: </span><b id="pc-a-out">—</b></div>
+
+  <h3>X is what percent of Y?</h3>
+  <div class="row">
+    <div class="field"><label for="pc-b-x">Value</label><input type="number" id="pc-b-x" inputmode="decimal" step="any" placeholder="42"></div>
+    <div class="field"><label for="pc-b-y">is what % of</label><input type="number" id="pc-b-y" inputmode="decimal" step="any" placeholder="50"></div>
+  </div>
+  <div class="result" aria-live="polite" style="margin-top:0"><span class="result-label">Answer: </span><b id="pc-b-out">—</b></div>
+
+  <h3>Percentage change from X to Y</h3>
+  <div class="row">
+    <div class="field"><label for="pc-c-from">From</label><input type="number" id="pc-c-from" inputmode="decimal" step="any" placeholder="40"></div>
+    <div class="field"><label for="pc-c-to">To</label><input type="number" id="pc-c-to" inputmode="decimal" step="any" placeholder="50"></div>
+  </div>
+  <div class="result" aria-live="polite" style="margin-top:0"><span class="result-label">Answer: </span><b id="pc-c-out">—</b></div>
+</section>
+
+<div class="prose">
+  <h2>The formulas</h2>
+  <ul>
+    <li><strong>X% of Y</strong> = X ÷ 100 × Y. Example: 15% of 80 = 0.15 × 80 = 12.</li>
+    <li><strong>X is what percent of Y</strong> = X ÷ Y × 100. Example: 42 out of 50 = 84%.</li>
+    <li><strong>Percentage change</strong> = (new − old) ÷ |old| × 100. Example: 40 → 50 is a 25% increase; 50 → 40 is a 20% decrease.</li>
+  </ul>
+
+  <h2>Common uses for students</h2>
+  <ul>
+    <li>Turn a test score into a percentage: points earned is what percent of points possible.</li>
+    <li>Work out a discount or tip: X% of the price.</li>
+    <li>Compare data in a lab report or assignment: percentage change between two measurements.</li>
+  </ul>
+
+  <h2>FAQ</h2>
+  <dl class="faq">
+    <dt>Why isn't a 25% increase undone by a 25% decrease?</dt>
+    <dd>Because the second percentage is taken from a different starting number. 40 → 50 is +25%, but 50 → 40 is only −20% of 50.</dd>
+    <dt>What's the difference between percent and percentage points?</dt>
+    <dd>Going from 10% to 12% is a 2 percentage-point rise, but a 20% increase in the rate itself.</dd>
+  </dl>
+</div>
