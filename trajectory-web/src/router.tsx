@@ -1,6 +1,7 @@
 // A small hash router: the app is one page, served from any static host, and every screen has a link
 // (#/today, #/week, #/tasks, #/study, #/classes, #/exam/<key>, #/activities, #/settings, #/syllabus, #/exam-prep,
-// #/exam-prep/<id>, #/imports, #/welcome). `useRoute` reads it; `navigate` changes it; `back` goes back when the app
+// #/exam-prep/<id>, #/imports, #/welcome, #/ai, #/study-guides[/<id>], #/practice[-exam/<id>], #/test-review, #/course-feeds,
+// #/calendars, #/reminders, #/semester-calendar, #/paywall, #/delete-account, #/privacy-policy). `useRoute` reads it; `navigate` changes it; `back` goes back when the app
 // opened the previous page, otherwise to the tab the page belongs to.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -30,11 +31,22 @@ export function litTabFor(name: string): TabName | null {
       return name;
     case "exam":
     case "exam-prep":
+    case "study-guides":
+    case "study-guide":
+    case "practice":
+    case "practice-exam":
+    case "test-review":
       return "study";
     case "activities":
     case "settings":
     case "imports":
     case "syllabus":
+    case "course-feeds":
+    case "calendars":
+    case "reminders":
+    case "semester-calendar":
+    case "delete-account":
+    case "privacy-policy":
       return "classes";
     default:
       return null;

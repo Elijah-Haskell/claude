@@ -1,28 +1,34 @@
 // Settings: one page, opened from the gear on Classes. What makes the plan fit real life comes first (sleep hours,
-// work and activities, how much study a day), then what keeps the plan with you (the calendar file, a backup of the
-// plan, the AI reader's key), then the app. Each row says its state at its right end. "Reset semester" asks first,
-// on the page. Everything lives in this browser: there is no account.
+// work and activities, how much study a day), then what keeps dates current (a course site's link, the calendar
+// file), then the account and the app. Each row says its state at its right end. The account row leads to Sign out
+// and Delete account; "Reset semester" asks first, on the page.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { ACCOUNT_COPY } from "../engine/account-copy";
 import { sleepHoursLabel } from "../engine/classes-view";
 import { clampSleepTarget, formatSleepDuration, sleepWindowWarning } from "../engine/sleep-window";
 import type { UserPreferences } from "../engine/types";
-import { localDateKey } from "../engine/utils";
+import { formatDuration, localDateKey } from "../engine/utils";
 import { studyLoadCaps } from "../engine/workload-analysis";
-import { formatDuration } from "../engine/utils";
+import { SUPPORT_EMAIL, WEBSITE_SUPPORT_URL, WEBSITE_TERMS_URL } from "../shared/const";
+import { PlanSavedRow } from "../components/plan-sync";
 import { UndoReplanBar } from "../components/plan-status";
+import { ProStatusRow } from "../components/pro-status-row";
+import { APP_VERSION } from "../lib/config";
 import { buildPlanIcs, downloadTextFile } from "../lib/ics-export";
-import { DEFAULT_AI_MODEL } from "../lib/ai-types";
+import { loadCourseFeeds, subscribeCourseFeeds } from "../lib/lms-feed-store";
 import { goBack, useNavigate } from "../router";
 import { useApp } from "../state/app-provider";
-import { PREF_KEYS, useLocalPref } from "../state/local-prefs";
+import { useAuth } from "../state/auth";
+import { usePlanSync } from "../state/plan-sync-client";
+import { useSignOut } from "../state/use-sign-out";
 import { Icon } from "../ui/icon";
 import { FieldGroup, FieldLabel, FieldPickRow, FieldRow, HeaderIconButton, InlineConfirm, Note, PrimaryButton, SectionLabel, Segmented, Stepper, TimeInput } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
 import { useColors, useTheme } from "../ui/theme";
 
-type Open = "sleep" | "study" | "ai" | "help" | null;
+type Open = "sleep" | "study" | "account" | "help" | null;
 
 const INTENSITY_OPTIONS: { value: string; label: string; ariaLabel: string }[] = [
   { value: "25", label: "Light", ariaLabel: "Light: about 4 hours of study a day at most" },
@@ -30,20 +36,39 @@ const INTENSITY_OPTIONS: { value: string; label: string; ariaLabel: string }[] =
   { value: "75", label: "Full", ariaLabel: "Full: about 6 hours of study a day at most" },
 ];
 
+/** mailto: link for "Contact support". */
+function supportMailto(): string {
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Trajectory support")}&body=${encodeURIComponent(`\n\n---\nTrajectory ${APP_VERSION}`)}`;
+}
+
 export function SettingsScreen() {
   const colors = useColors();
   const navigate = useNavigate();
   const { state, dispatch, exportState, importState, flush } = useApp();
   const { scheme, setScheme } = useTheme();
   const isDark = scheme === "dark";
+  const { user: authUser, isAuthenticated, loading: authLoading } = useAuth();
+  // "Sign out?", then the plan is saved to the account one last time and removed from this browser (src/state/use-sign-out.ts).
+  const signOut = useSignOut();
+  // The saved plan's row is only there once the saved plan has started (<PlanSavedRow /> shows nothing while "off").
+  const showSavedPlan = usePlanSync().phase !== "off" && isAuthenticated && !authLoading;
+
   const [open, setOpen] = useState<Open>(null);
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [importNote, setImportNote] = useState<{ tone: "green" | "red"; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const [apiKey, setApiKey] = useLocalPref(PREF_KEYS.geminiKey);
-  const [aiModel, setAiModel] = useLocalPref(PREF_KEYS.aiModel);
-  const [keyDraft, setKeyDraft] = useState(apiKey ?? "");
-  const [modelDraft, setModelDraft] = useState(aiModel ?? DEFAULT_AI_MODEL);
+  const [feedCount, setFeedCount] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void loadCourseFeeds().then((feeds) => {
+      if (active) setFeedCount(feeds.feeds.length);
+    });
+    const off = subscribeCourseFeeds((feeds) => setFeedCount(feeds.feeds.length));
+    return () => {
+      active = false;
+      off();
+    };
+  }, []);
 
   function resetSemester() {
     dispatch({ type: "RESET_SEMESTER" });
@@ -84,14 +109,16 @@ export function SettingsScreen() {
       })
       .catch(() => setImportNote({ tone: "red", text: "That file could not be read. Nothing changed." }));
   }
-  function saveKey() {
-    const trimmed = keyDraft.trim();
-    setApiKey(trimmed ? trimmed : null);
-    setAiModel(modelDraft.trim() && modelDraft.trim() !== DEFAULT_AI_MODEL ? modelDraft.trim() : null);
+
+  /** Close an open sheet, then run the action once it is gone. */
+  function after(action: () => void) {
     setOpen(null);
+    setTimeout(action, 150);
   }
 
   const activities = state.recurringEvents.length === 0 ? "None" : String(state.recurringEvents.length);
+  const feeds = feedCount === 0 ? "None" : feedCount === 1 ? "1 link" : `${feedCount} links`;
+  const reminders = state.notificationSettings?.enabled ? "On" : "Off";
 
   return (
     <div className="screen">
@@ -112,9 +139,11 @@ export function SettingsScreen() {
       </section>
 
       <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <SectionLabel title="Your plan, elsewhere" />
+        <SectionLabel title="Keep dates current" />
         <FieldGroup>
-          <FieldPickRow first icon="calSync" label="Calendar file" detail="Every class, session and deadline as an .ics file for Google, Apple or Outlook" value="Download" chevron={false} onPress={exportCalendar} ariaLabel="Download the plan as a calendar file" />
+          <FieldPickRow first icon="link" label="Course site link" detail="Canvas, Blackboard or Moodle" value={feeds} onPress={() => navigate("course-feeds")} />
+          {state.googleCalendarConnected ? <FieldPickRow icon="calSync" label="Google Calendar" detail="Connected. Sync or disconnect" onPress={() => navigate("calendars")} /> : null}
+          <FieldPickRow icon="cal" label="Calendar file" detail="Every class, session and deadline as an .ics file for Google, Apple or Outlook" value="Download" chevron={false} onPress={exportCalendar} ariaLabel="Download the plan as a calendar file" />
           <FieldPickRow icon="download" label="Back up this plan" detail="A file you can bring back here or on another computer" value="Save" chevron={false} onPress={exportBackup} ariaLabel="Save a backup file of the plan" />
           <FieldPickRow icon="upload" label="Restore a backup" detail="Replaces what is here with the file's plan" value="Open" chevron={false} onPress={() => fileInput.current?.click()} ariaLabel="Restore the plan from a backup file" />
           <input ref={fileInput} type="file" accept="application/json,.json" style={{ display: "none" }} aria-hidden onChange={(e) => { importBackup(e.target.files?.[0]); e.target.value = ""; }} />
@@ -123,10 +152,19 @@ export function SettingsScreen() {
       </section>
 
       <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <SectionLabel title="App" />
+        <SectionLabel title="Account and app" />
         <FieldGroup>
-          <FieldPickRow first icon="spark" label="AI syllabus reader" detail={apiKey ? "Your own Gemini key reads syllabi. It stays in this browser" : "Optional: your own Gemini API key reads messy syllabi"} value={apiKey ? "On" : "Off"} tone="violet" onPress={() => { setKeyDraft(apiKey ?? ""); setModelDraft(aiModel ?? DEFAULT_AI_MODEL); setOpen("ai"); }} />
+          {/* "Your plan · Saved to your account · 2 min ago", or what stops it from being saved (tap to try again) */}
+          {showSavedPlan ? <PlanSavedRow first /> : null}
+          {authLoading ? null : isAuthenticated ? (
+            <FieldPickRow first={!showSavedPlan} icon="user" label={ACCOUNT_COPY.signedIn} detail={authUser?.email || ACCOUNT_COPY.signedInDetail} onPress={() => setOpen("account")} ariaLabel={`${ACCOUNT_COPY.signedIn}. ${ACCOUNT_COPY.signedInDetail} Sign out or delete the account`} />
+          ) : (
+            <FieldRow first icon="user" label={ACCOUNT_COPY.notSignedIn} detail="Browser preview: the plan stays in this browser." />
+          )}
+          <FieldPickRow first={authLoading} icon="bell" label="Reminders" value={reminders} onPress={() => navigate("reminders")} />
           <FieldPickRow icon={isDark ? "moon" : "sun"} label="Appearance" value={isDark ? "Dark" : "Light"} chevron={false} onPress={() => setScheme(isDark ? "light" : "dark")} ariaLabel={isDark ? "Appearance: dark. Switch to light" : "Appearance: light. Switch to dark"} />
+          {/* What the student really has (a subscription, a School Year pass, the Degree Pass) or the free plan. Left out while that is still loading. */}
+          <ProStatusRow onOpenPaywall={() => navigate("paywall")} />
           <FieldPickRow icon="info" label="Help and privacy" onPress={() => setOpen("help")} />
         </FieldGroup>
       </section>
@@ -139,7 +177,7 @@ export function SettingsScreen() {
       ) : (
         <button type="button" className="link" onClick={() => setConfirmingReset(true)} aria-label="Reset semester" style={{ minHeight: 44, alignSelf: "center", padding: "0 12px", fontSize: 15, fontWeight: 600, color: colors.error }}>Reset semester</button>
       )}
-      <p className="caption mono" style={{ textAlign: "center", letterSpacing: 0.6, fontSize: 12 }}>Trajectory for the web · your plan stays in this browser</p>
+      <p className="caption mono" style={{ textAlign: "center", letterSpacing: 0.6, fontSize: 12 }}>Trajectory {APP_VERSION}</p>
 
       {/* What the sheets changed re-planned the semester: the bar that says so, with its Undo */}
       <UndoReplanBar variant="row" />
@@ -202,33 +240,29 @@ export function SettingsScreen() {
         </SheetBody>
       </Sheet>
 
-      {/* The AI reader's key: optional, the student's own, kept in this browser only */}
-      <Sheet open={open === "ai"} onClose={() => setOpen(null)} ariaLabel="AI syllabus reader">
+      {/* The account: that the plan is saved to it, Sign out, Delete */}
+      <Sheet open={open === "account"} onClose={() => setOpen(null)} ariaLabel={ACCOUNT_COPY.signedIn}>
         <SheetBody>
-          <SheetHead eyebrow="Optional" eyebrowColor={colors.violet} title="AI syllabus reader" onClose={() => setOpen(null)} />
-          <p className="sheet-sub" style={{ marginTop: -8 }}>Without a key, Trajectory finds dated items in a pasted syllabus itself. With your own Gemini API key (free from Google AI Studio), Gemini reads the whole document: the class, when it meets, the term and every deadline, including ones written as "Week 6".</p>
-          <div>
-            <FieldLabel>Gemini API key</FieldLabel>
-            <input className="input" type="password" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} placeholder="AIza…" autoComplete="off" aria-label="Gemini API key" />
-          </div>
-          <div>
-            <FieldLabel>Model</FieldLabel>
-            <input className="input mono" value={modelDraft} onChange={(e) => setModelDraft(e.target.value)} placeholder={DEFAULT_AI_MODEL} autoComplete="off" aria-label="Model id" style={{ fontSize: 14 }} />
-          </div>
-          <Note tone="plain" icon="shield">The key is stored in this browser only and sent straight to Google when you import a syllabus. Nothing goes through a Trajectory server. Gemini Flash has a free tier; beyond it an import costs a fraction of a cent on your account.</Note>
-          <PrimaryButton size="lg" fullWidth label={keyDraft.trim() ? "Save key" : apiKey ? "Remove key" : "Done"} onPress={saveKey} />
+          <SheetHead title={ACCOUNT_COPY.signedIn} onClose={() => setOpen(null)} />
+          {authUser?.email ? <p className="sheet-sub" style={{ marginTop: -8 }}>{authUser.email}</p> : null}
+          <p className="sheet-sub" style={{ marginTop: -4 }}>{ACCOUNT_COPY.signedInDetail} Signing out removes it from this browser; sign in again to get it back.</p>
+          <FieldGroup>
+            <FieldPickRow first icon="logout" label="Sign out" onPress={() => after(signOut)} chevron={false} />
+          </FieldGroup>
+          <button type="button" className="link" onClick={() => after(() => navigate("delete-account"))} aria-label="Delete account and data" style={{ minHeight: 44, alignSelf: "center", padding: "0 12px", fontSize: 15, fontWeight: 600, color: colors.error }}>Delete account and data</button>
         </SheetBody>
       </Sheet>
 
-      {/* Help and privacy */}
+      {/* Help, support and the two legal pages */}
       <Sheet open={open === "help"} onClose={() => setOpen(null)} ariaLabel="Help and privacy">
         <SheetBody>
           <SheetHead title="Help and privacy" onClose={() => setOpen(null)} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 14.5, lineHeight: "21px", color: colors.muted }}>
-            <p style={{ margin: 0 }}><strong style={{ color: colors.foreground }}>How planning works.</strong> Add your classes and deadlines (or paste a syllabus) and Trajectory places study sessions in the free time before each deadline, around your classes, work, activities and sleep. Whenever something changes, it re-plans the whole semester by itself and offers an Undo.</p>
-            <p style={{ margin: 0 }}><strong style={{ color: colors.foreground }}>Replan.</strong> Today's Replan link previews a new plan for today, the week or the semester. Nothing changes until you apply it, and every applied change can be undone.</p>
-            <p style={{ margin: 0 }}><strong style={{ color: colors.foreground }}>Privacy.</strong> Your plan is saved in this browser's storage and never sent anywhere. Clearing the site's data removes it, so keep a backup file if it matters. If you add a Gemini API key, the syllabus text you import is sent to Google under your own account and nowhere else.</p>
-          </div>
+          <FieldGroup>
+            <FieldPickRow first icon="info" label="Help" detail="How planning, replanning and the syllabus import work" onPress={() => window.open(WEBSITE_SUPPORT_URL, "_blank", "noopener")} ariaLabel="Help, on the web" />
+            <FieldPickRow icon="mail" label="Contact support" detail={SUPPORT_EMAIL} onPress={() => { window.location.href = supportMailto(); }} ariaLabel={`Contact support by e-mail at ${SUPPORT_EMAIL}`} />
+            <FieldPickRow icon="shield" label="Privacy Policy" onPress={() => after(() => navigate("privacy-policy"))} />
+            <FieldPickRow icon="file" label="Terms of Use" onPress={() => window.open(WEBSITE_TERMS_URL, "_blank", "noopener")} ariaLabel="Terms of Use, on the web" />
+          </FieldGroup>
           <PrimaryButton size="lg" fullWidth tone="ghost" label="Close" onPress={() => setOpen(null)} />
         </SheetBody>
       </Sheet>

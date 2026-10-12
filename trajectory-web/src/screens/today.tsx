@@ -28,6 +28,7 @@ import { isDeadline } from "../engine/week-view";
 import { blockCourseLabel, blockDisplayTitle, isFlexibleSession, sessionDisplayTitle, showsOnWeekGrid } from "../engine/week-layout";
 import { overloadedDaysAhead, realityCheckFor } from "../engine/workload-analysis";
 import { FlexibleSessionsTip } from "../components/block-sheet";
+import { PassExpiryBanner } from "../components/pass-expiry-banner";
 import { PlanReviewSheet, PlanStatusCard, UndoReplanBar, usePlanFixHandlers } from "../components/plan-status";
 import { DeferralConfirm, ReplanPreviewBody } from "../components/replan-preview";
 import { WeekStrip } from "../components/week-strip";
@@ -453,6 +454,8 @@ export function TodayScreen() {
 
       {/* 2 · The week as a strip of dates: click a day to look at it, click today to come back */}
       <WeekStrip days={stripDays} selectedKey={viewDate} onSelect={(key) => setPickedDate(key === today ? null : key)} />
+      {/* A School Year pass in its last days, or just ended: "Get another year" (components/pass-expiry-banner.tsx) */}
+      <PassExpiryBanner />
 
       {/* The day a syllabus was planned: what was planned, what was left out, and the way to undo it */}
       {shownRecap ? (

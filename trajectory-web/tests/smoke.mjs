@@ -1,10 +1,9 @@
-// Browser smoke test: builds nothing itself; it expects `vite preview` (or `vite`) at the URL in SMOKE_URL
-// (default http://localhost:4173) and walks the main screens at phone and desktop width, failing on any
-// console error or uncaught page error. Run: npm run build && npm run preview & node tests/smoke.mjs
+// Browser smoke test of the main screens, signed in against the mock API (tests/mock-server.mjs; run through
+// tests/run-smoke.mjs, or build with VITE_API_BASE_URL + VITE_TEST_SIGN_IN=1 and set SMOKE_URL yourself). Walks Today,
+// Week, Tasks, Study, Classes and Settings at phone and desktop width, failing on any console error or page error.
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 
-// Playwright from this project when it is installed here, else from the global npm root.
 const require = createRequire(import.meta.url);
 function loadPlaywright() {
   try {
@@ -43,31 +42,41 @@ for (const size of widths) {
   };
 
   console.log(`${size.name} (${size.width}x${size.height})`);
-  await page.goto(`${base}/#/welcome`, { waitUntil: "networkidle" });
-  await check("welcome renders", async () => {
+  await page.goto(`${base}/`, { waitUntil: "networkidle" });
+  await check("the sign-in screen renders", async () => {
     await page.getByRole("heading", { name: /planned from your syllabus/i }).waitFor({ timeout: 10000 });
   });
-  await check("set up by hand lands on Today", async () => {
-    await page.getByRole("button", { name: /set up by hand/i }).click();
+  await check("signing in opens the app", async () => {
+    await page.getByRole("button", { name: "Test sign-in" }).click();
+    // A new account with no plan goes to the syllabus import; one with a plan (the desktop pass) to Today.
+    await page.waitForFunction(() => /^#\/(syllabus|today)/.test(window.location.hash), null, { timeout: 30000 });
+    await page.goto(`${base}/#/today`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "Today" }).waitFor({ timeout: 10000 });
   });
   await check("add a class by hand", async () => {
     await page.goto(`${base}/#/classes`, { waitUntil: "networkidle" });
-    await page.getByRole("button", { name: /add a class by hand/i }).click();
-    await page.getByLabel("Class name").fill("Principles of Finance");
+    if ((await page.getByText(`Principles of Finance ${size.name}`).count()) > 0) return;
+    // An empty Classes tab offers "Add a class by hand" directly; one with classes asks how first.
+    const byHand = page.getByRole("button", { name: /add a class by hand/i });
+    if ((await byHand.count()) > 0) await byHand.click();
+    else {
+      await page.getByRole("button", { name: /^Add a class/ }).click();
+      await page.getByRole("button", { name: /^By hand/ }).click();
+    }
+    await page.getByLabel("Class name").fill(`Principles of Finance ${size.name}`);
     await page.getByRole("checkbox", { name: "Monday" }).click();
     await page.getByRole("checkbox", { name: "Wednesday" }).click();
     await page.getByLabel("Class start time").fill("10:00");
     await page.getByLabel("Class end time").fill("11:15");
     await page.getByRole("button", { name: "Add the class" }).click();
-    await page.getByText("Principles of Finance").first().waitFor({ timeout: 10000 });
+    await page.getByText(`Principles of Finance ${size.name}`).first().waitFor({ timeout: 10000 });
   });
   await check("add a task from the add button", async () => {
     await page.getByRole("button", { name: /add a task, event or exam/i }).first().click();
-    await page.getByLabel("Task name").fill("Problem Set 1");
+    await page.getByLabel("Task name").fill(`Problem Set ${size.name}`);
     await page.getByRole("button", { name: "Add task", exact: true }).click();
     await page.goto(`${base}/#/tasks`, { waitUntil: "networkidle" });
-    await page.getByText("Problem Set 1").first().waitFor({ timeout: 10000 });
+    await page.getByText(`Problem Set ${size.name}`).first().waitFor({ timeout: 10000 });
   });
   await check("week grid renders", async () => {
     await page.goto(`${base}/#/week`, { waitUntil: "networkidle" });
@@ -82,28 +91,21 @@ for (const size of widths) {
     await page.getByRole("button", { name: "Preview changes" }).waitFor({ timeout: 10000 });
     await page.getByRole("button", { name: "Close Replan" }).click();
   });
-  await check("study, settings and syllabus screens render", async () => {
+  await check("study, settings and the import screens render", async () => {
     await page.goto(`${base}/#/study`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "Study", exact: true }).waitFor({ timeout: 10000 });
     await page.goto(`${base}/#/settings`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "Settings" }).waitFor({ timeout: 10000 });
-    await page.goto(`${base}/#/syllabus`, { waitUntil: "networkidle" });
-    await page.getByRole("heading", { name: "Add your syllabus" }).waitFor({ timeout: 10000 });
+    await page.getByText("Signed in with Apple").first().waitFor({ timeout: 10000 });
+    await page.goto(`${base}/#/imports`, { waitUntil: "networkidle" });
+    await page.getByRole("heading").first().waitFor({ timeout: 10000 });
   });
-  await check("the built-in reader imports a pasted syllabus", async () => {
-    await page.getByLabel("Syllabus text").fill(["CHEM 101: General Chemistry", "Classes meet TTh 9:30-10:45 am", "Classes begin January 12, 2027", "Last day of class: April 30, 2027", "Feb 3, 2027 Quiz 1", "Feb 24, 2027 Midterm Exam", "March 17, 2027 Problem Set 3 due", "April 28, 2027 Final Exam"].join("\n"));
-    await page.getByRole("button", { name: "Read the syllabus" }).click();
-    await page.getByRole("heading", { name: "Check your class" }).waitFor({ timeout: 15000 });
-    await page.getByRole("button", { name: /^Continue/ }).click();
-    await page.getByRole("heading", { name: "Check the dates" }).waitFor({ timeout: 15000 });
-    await page.getByRole("button", { name: /^Plan \d+ item/ }).click();
-    await page.getByRole("heading", { name: "Today" }).waitFor({ timeout: 30000 });
-    await page.getByText(/semester is planned|planned/i).first().waitFor({ timeout: 10000 });
-  });
-  await check("the plan survives a reload", async () => {
+  await check("the plan survives a reload and is saved to the account", async () => {
+    await page.goto(`${base}/#/settings`, { waitUntil: "networkidle" });
+    await page.getByText(/Saved to your account · /).first().waitFor({ timeout: 30000 });
     await page.reload({ waitUntil: "networkidle" });
     await page.goto(`${base}/#/classes`, { waitUntil: "networkidle" });
-    await page.getByText(/General Chemistry/).first().waitFor({ timeout: 10000 });
+    await page.getByText(`Principles of Finance ${size.name}`).first().waitFor({ timeout: 10000 });
   });
   await check("no horizontal page scroll", async () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

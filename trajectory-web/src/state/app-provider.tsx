@@ -1,18 +1,19 @@
 // The app's state for the web: the mobile app's reducer (src/engine/app-context.ts) wrapped in a React provider that
-// loads and saves the plan in this browser (localStorage), rolls the plan forward on a new day and runs the automatic
-// whole-semester re-plan whenever something the plan is built from changes. Nothing leaves the browser.
+// loads and saves the plan in this browser through the engine's one snapshot writer (so the plan saved to the account
+// can be written through the same writer, src/lib/plan-sync-device.ts), rolls the plan forward on a new day and runs
+// the automatic whole-semester re-plan whenever something the plan is built from changes.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 
-import { initialState, reducer, runReplan, type Action, type ReplanRequest, type ScopedReplanPreview } from "../engine/app-context";
+import { initialState, noteDispatched, reducer, runReplan, type Action, type ReplanRequest, type ScopedReplanPreview } from "../engine/app-context";
 import { planInputsKey } from "../engine/plan-inputs";
 import { scoreTasks } from "../engine/priority-engine";
-import { APP_STATE_STORAGE_KEY, parsePersistedState, toLocalPersistedState } from "../engine/state-persistence";
+import { APP_STATE_STORAGE_KEY, createStatePersister, parsePersistedState, toLocalPersistedState, type StatePersister } from "../engine/state-persistence";
 import type { AppState } from "../engine/types";
 import { UNDO_SNAPSHOT_STORAGE_KEY, parsePersistedUndo, toPersistedUndo } from "../engine/undo-persistence";
 import { localDateKey } from "../engine/utils";
+import { appStorage, readLocal, writeLocal } from "../lib/storage";
 
-export const PERSIST_DEBOUNCE_MS = 400;
 /** A burst of edits costs one plan. */
 const AUTO_REPLAN_DELAY_MS = 1200;
 
@@ -32,78 +33,71 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-function readStorage(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
+let sharedPersister: StatePersister | null = null;
 
-function writeStorage(key: string, value: string | null): boolean {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
-  }
+/**
+ * The app's one snapshot writer. Shared, so a wipe can wait for it (`appStatePersister().idle()`), and so a plan
+ * loaded from the account is written through it too: with one writer, an older snapshot can never land after it.
+ */
+export function appStatePersister(): StatePersister {
+  sharedPersister ??= createStatePersister({ storage: appStorage });
+  return sharedPersister;
 }
 
 /** The saved plan (with its undo snapshot), or the pristine state on a first visit. */
 function loadInitialState(): AppState {
-  const saved = parsePersistedState(readStorage(APP_STATE_STORAGE_KEY));
+  const saved = parsePersistedState(readLocal(APP_STATE_STORAGE_KEY));
   if (!saved) return initialState;
-  const undo = parsePersistedUndo(readStorage(UNDO_SNAPSHOT_STORAGE_KEY));
+  const undo = parsePersistedUndo(readLocal(UNDO_SNAPSHOT_STORAGE_KEY));
   return reducer(initialState, { type: "LOAD_STATE", payload: undo ? { ...saved, undoSnapshots: [undo] } : saved });
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, loadInitialState);
+  const [state, rawDispatch] = useReducer(reducer, undefined, loadInitialState);
+  // The reducer counts the student's own actions per state (the saved plan tells an edit from a re-plan by it).
+  const dispatch = useCallback((action: Action) => {
+    noteDispatched(action);
+    rawDispatch(action);
+  }, []);
   // Loaded synchronously from localStorage, so the first render already shows the plan.
   const [isHydrated] = useState(true);
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // ── Save the plan (debounced, and at once when the page is hidden) ──
-  const lastWrittenRef = useRef<string | null>(null);
-  const writeNow = useCallback(() => {
-    const current = stateRef.current;
-    if (current === initialState) return; // a fresh install (or a wipe) writes nothing
-    const json = JSON.stringify(toLocalPersistedState(current));
-    if (json !== lastWrittenRef.current && writeStorage(APP_STATE_STORAGE_KEY, json)) lastWrittenRef.current = json;
-  }, []);
+  // ── Save the plan through the one writer (debounced; at once when the page is hidden) ──
   useEffect(() => {
+    const persister = appStatePersister();
     if (state === initialState) {
-      // RESET / a wipe: nothing may reappear on the next visit.
-      writeStorage(APP_STATE_STORAGE_KEY, null);
-      writeStorage(UNDO_SNAPSHOT_STORAGE_KEY, null);
-      lastWrittenRef.current = null;
+      // RESET / a wipe / a sign-out: nothing may reappear on the next visit.
+      persister.cancel();
+      writeLocal(APP_STATE_STORAGE_KEY, null);
+      writeLocal(UNDO_SNAPSHOT_STORAGE_KEY, null);
       return;
     }
-    const timer = setTimeout(writeNow, PERSIST_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [state, writeNow]);
+    persister.schedule(state);
+    if (document.visibilityState !== "visible") void persister.flush();
+  }, [state]);
   useEffect(() => {
+    const flush = () => void appStatePersister().flush();
     const onHide = () => {
-      if (document.visibilityState === "hidden") writeNow();
+      if (document.visibilityState === "hidden") flush();
     };
     document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("pagehide", writeNow);
+    window.addEventListener("pagehide", flush);
     return () => {
       document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("pagehide", writeNow);
+      window.removeEventListener("pagehide", flush);
     };
-  }, [writeNow]);
+  }, []);
 
   // The newest undo snapshot under its own key (dropping one is written at once: an Undo must never erase an edit).
   const latestUndo = state.undoSnapshots?.[0];
   useEffect(() => {
     if (!latestUndo) {
-      writeStorage(UNDO_SNAPSHOT_STORAGE_KEY, null);
+      writeLocal(UNDO_SNAPSHOT_STORAGE_KEY, null);
       return;
     }
-    const timer = setTimeout(() => writeStorage(UNDO_SNAPSHOT_STORAGE_KEY, toPersistedUndo(latestUndo)), 300);
+    const timer = setTimeout(() => writeLocal(UNDO_SNAPSHOT_STORAGE_KEY, toPersistedUndo(latestUndo)), 300);
     return () => clearTimeout(timer);
   }, [latestUndo]);
 
@@ -147,17 +141,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const runReplanNow = useCallback((request: ReplanRequest) => runReplan(stateRef.current, request, new Date()), []);
+  const flush = useCallback(() => {
+    void appStatePersister().flush();
+  }, []);
   const exportState = useCallback(() => JSON.stringify(toLocalPersistedState(stateRef.current), null, 2), []);
   const importState = useCallback((raw: string) => {
     const parsed = parsePersistedState(raw);
     if (!parsed) return false;
     dispatch({ type: "LOAD_STATE", payload: parsed });
     return true;
-  }, []);
+  }, [dispatch]);
 
   const value = useMemo<AppContextValue>(
-    () => ({ state, dispatch, isHydrated, runReplan: runReplanNow, flush: writeNow, importState, exportState }),
-    [state, isHydrated, runReplanNow, writeNow, importState, exportState],
+    () => ({ state, dispatch, isHydrated, runReplan: runReplanNow, flush, importState, exportState }),
+    [state, dispatch, isHydrated, runReplanNow, flush, importState, exportState],
   );
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

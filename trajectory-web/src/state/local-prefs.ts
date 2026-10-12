@@ -75,4 +75,6 @@ export const PREF_KEYS = {
   welcomeSeen: "trajectory_web_welcome_seen",
   geminiKey: "trajectory_web_gemini_key",
   aiModel: "trajectory_web_ai_model",
+  /** The local day ("YYYY-MM-DD") the School Year pass banner was last hidden (components/pass-expiry-banner.tsx). */
+  passBannerHiddenOn: "trajectory_web_pass_banner_hidden_on",
 } as const;
