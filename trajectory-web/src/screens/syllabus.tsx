@@ -1,6 +1,6 @@
 // The syllabus import: paste it ONCE and the whole semester is planned. Four steps, counted at the top of each:
 //
-//   1. Add your syllabus   pasted text or a text file; read by the built-in reader, or by Claude with your own key
+//   1. Add your syllabus   pasted text or a text file; read by the built-in reader, or by Gemini with your own key
 //   2. Check your class    the class and its short name, days and times (prefilled), the term (asked once), breaks
 //   3. Check the dates     only the doubtful ones ask for attention; nothing without a date is planned
 //   4. Building your plan  duplicate-aware; the plan is built right away
@@ -618,7 +618,7 @@ export function SyllabusScreen() {
   const navigate = useNavigate();
   const route = useRoute();
   const { state, dispatch } = useApp();
-  const [apiKey] = useLocalPref(PREF_KEYS.anthropicKey);
+  const [apiKey] = useLocalPref(PREF_KEYS.geminiKey);
   const [aiModel] = useLocalPref(PREF_KEYS.aiModel);
   const today = todayString();
 
@@ -722,9 +722,9 @@ export function SyllabusScreen() {
       abortRef.current = controller;
       setIsReading(true);
       try {
-        // The Anthropic SDK is loaded only when a key is used, so the app itself stays small.
-        const { readSyllabusWithClaude } = await import("../lib/anthropic");
-        const extraction = await readSyllabusWithClaude({ apiKey, model: aiModel ?? undefined, text: source, courseHint, today, semesterStart: state.semester?.startDate, semesterEnd: state.semester?.endDate, signal: controller.signal });
+        // The Gemini client is loaded only when a key is used, so the app itself stays small.
+        const { readSyllabusWithGemini } = await import("../lib/gemini");
+        const extraction = await readSyllabusWithGemini({ apiKey, model: aiModel ?? undefined, text: source, courseHint, today, semesterStart: state.semester?.startDate, semesterEnd: state.semester?.endDate, signal: controller.signal });
         if (controller.signal.aborted) return;
         finishRead(extraction, source);
       } catch (error) {
@@ -954,15 +954,15 @@ export function SyllabusScreen() {
             </div>
             <FieldGroup>
               {apiKey ? (
-                <FieldRow first icon="spark" label="Read with AI" detail="Claude reads the whole document with your own key" tint={colors.violet}>
-                  <AppSwitch value={reader === "ai"} onValueChange={(on) => setReader(on ? "ai" : "builtin")} ariaLabel="Read with AI, using your own Anthropic key" disabled={isReading} />
+                <FieldRow first icon="spark" label="Read with AI" detail="Gemini reads the whole document with your own key" tint={colors.violet}>
+                  <AppSwitch value={reader === "ai"} onValueChange={(on) => setReader(on ? "ai" : "builtin")} ariaLabel="Read with AI, using your own Gemini key" disabled={isReading} />
                 </FieldRow>
               ) : (
-                <FieldRow first icon="spark" label="Built-in reader" detail="Finds dated items line by line. For messy syllabi, add an Anthropic API key in Settings and Claude reads it instead" tint={colors.violet} />
+                <FieldRow first icon="spark" label="Built-in reader" detail="Finds dated items line by line. For messy syllabi, add a Gemini API key in Settings and Gemini reads it instead" tint={colors.violet} />
               )}
             </FieldGroup>
           </div>
-          <FlowFooter hint={isReading ? (reader === "ai" ? "Claude is reading your syllabus. This usually takes under a minute." : null) : chars > 0 && chars < 20 ? "Paste a little more of the syllabus to continue" : null} hintTone="quiet">
+          <FlowFooter hint={isReading ? (reader === "ai" ? "Gemini is reading your syllabus. This usually takes under a minute." : null) : chars > 0 && chars < 20 ? "Paste a little more of the syllabus to continue" : null} hintTone="quiet">
             {isReading ? (
               <>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, minHeight: 54 }}>

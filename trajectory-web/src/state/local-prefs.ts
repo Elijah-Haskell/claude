@@ -73,6 +73,6 @@ export const PREF_KEYS = {
   setupListHidden: "trajectory_web_setup_list_hidden",
   semesterNudgeDismissed: "trajectory_web_semester_nudge_dismissed",
   welcomeSeen: "trajectory_web_welcome_seen",
-  anthropicKey: "trajectory_web_anthropic_key",
+  geminiKey: "trajectory_web_gemini_key",
   aiModel: "trajectory_web_ai_model",
 } as const;

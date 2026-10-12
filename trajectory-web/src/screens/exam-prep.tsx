@@ -5,8 +5,8 @@
 // and the link that plans or replans that time; the two ways to practise (flashcards and the quiz); then the reading,
 // on a switch: the topics, or the study guide. Exam study time is ONE task handed to the same planner as every other
 // task (src/engine/exam-runway.ts); before anything changes, the link asks the real planner whether the time fits
-// and says what it found. With an Anthropic key in Settings the study guide, flashcards and quiz are written by
-// Claude; without one, definitions and flashcards are lifted from the student's own notes.
+// and says what it found. With a Gemini key in Settings the study guide, flashcards and quiz are written by
+// Gemini; without one, definitions and flashcards are lifted from the student's own notes.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -311,7 +311,7 @@ function ExamPrepGuide({ guide, writing, canGenerate, onGenerate }: { guide: Exa
             <StateTag label="AI study guide" tone="violet" icon="spark" />
           </div>
           <h2 style={{ margin: 0, fontSize: 19, lineHeight: "24px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>{intro.title}</h2>
-          <p style={body}>{canGenerate ? intro.body : "Add your own Anthropic API key in Settings and Claude writes explanations, flashcards and practice questions for these topics. Without one, what is below comes from your own notes."}</p>
+          <p style={body}>{canGenerate ? intro.body : "Add your own Gemini API key in Settings and Gemini writes explanations, flashcards and practice questions for these topics. Without one, what is below comes from your own notes."}</p>
           {intro.action ? (canGenerate ? <PrimaryButton label={intro.action} size="lg" fullWidth onPress={onGenerate} style={{ marginTop: 10 }} /> : <PrimaryButton label="Open Settings" tone="ghost" size="lg" fullWidth onPress={() => navigate("settings")} style={{ marginTop: 10 }} />) : null}
         </Card>
       ) : null}
@@ -671,7 +671,7 @@ export function ExamPrepDetailScreen({ examId }: { examId: string }) {
 function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
   const colors = useColors();
   const { state, dispatch } = useApp();
-  const [apiKey] = useLocalPref(PREF_KEYS.anthropicKey);
+  const [apiKey] = useLocalPref(PREF_KEYS.geminiKey);
   const [aiModel] = useLocalPref(PREF_KEYS.aiModel);
   const questions = exam.studyGuide?.practiceQuestions ?? [];
   const cards = exam.studyGuide?.flashcards ?? [];
@@ -704,8 +704,8 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
     try {
       const source = examRef.current;
       if (apiKey) {
-        const { writeExamMaterialWithClaude } = await import("../lib/anthropic");
-        const material = await writeExamMaterialWithClaude({ apiKey, model: aiModel ?? undefined, topics: source.topics.map((topic) => topic.title), rawInput: source.rawInput || undefined, className: source.className, daysUntil: daysUntilExam(localDateKey(new Date()), source.examDate) });
+        const { writeExamMaterialWithGemini } = await import("../lib/gemini");
+        const material = await writeExamMaterialWithGemini({ apiKey, model: aiModel ?? undefined, topics: source.topics.map((topic) => topic.title), rawInput: source.rawInput || undefined, className: source.className, daysUntil: daysUntilExam(localDateKey(new Date()), source.examDate) });
         // Merged into the LATEST version of the prep, so what was marked meanwhile is kept.
         dispatch({ type: "UPDATE_EXAM_PREP", payload: withMaterial(examRef.current, material, new Date()) });
       } else if (!source.studyGuide) {
@@ -856,7 +856,7 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
                 </span>
                 <span className="row-text">
                   <span className="row-label" style={{ display: "block" }}>{hasAiGuide ? "Make the material again" : "Write the study material"}</span>
-                  <span className="row-detail" style={{ display: "block" }}>Explanations, flashcards and practice questions, written by Claude with your key</span>
+                  <span className="row-detail" style={{ display: "block" }}>Explanations, flashcards and practice questions, written by Gemini with your key</span>
                 </span>
               </button>
             </FieldGroup>

@@ -40,7 +40,7 @@ export function SettingsScreen() {
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [importNote, setImportNote] = useState<{ tone: "green" | "red"; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const [apiKey, setApiKey] = useLocalPref(PREF_KEYS.anthropicKey);
+  const [apiKey, setApiKey] = useLocalPref(PREF_KEYS.geminiKey);
   const [aiModel, setAiModel] = useLocalPref(PREF_KEYS.aiModel);
   const [keyDraft, setKeyDraft] = useState(apiKey ?? "");
   const [modelDraft, setModelDraft] = useState(aiModel ?? DEFAULT_AI_MODEL);
@@ -125,7 +125,7 @@ export function SettingsScreen() {
       <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <SectionLabel title="App" />
         <FieldGroup>
-          <FieldPickRow first icon="spark" label="AI syllabus reader" detail={apiKey ? "Your own Anthropic key reads syllabi. It stays in this browser" : "Optional: your own Anthropic API key reads messy syllabi"} value={apiKey ? "On" : "Off"} tone="violet" onPress={() => { setKeyDraft(apiKey ?? ""); setModelDraft(aiModel ?? DEFAULT_AI_MODEL); setOpen("ai"); }} />
+          <FieldPickRow first icon="spark" label="AI syllabus reader" detail={apiKey ? "Your own Gemini key reads syllabi. It stays in this browser" : "Optional: your own Gemini API key reads messy syllabi"} value={apiKey ? "On" : "Off"} tone="violet" onPress={() => { setKeyDraft(apiKey ?? ""); setModelDraft(aiModel ?? DEFAULT_AI_MODEL); setOpen("ai"); }} />
           <FieldPickRow icon={isDark ? "moon" : "sun"} label="Appearance" value={isDark ? "Dark" : "Light"} chevron={false} onPress={() => setScheme(isDark ? "light" : "dark")} ariaLabel={isDark ? "Appearance: dark. Switch to light" : "Appearance: light. Switch to dark"} />
           <FieldPickRow icon="info" label="Help and privacy" onPress={() => setOpen("help")} />
         </FieldGroup>
@@ -206,16 +206,16 @@ export function SettingsScreen() {
       <Sheet open={open === "ai"} onClose={() => setOpen(null)} ariaLabel="AI syllabus reader">
         <SheetBody>
           <SheetHead eyebrow="Optional" eyebrowColor={colors.violet} title="AI syllabus reader" onClose={() => setOpen(null)} />
-          <p className="sheet-sub" style={{ marginTop: -8 }}>Without a key, Trajectory finds dated items in a pasted syllabus itself. With your own Anthropic API key, Claude reads the whole document: the class, when it meets, the term and every deadline, including ones written as "Week 6".</p>
+          <p className="sheet-sub" style={{ marginTop: -8 }}>Without a key, Trajectory finds dated items in a pasted syllabus itself. With your own Gemini API key (free from Google AI Studio), Gemini reads the whole document: the class, when it meets, the term and every deadline, including ones written as "Week 6".</p>
           <div>
-            <FieldLabel>Anthropic API key</FieldLabel>
-            <input className="input" type="password" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} placeholder="sk-ant-…" autoComplete="off" aria-label="Anthropic API key" />
+            <FieldLabel>Gemini API key</FieldLabel>
+            <input className="input" type="password" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} placeholder="AIza…" autoComplete="off" aria-label="Gemini API key" />
           </div>
           <div>
             <FieldLabel>Model</FieldLabel>
             <input className="input mono" value={modelDraft} onChange={(e) => setModelDraft(e.target.value)} placeholder={DEFAULT_AI_MODEL} autoComplete="off" aria-label="Model id" style={{ fontSize: 14 }} />
           </div>
-          <Note tone="plain" icon="shield">The key is stored in this browser only and sent straight to Anthropic when you import a syllabus. Nothing goes through a Trajectory server. Each import costs a few cents of API usage on your account.</Note>
+          <Note tone="plain" icon="shield">The key is stored in this browser only and sent straight to Google when you import a syllabus. Nothing goes through a Trajectory server. Gemini Flash has a free tier; beyond it an import costs a fraction of a cent on your account.</Note>
           <PrimaryButton size="lg" fullWidth label={keyDraft.trim() ? "Save key" : apiKey ? "Remove key" : "Done"} onPress={saveKey} />
         </SheetBody>
       </Sheet>
@@ -227,7 +227,7 @@ export function SettingsScreen() {
           <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 14.5, lineHeight: "21px", color: colors.muted }}>
             <p style={{ margin: 0 }}><strong style={{ color: colors.foreground }}>How planning works.</strong> Add your classes and deadlines (or paste a syllabus) and Trajectory places study sessions in the free time before each deadline, around your classes, work, activities and sleep. Whenever something changes, it re-plans the whole semester by itself and offers an Undo.</p>
             <p style={{ margin: 0 }}><strong style={{ color: colors.foreground }}>Replan.</strong> Today's Replan link previews a new plan for today, the week or the semester. Nothing changes until you apply it, and every applied change can be undone.</p>
-            <p style={{ margin: 0 }}><strong style={{ color: colors.foreground }}>Privacy.</strong> Your plan is saved in this browser's storage and never sent anywhere. Clearing the site's data removes it, so keep a backup file if it matters. If you add an Anthropic API key, the syllabus text you import is sent to Anthropic under your own account and nowhere else.</p>
+            <p style={{ margin: 0 }}><strong style={{ color: colors.foreground }}>Privacy.</strong> Your plan is saved in this browser's storage and never sent anywhere. Clearing the site's data removes it, so keep a backup file if it matters. If you add a Gemini API key, the syllabus text you import is sent to Google under your own account and nowhere else.</p>
           </div>
           <PrimaryButton size="lg" fullWidth tone="ghost" label="Close" onPress={() => setOpen(null)} />
         </SheetBody>

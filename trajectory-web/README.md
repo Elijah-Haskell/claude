@@ -16,8 +16,8 @@ and lets you undo any change. Everything stays in your browser: there is no acco
 - **Classes**: your classes, the term's dates and breaks, imported syllabi, work and activities, and **Settings**
   (sleep hours, study load, calendar export, backup and restore, appearance, an optional AI key).
 - **Syllabus import** in four steps: paste the text (or pick a .txt file) → check the class → check the dates →
-  the plan is built. A built-in reader finds dated items line by line; with your own Anthropic API key, Claude
-  reads the whole document instead. Either way the dates are resolved deterministically by the planning engine,
+  the plan is built. A built-in reader finds dated items line by line; with your own Gemini API key, Gemini
+  reads the whole document instead (the same models and request shape as the mobile app's server). Either way the dates are resolved deterministically by the planning engine,
   and the import can be undone from Today or from the import history.
 
 The planning engine (`src/engine/`) is the mobile app's pure TypeScript, ported file for file, with its original
@@ -43,12 +43,13 @@ node tests/smoke.mjs   # browser smoke test against the preview (needs playwrigh
 
 ## The optional AI reader
 
-Settings → "AI syllabus reader" takes an Anthropic API key. It is stored in this browser's localStorage only and
-sent straight to Anthropic from the page (the official SDK, `dangerouslyAllowBrowser`), never to any Trajectory
-server. It is used for two things: reading a pasted syllabus (structured output, validated by the engine's parser)
-and writing an exam prep's study material. A safety decline is re-run on a fallback model inside the same call
-(`fallbacks: "default"`). Without a key, everything still works: the built-in reader handles syllabi and the exam
-prep uses what your own notes give it.
+Settings → "AI syllabus reader" takes a Gemini API key (Google AI Studio). It is stored in this browser's
+localStorage only and sent straight to Google's `generateContent` endpoint from the page, never to any Trajectory
+server. It is used for two things: reading a pasted syllabus (JSON output against the engine's own schema, then
+validated by the engine's parser) and writing an exam prep's study material. The request shape mirrors the mobile
+app's server: `gemini-3.8-flash` by default, `responseJsonSchema` structured output and a Gemini 3 thinking level
+with headroom for the answer. Without a key, everything still works: the built-in reader handles syllabi and the
+exam prep uses what your own notes give it.
 
 ## Where your plan lives
 
