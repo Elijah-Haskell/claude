@@ -19,6 +19,11 @@ export function ProStatusRow({ onOpenPaywall, first }: { onOpenPaywall?: () => v
   const { offerings, managementUrl } = useSubscription();
   if (status.isLoading) return null;
 
+  // Pro the server confirmed (no RevenueCat web key in this build): active, but how it was bought is not known here.
+  if (status.isPro && !status.source) {
+    return <FieldRow first={first} icon="crown" label="Trajectory Pro" detail="Active on your account" />;
+  }
+
   const model = proStatusRowModel(status, new Date(), renewalPeriodFor(status.productId, offerings));
   const openPaywall = onOpenPaywall ?? (() => navigate("paywall"));
 

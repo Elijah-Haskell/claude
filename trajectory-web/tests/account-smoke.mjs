@@ -80,6 +80,11 @@ await check("the paywall opens and says the store is not set up", async () => {
   await page.getByText(/not just one/).waitFor({ timeout: 10000 });
   await page.getByText(/Purchases aren't set up/).waitFor({ timeout: 10000 });
 });
+await check("without a RevenueCat web key, Pro comes from the server (the mock's MOCK_PRO=1 account)", async () => {
+  await page.goto(`${base}/#/settings`, { waitUntil: "networkidle" });
+  await page.getByText("Active on your account").first().waitFor({ timeout: 10000 });
+  if (await page.getByText("Free plan", { exact: true }).count()) throw new Error("Settings still says Free plan");
+});
 if (problems.length > 0) {
   failures += problems.length;
   for (const problem of problems) console.log(`  FAIL ${problem}`);

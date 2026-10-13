@@ -123,10 +123,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   // Configure once the account is known, under the account's id (or the browser's anonymous one), then load offerings.
   useEffect(() => {
     if (authLoading || purchasesRef.current || !configured) {
-      if (!configured) {
-        setOfferings(UNAVAILABLE_OFFERINGS);
-        setIsLoading(false);
-      }
+      // No web key: nothing to sell here, and Pro comes from the server (the effect below).
+      if (!configured) setOfferings(UNAVAILABLE_OFFERINGS);
       return;
     }
     let cancelled = false;
@@ -151,6 +149,29 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [authLoading, configured, applyInfo]);
+
+  // Without a RevenueCat web key the browser cannot read the entitlement itself, but the server can: it checks
+  // RevenueCat under the account's id. So Pro bought on the iPhone, or granted in the RevenueCat dashboard, counts here.
+  // The server answers yes or no only, so the source stays unknown (the Pro row then just says it is active).
+  useEffect(() => {
+    if (configured || authLoading) return;
+    if (!desiredId) {
+      setStatus((prev) => (sameProStatus(prev, NOT_PRO_STATUS) ? prev : NOT_PRO_STATUS));
+      setIsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setIsLoading(true);
+    void recheckProOnServer().then((pro) => {
+      if (cancelled) return;
+      const next: ProStatus = pro ? { ...NOT_PRO_STATUS, isPro: true } : NOT_PRO_STATUS;
+      setStatus((prev) => (sameProStatus(prev, next) ? prev : next));
+      setIsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [configured, authLoading, desiredId]);
 
   // A School Year pass ends at a moment, with no RevenueCat update: read the last CustomerInfo again then.
   useEffect(() => {
