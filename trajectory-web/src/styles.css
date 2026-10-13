@@ -728,9 +728,6 @@ textarea.input {
 .ai-composer textarea::placeholder {
   color: var(--muted);
 }
-body[data-route="ai"] .snack-wrap {
-  display: none;
-}
 @media (min-width: 900px) {
   .ai-page {
     min-height: calc(100vh - 48px);

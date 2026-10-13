@@ -21,9 +21,9 @@ import { DIFFICULTY_LABEL, feedbackHeadline, NOT_SCORED_COPY, PRACTICE_EMPTY, PR
 import type { PracticeQuestion } from "../engine/types";
 import { goBack, useNavigate } from "../router";
 import { useApp } from "../state/app-provider";
-import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
 import { AiContentLabel } from "../components/ai-content-label";
 import { PracticeResult } from "../components/practice-result";
+import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
 import { ChoiceRow, ExamTop, FlowFooter, FoldText, MonoCount, SmallLabel, Tag, ToolHead, ToolTop, type ChoiceState } from "../components/study-parts";
 import { Icon } from "../ui/icon";
 import { Card, FieldGroup, Note, PrimaryButton, SectionLabel } from "../ui/primitives";

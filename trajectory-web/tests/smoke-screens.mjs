@@ -146,9 +146,15 @@ for (const size of widths) {
     await page.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "Remove the heads-up 1 hour before" }).click();
     await page.getByText("1 hour before", { exact: true }).waitFor({ state: "detached", timeout: 5000 });
-    // Off again: the sections fold away, and the browser was not asked a second time.
+    // A plan with study sessions ahead: the headless scheduler holds a reminder per session in a timer.
+    await page.getByRole("button", { name: /add a task, event or exam/i }).first().click();
+    await page.getByLabel("Task name").fill("Problem Set 1");
+    await page.getByRole("button", { name: "Add task", exact: true }).click();
+    await page.waitForFunction(() => (window.__trajectoryReminderTimers?.size ?? 0) > 0, null, { timeout: 20000 });
+    // Off again: the sections fold away, every timer goes, and the browser was not asked a second time.
     await master.click();
     await page.getByText("When a session starts").waitFor({ state: "detached", timeout: 5000 });
+    await page.waitForFunction(() => (window.__trajectoryReminderTimers?.size ?? 0) === 0, null, { timeout: 10000 });
     if ((await asks()) !== 1) throw new Error("turning reminders off asked for permission");
   });
 

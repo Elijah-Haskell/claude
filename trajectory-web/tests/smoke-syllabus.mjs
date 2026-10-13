@@ -3,7 +3,8 @@
 // dates are checked, the plan is built, the items are on Today and Tasks, the import is on the imports screen with
 // its undo, and a second syllabus runs into the free plan's limit (with the way to the plans). Expects a build made
 // with VITE_API_BASE_URL=http://127.0.0.1:4191 VITE_TEST_SIGN_IN=1 served at SMOKE_URL (default http://127.0.0.1:4181),
-// and `MOCK_PORT=4191 node tests/mock-server.mjs` running.
+// and `MOCK_PORT=4191 node tests/mock-server.mjs` running. Start the mock fresh for each run: its in-memory ledger
+// counts the test student's one free syllabus, so a second run against the same mock process is refused.
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 

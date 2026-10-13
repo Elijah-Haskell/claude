@@ -15,7 +15,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { ErrorCode, Purchases, type CustomerInfo, type PurchasesError } from "@revenuecat/purchases-js";
 
 import { mutate } from "../lib/api";
-import { REVENUECAT_WEB_KEY } from "../lib/config";
+import { REVENUECAT_WEB_KEY, TEST_PRO } from "../lib/config";
 import { identityStep, reconcileProRefusal, revenueCatIdForSession, singleFlight, type ProRefusalOutcome } from "../lib/pro-identity";
 import { proStatusFromWebCustomerInfo, resolveWebOfferings, type WebPackage } from "../lib/revenuecat-web";
 import { createPromptDebouncer, paywallPromptCopy, proMismatchCopy, setProRefusalHandler, subscribePaywallPrompt } from "../lib/sign-in-prompt";
@@ -336,12 +336,15 @@ export function useSubscription(): SubscriptionContextValue {
 /** The student's Pro in full, as a ProStatus for the wording helpers in lib/subscription-plans.ts. */
 export function useProDetails(): ProStatus & { isLoading: boolean } {
   const { isPro, isLoading, proSource, proUntil, willRenew, proProductId, termPass } = useSubscription();
+  // A test build holds Pro itself (lib/config.ts TEST_PRO): the browser only learns Pro from RevenueCat, which the
+  // mock server's builds have no key for. Compiled out of every other build.
+  if (TEST_PRO) return { isPro: true, source: "subscription", until: null, willRenew: true, productId: null, termPass: null, isLoading: false };
   return { isPro, source: proSource, until: proUntil, willRenew, productId: proProductId, termPass, isLoading };
 }
 
 /** Entitlement + whether it is still being determined. */
 export function useProStatus(): { isPro: boolean; isLoading: boolean } {
-  const { isPro, isLoading } = useSubscription();
+  const { isPro, isLoading } = useProDetails();
   return { isPro, isLoading };
 }
 

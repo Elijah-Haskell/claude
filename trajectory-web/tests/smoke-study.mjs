@@ -1,7 +1,9 @@
 // Browser test of the Pro study tools against the mock API (tests/mock-server.mjs, MOCK_PRO=1): sign in, open Study,
 // make a study guide from pasted text, open it, make a practice exam and answer a question, open Test review and review
 // a page, and open an exam prep whose material the server writes. Expects a build made with
-// VITE_API_BASE_URL=http://127.0.0.1:4193 VITE_TEST_SIGN_IN=1 served at SMOKE_URL (default http://127.0.0.1:4183).
+//   VITE_API_BASE_URL=http://127.0.0.1:4193 VITE_TEST_SIGN_IN=1 VITE_TEST_PRO=1
+// served at SMOKE_URL (default http://127.0.0.1:4183). VITE_TEST_PRO=1 is what makes the browser hold Pro: the web app
+// learns Pro only from RevenueCat, which a test build has no key for, while the mock server's MOCK_PRO=1 is the server's side.
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 
@@ -63,10 +65,12 @@ await check("the Study tab lists the four study tools", async () => {
 });
 
 await check("Study guide opens its list", async () => {
+  if (await page.getByLabel("Part of Trajectory Pro").count()) throw new Error("the tools are labelled Pro: the build lacks VITE_TEST_PRO=1");
   await page.getByRole("button", { name: /^Study guide\. / }).click();
   await page.waitForFunction(() => window.location.hash.startsWith("#/study-guides"), null, { timeout: 10000 });
-  await page.getByRole("heading", { name: "Study guide" }).waitFor({ timeout: 10000 });
-  await page.getByText("No study guides yet").waitFor({ timeout: 10000 });
+  await page.getByRole("heading", { name: "Study guide", exact: true }).waitFor({ timeout: 10000 });
+  // A fresh account sees the empty card; an account that ran this test before sees its guides. Either way: the button.
+  await page.getByRole("button", { name: "New study guide" }).waitFor({ timeout: 10000 });
 });
 
 await check("a study guide is built from pasted text (after the AI consent) and opens", async () => {
@@ -121,9 +125,9 @@ await check("a multiple-choice answer is submitted and graded, then the next que
 await check("the practice list shows the exam, and the guide's button now takes it", async () => {
   await page.goto(`${base}/#/practice`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Practice exam" }).waitFor({ timeout: 10000 });
-  await page.getByRole("button", { name: /^Biology 101\. Practice exam · 15 questions/ }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: /^Biology 101\. Practice exam · 15 questions/ }).first().waitFor({ timeout: 10000 });
   await page.goto(`${base}/#/study-guides`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: /^Study guide: Biology 101\. 3 topics · practice exam/ }).click();
+  await page.getByRole("button", { name: /^Study guide: Biology 101\. 3 topics · practice exam/ }).first().click();
   await page.getByRole("button", { name: "Take the practice exam" }).waitFor({ timeout: 10000 });
 });
 
@@ -141,7 +145,7 @@ await check("Test review opens, waits for a page, uploads one and reviews it", a
   await page.waitForFunction(() => !document.querySelector('button[aria-label="Review my test"]')?.hasAttribute("disabled"), null, { timeout: 10000 });
   await page.getByRole("button", { name: /^Class, optional/ }).click();
   await page.getByRole("dialog", { name: "Class" }).waitFor({ timeout: 5000 });
-  await page.getByLabel("Class, optional").fill("Principles of Finance");
+  await page.getByRole("textbox", { name: "Class, optional" }).fill("Principles of Finance");
   await page.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Review my test" }).click();
   await page.getByRole("heading", { name: "2 mistakes to learn from" }).waitFor({ timeout: 30000 });
@@ -163,8 +167,8 @@ await check("an exam prep's material is written by the server and labelled as AI
   await page.getByRole("dialog", { name: "New exam prep" }).waitFor({ timeout: 10000 });
   const examDay = new Date(Date.now() + 10 * 86_400_000);
   const key = `${examDay.getFullYear()}-${String(examDay.getMonth() + 1).padStart(2, "0")}-${String(examDay.getDate()).padStart(2, "0")}`;
-  await page.getByLabel("Exam date").fill(key);
-  await page.getByLabel("Exam topics, one per line").fill("GAAP vs Non-GAAP\nRevenue recognition");
+  await page.getByRole("textbox", { name: "Exam date" }).fill(key);
+  await page.getByRole("textbox", { name: "Exam topics, one per line" }).fill("GAAP vs Non-GAAP\nRevenue recognition");
   await page.getByRole("button", { name: "Build exam prep" }).click();
   await page.waitForFunction(() => /^#\/exam-prep\/.+/.test(window.location.hash), null, { timeout: 10000 });
   await page.getByRole("button", { name: "Flashcards, 4" }).waitFor({ timeout: 30000 });
@@ -176,7 +180,7 @@ await check("an exam prep's material is written by the server and labelled as AI
 
 await check("the Practice list opens an exam prep's quiz straight away", async () => {
   await page.goto(`${base}/#/practice`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: /Exam quiz · 2 questions/ }).click();
+  await page.getByRole("button", { name: /Exam quiz · 2 questions/ }).first().click();
   await page.waitForFunction(() => /^#\/exam-prep\/.+\?tab=quiz/.test(window.location.hash), null, { timeout: 10000 });
   await page.getByRole("dialog", { name: "Question 1 of 2" }).waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Close the quiz" }).click();

@@ -117,7 +117,8 @@ export const FILE_KIND_LABEL = { pdf: "PDF", image: "Image", docx: "Word file", 
 
 /** What the wait is reading, in words: the file's name, "3 pages", "Pasted text", and the line under it. */
 export function sourceWords(input: { kind: ExtractionSource["kind"]; file: Pick<LocalFile, "name" | "kind"> | null; pageCount: number; textLength: number }): { name: string; detail: string } {
-  if (input.kind === "paste") return { name: "Pasted text", detail: `${input.textLength.toLocaleString("en-US")} characters` };
+  // A pasted reading picked up again after a reload has no text in the browser any more: no count then.
+  if (input.kind === "paste") return { name: "Pasted text", detail: input.textLength > 0 ? `${input.textLength.toLocaleString("en-US")} characters` : "" };
   if (input.kind === "scan") return { name: `${input.pageCount} page${input.pageCount === 1 ? "" : "s"}`, detail: "Photos of the pages" };
   return { name: input.file?.name ?? "Your syllabus", detail: input.file ? FILE_KIND_LABEL[input.file.kind] : "Syllabus" };
 }

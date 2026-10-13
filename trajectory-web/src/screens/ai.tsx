@@ -44,7 +44,6 @@ import { buildMemoryContext, learnFromEvents, learnFromTasks, loadAIMemory, type
 import { mutate } from "../lib/api";
 import { isDeadlineChangeIntent, isEditIntent } from "../lib/assistant-intent";
 import { displayableReply } from "../lib/assistant-reply";
-import { TEST_PRO } from "../lib/config";
 import { goBack, navigate, useRoute } from "../router";
 import { useApp } from "../state/app-provider";
 import { useGlobalModal } from "../state/modal-context";
@@ -102,9 +101,7 @@ export function AiScreen() {
   const colors = useColors();
   const route = useRoute();
   const { state, dispatch } = useApp();
-  const { isPro: proEntitlement, isLoading: isProLoading } = useProStatus();
-  // A test build may say Pro itself (lib/config.ts TEST_PRO: the mock server grants Pro, RevenueCat is not there).
-  const isPro = proEntitlement || TEST_PRO;
+  const { isPro, isLoading: isProLoading } = useProStatus();
   // Without Pro, the two free ways to change the plan: the Replan sheet the app renders (Today opens it too) and the
   // Add sheet.
   const { openReplan, openAdd } = useGlobalModal();
@@ -145,14 +142,6 @@ export function AiScreen() {
   // Load AI memory on mount
   useEffect(() => {
     loadAIMemory().then(setAiMemory).catch(() => {});
-  }, []);
-
-  // The page confirms its own changes with Undo, so the app-wide undo snackbar stays hidden while it is open (src/styles.css).
-  useEffect(() => {
-    document.body.dataset.route = "ai";
-    return () => {
-      delete document.body.dataset.route;
-    };
   }, []);
 
   // Pending deep-link prompt — will be auto-sent after handleSend is defined (the router already decoded it).
@@ -830,7 +819,7 @@ export function AiScreen() {
   );
 
   // Entitlement still loading: don't flash the Pro note at a paying student.
-  if (isProLoading && !TEST_PRO) {
+  if (isProLoading) {
     return (
       <div className="screen ai-page">
         {head()}

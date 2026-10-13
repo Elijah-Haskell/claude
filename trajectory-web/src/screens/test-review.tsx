@@ -17,8 +17,8 @@ import { readPickedImage, reviewTest, uploadReviewImage } from "../lib/study-api
 import { describeStudyError, type StudyErrorInfo } from "../lib/study-errors";
 import { goBack } from "../router";
 import { useApp } from "../state/app-provider";
-import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
 import { BigOption, FlowFooter, MonoCount, ToolError, ToolHead, ToolIconButton, ToolTop } from "../components/study-parts";
+import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
 import { ReviewPages, type ReviewPage } from "../components/test-review-pages";
 import { TestReviewResultView } from "../components/test-review-result";
 import { ReviewTextSheet } from "../components/test-review-text-sheet";

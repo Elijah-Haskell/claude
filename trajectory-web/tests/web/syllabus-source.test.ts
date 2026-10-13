@@ -63,6 +63,7 @@ describe("what is remembered while a reading runs", () => {
 describe("what the wait says it is reading", () => {
   it("names the file, the pages or the pasted text", () => {
     expect(sourceWords({ kind: "paste", file: null, pageCount: 0, textLength: 12345 })).toEqual({ name: "Pasted text", detail: "12,345 characters" });
+    expect(sourceWords({ kind: "paste", file: null, pageCount: 0, textLength: 0 })).toEqual({ name: "Pasted text", detail: "" }); // resumed after a reload: the text is not kept
     expect(sourceWords({ kind: "scan", file: null, pageCount: 1, textLength: 0 })).toEqual({ name: "1 page", detail: "Photos of the pages" });
     expect(sourceWords({ kind: "scan", file: null, pageCount: 3, textLength: 0 })).toEqual({ name: "3 pages", detail: "Photos of the pages" });
     expect(sourceWords({ kind: "file", file: { name: "FINC 3100.pdf", kind: "pdf" }, pageCount: 0, textLength: 0 })).toEqual({ name: "FINC 3100.pdf", detail: "PDF" });

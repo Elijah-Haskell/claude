@@ -4,17 +4,13 @@
  * Refreshes the student's course calendar feeds (Canvas / LMS) after launch and whenever the tab comes back into
  * view, at most every 6 hours per feed, and applies the changes: new deadlines become tasks, moved due dates move
  * their tasks (the reactive planner then replans). All in this browser; the feed links never reach the server.
- *
- * Also mounts the Google Calendar foreground re-sync (components/headless/gcal-auto-sync.tsx), the other piece
- * that keeps outside dates current when the tab comes back.
  */
-import { useEffect, useRef, type ReactElement } from "react";
+import { useEffect, useRef } from "react";
 
 import { feedChangeActions } from "../../lib/lms-feed";
 import { refreshCourseFeeds } from "../../lib/lms-feed-store";
 import type { Task } from "../../engine/types";
 import { useApp } from "../../state/app-provider";
-import { GCalAutoSync } from "./gcal-auto-sync";
 
 /**
  * Apply a feed refresh through the normal task actions (shared with the Course site link screen), onto the tasks as
@@ -31,7 +27,7 @@ export function applyFeedChanges(
 /** After launch, the launch replan settles first. */
 const INITIAL_DELAY_MS = 4000;
 
-export function CourseFeedRefresher(): ReactElement {
+export function CourseFeedRefresher(): null {
   const { state, dispatch, isHydrated } = useApp();
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -56,5 +52,5 @@ export function CourseFeedRefresher(): ReactElement {
     };
   }, [isHydrated, dispatch]);
 
-  return <GCalAutoSync />;
+  return null;
 }

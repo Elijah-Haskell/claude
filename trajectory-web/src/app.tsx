@@ -20,6 +20,7 @@ import { useColors } from "./ui/theme";
 import { AddSheet } from "./components/add-sheet";
 import { BlockSheet } from "./components/block-sheet";
 import { CourseFeedRefresher } from "./components/headless/course-feed-refresher";
+import { GCalAutoSync } from "./components/headless/gcal-auto-sync";
 import { ResumePendingExtraction } from "./components/headless/resume-pending-extraction";
 import { StudyNotifications } from "./components/headless/study-notifications";
 import { UndoReplanBar } from "./components/plan-status";
@@ -182,8 +183,8 @@ function NotFound() {
   );
 }
 
-/** The sheets that exist once for the whole app. */
-function GlobalSheets() {
+/** The sheets that exist once for the whole app. The Ask AI page confirms its own changes with Undo, so the app-wide undo snackbar stays away while it is open. */
+function GlobalSheets({ undoBar }: { undoBar: boolean }) {
   const { state, closeAdd, closeReplan, closeTask, closeBlock } = useGlobalModal();
   return (
     <>
@@ -191,7 +192,7 @@ function GlobalSheets() {
       <ReplanSheet preset={state.replan} onClose={closeReplan} />
       <TaskSheetHost taskId={state.taskId} onClose={closeTask} />
       {state.blockId ? <BlockSheet blockId={state.blockId} onClose={closeBlock} /> : null}
-      <UndoReplanBar variant="snackbar" />
+      {undoBar ? <UndoReplanBar variant="snackbar" /> : null}
     </>
   );
 }
@@ -286,6 +287,7 @@ export function App() {
       <SessionEndedListener />
       <AccountGuard route={route} blocked={blocked} />
       <CourseFeedRefresher />
+      <GCalAutoSync />
       <StudyNotifications />
       <ResumePendingExtraction />
       <DialogHost />
@@ -316,7 +318,7 @@ export function App() {
       <Frame lit={lit} wide={route.name === "week" || route.name === "semester-calendar"}>
         <Screen name={route.name} segments={route.segments} />
       </Frame>
-      <GlobalSheets />
+      <GlobalSheets undoBar={route.name !== "ai"} />
       {headless}
     </>
   );

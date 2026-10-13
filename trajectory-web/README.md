@@ -55,6 +55,8 @@ npm run smoke            # browser tests against the mock API (Playwright + Chro
 | `VITE_APPLE_REDIRECT_URI` | The Return URL registered with that Services ID. Default: the page's own origin and path. |
 | `VITE_REVENUECAT_WEB_KEY` | RevenueCat Web Billing public key (`rcb_…`). Without it the paywall shows no prices and cannot sell; Pro bought on the iPhone still works. |
 | `VITE_ACCOUNT_REQUIRED` | `false` builds the browser preview the mobile repo also has: no account, the plan stays in this browser (screenshots, demos). |
+| `VITE_TEST_SIGN_IN` | `1` adds a "Test sign-in" button for the mock API (`tests/mock-server.mjs`). Test builds only. |
+| `VITE_TEST_PRO` | `1` makes the browser hold Trajectory Pro without RevenueCat, for the mock's `MOCK_PRO=1` accounts. Test builds only; compiled out of every other build. |
 
 ## What the server and the dashboards need
 
@@ -90,7 +92,8 @@ The web app calls the production server unchanged, with three things to set up o
 - `src/screens/`, `src/components/` — the screens, rebuilt in plain React on the mobile design system
   (`src/styles.css`, `src/ui/`). `src/app.tsx` — the frame, the hash routes and the account gate.
 - `tests/mock-server.mjs` — a stand-in for the API for the browser tests: the real tRPC server library with the
-  production transformer and the real procedure names; `tests/run-smoke.mjs` builds against it and runs every suite.
+  production transformer and the real procedure names; `tests/run-smoke.mjs` builds against it (a free build and a
+  Pro build) and runs every suite, each against a freshly started mock.
 
 ## Where things differ from the iPhone
 
@@ -101,3 +104,10 @@ The web app calls the production server unchanged, with three things to set up o
   says so, and the iPhone app reads it instead.
 - Purchases go through RevenueCat's checkout instead of the App Store; a web subscription is managed from the
   Settings row, which opens RevenueCat's page.
+- A pasted or typed syllabus is read as a background job like a file (the iPhone reads text in one call), so a
+  reload picks the reading back up. A picked file does not outlive a reload: if that reading fails, the student
+  chooses the file again.
+- Browser notifications have no Snooze or Skip buttons; clicking one opens Today. The browser only asks for
+  permission from the Reminders switch, never after the first plan.
+- The syllabus screen itself tells a free account whose one syllabus is used (the iPhone tells it at the entry
+  points); the server's own refusal leads to the same card.

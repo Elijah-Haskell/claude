@@ -230,6 +230,8 @@ const appRouter = t.router({
           user = { id: nextUserId++, openId, name: [input.givenName, input.familyName].filter(Boolean).join(" ") || "Trajectory Student", email: input.email ?? null, loginMethod: "apple", lastSignedIn: new Date() };
           users.set(openId, user);
         }
+        // MOCK_GCAL=1: the connection made before is there again at every sign-in, so a test that disconnected it can run again.
+        if (GCAL) gcal.delete(user.id);
         return { sessionToken: newToken(openId), user };
       }),
     refresh: protectedProcedure.mutation(({ ctx }) => ({ sessionToken: newToken(ctx.user.openId) })),

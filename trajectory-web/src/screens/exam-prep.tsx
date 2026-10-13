@@ -68,9 +68,9 @@ import { extractDocxText, generateExamContent, readFileAsBase64, readPickedImage
 import { describeStudyError, type StudyErrorInfo } from "../lib/study-errors";
 import { goBack, useNavigate, useRoute } from "../router";
 import { useApp } from "../state/app-provider";
-import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
 import { AiContentLabel } from "../components/ai-content-label";
 import { ToolError, ToolLink } from "../components/study-parts";
+import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
 import { Icon, type IconName } from "../ui/icon";
 import { Card, CourseChip, DateBadge, DateInput, FieldGroup, FieldLabel, FieldPickRow, FieldRow, HeaderIconButton, MONO_FONT, Note, PrimaryButton, ScreenHeader, SectionLabel, Segmented, TimeInput } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";

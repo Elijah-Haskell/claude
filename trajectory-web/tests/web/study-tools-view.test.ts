@@ -631,10 +631,17 @@ describe("the study tools' screens, as built for the web", () => {
   it("the tools that call the AI open Trajectory Pro for a student without it; taking a saved exam does not", () => {
     expect(read("src/screens/study-guides.tsx").match(/useRedirectToPaywallIfNotPro\(\);/g)).toHaveLength(2);
     expect(read("src/screens/test-review.tsx")).toContain("useRedirectToPaywallIfNotPro();");
+    expect(read("src/screens/exam-prep.tsx").match(/useRedirectToPaywallIfNotPro\(\);/g)).toHaveLength(2);
     const practice = read("src/screens/practice.tsx");
     const [list, exam] = practice.split("export function PracticeExamScreen");
     expect(list).toContain("useRedirectToPaywallIfNotPro();");
-    expect(exam).not.toContain("useRedirectToPaywallIfNotPro");
+    expect(exam).not.toContain("useRedirectToPaywallIfNot");
+    // The gate is the app's own (lib/subscription-plans.ts rules); only a test build stands in for the entitlement,
+    // in the one place every screen reads it (src/state/subscription-context.tsx).
+    const gate = read("src/state/use-pro-gate.ts");
+    expect(gate).toContain("decideProGate({ isPro, isLoading })");
+    expect(gate).toContain("shouldRedirectToPaywall({ isPro, isLoading })");
+    expect(read("src/state/subscription-context.tsx")).toContain("if (TEST_PRO) return { isPro: true,");
   });
 
   it("a pushed screen goes back to where it came from; none replaces itself with the tabs", () => {
