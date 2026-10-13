@@ -1,0 +1,30 @@
+# DigitalOcean App Platform spec for the web app at https://app.trajectoryapp.org, as a free static site
+# (App Platform hosts up to three static-site apps free, with 1 GiB of outbound data each per month:
+# https://docs.digitalocean.com/products/app-platform/details/pricing/).
+#
+# Create it once: DigitalOcean > Apps > Create App > "Import from App Spec" (or `doctl apps create --spec <this file>`),
+# then fill in VITE_APPLE_CLIENT_ID with the Services ID. App Platform shows the CNAME target for app.trajectoryapp.org
+# under Settings > Domains; add that CNAME (host "app") at Wix, changing nothing else in the zone.
+name: trajectory-web
+static_sites:
+  - name: web
+    github:
+      repo: Elijah-Haskell/claude
+      branch: claude/nice-pasteur-tkgeqi
+      deploy_on_push: true
+    source_dir: trajectory-web
+    build_command: npm ci && npm run build
+    output_dir: dist
+    envs:
+      - key: VITE_API_BASE_URL
+        value: https://api.trajectoryapp.org
+        scope: BUILD_TIME
+      - key: VITE_APPLE_CLIENT_ID
+        value: org.trajectoryapp.web # the Services ID created in Apple Developer; must match APPLE_WEB_SERVICES_ID
+        scope: BUILD_TIME
+      - key: VITE_APPLE_REDIRECT_URI
+        value: https://app.trajectoryapp.org/
+        scope: BUILD_TIME
+domains:
+  - domain: app.trajectoryapp.org
+    type: PRIMARY

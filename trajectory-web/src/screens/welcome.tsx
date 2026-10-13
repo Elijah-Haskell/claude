@@ -131,7 +131,7 @@ export function WelcomeScreen() {
   }, [waiting]);
   const extras = waitingExtras({ stage, planPhase: gate.planPhase, waitedLong });
 
-  async function finishSignIn(credential: { identityToken: string; appleUserId: string; email?: string; givenName?: string; familyName?: string; authorizationCode?: string }) {
+  async function finishSignIn(credential: { identityToken: string; appleUserId: string; email?: string; givenName?: string; familyName?: string; authorizationCode?: string; nonce?: string }) {
     const result = await mutate("auth.apple", credential, { quiet: true, timeoutMs: 20_000 });
     const account = await completeSignIn(result);
     if (!account || !(await authRefresh())) throw new Error("We could not sign you in. Please try again.");

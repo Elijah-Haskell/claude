@@ -185,7 +185,7 @@ export interface Procedures {
   "auth.me": { kind: "query"; input: void; output: ApiUser | null };
   "auth.apple": {
     kind: "mutation";
-    input: { identityToken: string; appleUserId: string; email?: string; givenName?: string; familyName?: string; authorizationCode?: string };
+    input: { identityToken: string; appleUserId: string; email?: string; givenName?: string; familyName?: string; authorizationCode?: string; nonce?: string };
     output: SignInResult;
   };
   "auth.refresh": { kind: "mutation"; input: void; output: { sessionToken: string } };

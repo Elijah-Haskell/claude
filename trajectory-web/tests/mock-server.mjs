@@ -222,7 +222,7 @@ const appRouter = t.router({
   auth: t.router({
     me: publicProcedure.query(({ ctx }) => ctx.user),
     apple: publicProcedure
-      .input(z.object({ identityToken: z.string().min(1), appleUserId: z.string().min(1), email: z.string().optional(), givenName: z.string().optional(), familyName: z.string().optional(), authorizationCode: z.string().optional() }))
+      .input(z.object({ identityToken: z.string().min(1), appleUserId: z.string().min(1), email: z.string().optional(), givenName: z.string().optional(), familyName: z.string().optional(), authorizationCode: z.string().optional(), nonce: z.string().min(16).max(256).optional() }))
       .mutation(({ input }) => {
         const openId = `apple:${input.appleUserId}`;
         let user = users.get(openId);

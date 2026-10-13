@@ -5,8 +5,9 @@
  * name and e-mail Apple shares at the first sign-in, and the one-time authorization code the server exchanges so that
  * deleting the account can revoke the grant.
  *
- * Note for whoever deploys this: Apple sets the identity token's audience to the Services ID, not to the app's bundle
- * id, so the server must accept both (server/routers.ts `auth.apple`, APPLE_BUNDLE_ID). See the README.
+ * Each sign-in makes a fresh random nonce: Apple gets its SHA-256 (it comes back inside the identity token) and the
+ * server gets the raw value, which it must hash to the token's claim. The server requires this for a web token
+ * (APPLE_WEB_SERVICES_ID; see SERVER_CHANGES.md), so a token picked up elsewhere cannot be replayed.
  */
 import { APPLE_CLIENT_ID, APPLE_REDIRECT_URI } from "./config";
 
@@ -38,6 +39,8 @@ export interface AppleWebCredential {
   givenName?: string;
   familyName?: string;
   authorizationCode?: string;
+  /** The raw nonce whose SHA-256 Apple put in the identity token. */
+  nonce?: string;
 }
 
 /** Whether this build can offer Sign in with Apple at all (a Services ID is configured). */
@@ -76,10 +79,16 @@ function jwtSubject(token: string): string {
   }
 }
 
-function randomState(): string {
-  const bytes = new Uint8Array(16);
+function randomHex(byteCount: number): string {
+  const bytes = new Uint8Array(byteCount);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** SHA-256 (hex) of a string: what Apple is given as the nonce for the raw value the server receives. */
+export async function nonceDigest(raw: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Errors Apple's script rejects with when the student closed the popup or declined. */
@@ -92,7 +101,9 @@ const CANCELLED = new Set(["popup_closed_by_user", "user_cancelled_authorize", "
 export async function signInWithApple(): Promise<AppleWebCredential | null> {
   if (!appleSignInAvailable()) throw new Error("Sign in with Apple is not set up for this website yet.");
   const AppleID = await loadAppleScript();
-  AppleID.auth.init({ clientId: APPLE_CLIENT_ID, scope: "name email", redirectURI: APPLE_REDIRECT_URI, state: randomState(), usePopup: true });
+  const state = randomHex(16);
+  const nonce = randomHex(32);
+  AppleID.auth.init({ clientId: APPLE_CLIENT_ID, scope: "name email", redirectURI: APPLE_REDIRECT_URI, state, nonce: await nonceDigest(nonce), usePopup: true });
   let response: AppleAuthResponse;
   try {
     response = await AppleID.auth.signIn();
@@ -100,6 +111,9 @@ export async function signInWithApple(): Promise<AppleWebCredential | null> {
     const code = (error as { error?: unknown } | null)?.error;
     if (typeof code === "string" && CANCELLED.has(code)) return null;
     throw new Error("Apple could not complete the sign-in. Please try again.");
+  }
+  if (response?.authorization?.state !== undefined && response.authorization.state !== state) {
+    throw new Error("Apple's answer did not match this sign-in. Please try again.");
   }
   const identityToken = response?.authorization?.id_token;
   if (!identityToken) throw new Error("Apple did not return a sign-in token. Please try again.");
@@ -112,5 +126,6 @@ export async function signInWithApple(): Promise<AppleWebCredential | null> {
     givenName: response.user?.name?.firstName || undefined,
     familyName: response.user?.name?.lastName || undefined,
     authorizationCode: response.authorization.code || undefined,
+    nonce,
   };
 }
