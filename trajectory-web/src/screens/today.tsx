@@ -27,6 +27,7 @@ import { daysBetweenKeys, dateKeyOf, formatDuration, formatTime, getDurationMinu
 import { isDeadline } from "../engine/week-view";
 import { blockCourseLabel, blockDisplayTitle, isFlexibleSession, sessionDisplayTitle, showsOnWeekGrid } from "../engine/week-layout";
 import { overloadedDaysAhead, realityCheckFor } from "../engine/workload-analysis";
+import { AskAiButton } from "../components/ask-ai-button";
 import { FlexibleSessionsTip } from "../components/block-sheet";
 import { PassExpiryBanner } from "../components/pass-expiry-banner";
 import { PlanReviewSheet, PlanStatusCard, UndoReplanBar, usePlanFixHandlers } from "../components/plan-status";
@@ -449,8 +450,8 @@ export function TodayScreen() {
 
   return (
     <div className="screen">
-      {/* 1 · The date and "Today" (or the weekday looked at) */}
-      <ScreenHeader eyebrow={eyebrow} title={isToday ? "Today" : dayName} />
+      {/* 1 · The date and "Today" (or the weekday looked at), and Ask AI */}
+      <ScreenHeader eyebrow={eyebrow} title={isToday ? "Today" : dayName} right={startCard ? undefined : <AskAiButton />} />
 
       {/* 2 · The week as a strip of dates: click a day to look at it, click today to come back */}
       <WeekStrip days={stripDays} selectedKey={viewDate} onSelect={(key) => setPickedDate(key === today ? null : key)} />

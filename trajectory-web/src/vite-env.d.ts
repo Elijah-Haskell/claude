@@ -13,4 +13,6 @@ interface ImportMetaEnv {
   readonly VITE_ACCOUNT_REQUIRED?: string;
   /** "1" = the welcome screen offers a test sign-in against a mock server (tests/mock-server.mjs). Never in production. */
   readonly VITE_TEST_SIGN_IN?: string;
+  /** "1" = Trajectory AI treats this browser as Pro, for the browser test against the mock server (MOCK_PRO=1). Never in production. */
+  readonly VITE_TEST_PRO?: string;
 }

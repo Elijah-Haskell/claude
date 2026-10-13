@@ -718,3 +718,22 @@ textarea.input {
     bottom: 0;
   }
 }
+
+/* ── Trajectory AI (src/screens/ai.tsx): the conversation fills the screen so the box stays at the bottom, and the
+   page confirms its own changes with Undo, so the app-wide undo snackbar is hidden while it is open ── */
+.ai-page {
+  min-height: calc(100vh - 84px - env(safe-area-inset-bottom, 0px));
+  min-height: calc(100dvh - 84px - env(safe-area-inset-bottom, 0px));
+}
+.ai-composer textarea::placeholder {
+  color: var(--muted);
+}
+body[data-route="ai"] .snack-wrap {
+  display: none;
+}
+@media (min-width: 900px) {
+  .ai-page {
+    min-height: calc(100vh - 48px);
+    min-height: calc(100dvh - 48px);
+  }
+}

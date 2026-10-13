@@ -51,6 +51,8 @@ export const REMINDERS_COPY = {
   footnote: `Notifications cover the next ${REMINDER_WINDOW_DAYS} days and are rewritten whenever your plan changes, so a moved session never pings you at its old time.`,
   /** What the browser adds: reminders are shown by this browser, so a Trajectory tab has to be open. */
   tabNote: "Reminders come from this browser while a Trajectory tab is open.",
+  /** A browser without the Notification API (or one that keeps it from web pages). */
+  unsupported: "This browser cannot show notifications, so reminders cannot come here. The iPhone app can remind you.",
   sheetTitle: "Add a heads-up",
   sheetSub: "How long before the session starts?",
   customTime: "Set specific time of day",

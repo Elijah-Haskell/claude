@@ -6,8 +6,8 @@ const NOW = new Date(2026, 9, 7, 12, 0, 0);
 const ago = (minutes: number) => new Date(NOW.getTime() - minutes * 60000).toISOString();
 
 describe("what the screen has always promised, word for word", () => {
-  it("the link stays on the phone", () => {
-    expect(COURSE_LINK_COPY.privacy).toBe("The link is private to you. It stays on this phone and is fetched straight from your school, never through Trajectory's server.");
+  it("the link stays in this browser (the iPhone says \"this phone\")", () => {
+    expect(COURSE_LINK_COPY.privacy).toBe("The link is private to you. It stays in this browser and is fetched straight from your school, never through Trajectory's server.");
   });
 
   it("what a link brings in", () => {

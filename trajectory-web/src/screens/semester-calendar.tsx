@@ -1,20 +1,19 @@
-// PLACEHOLDER: ported in a following step (see the task list). Keep the export names; the route is wired in src/app.tsx.
-import { goBack } from "../router";
-import { Icon } from "../ui/icon";
-import { HeaderIconButton, Note, ScreenHeader } from "../ui/primitives";
-import { useColors } from "../ui/theme";
+/**
+ * The month view lives in the Week screen ("3 days / Week / Month", src/components/month-view.tsx), as in the iPhone
+ * app (app/semester-calendar.tsx). This route stays for links from OUTSIDE the app (an old notification, a saved
+ * bookmark): it opens Week on its Month view, replacing itself in the history so the back button never returns here.
+ * In-app links go straight to "#/week?view=month".
+ */
+import { useEffect } from "react";
 
-export function SemesterCalendarScreen() {
-  const colors = useColors();
-  return (
-    <div className="screen" style={{ maxWidth: 560 }}>
-      <div style={{ display: "flex", paddingTop: 4 }}>
-        <HeaderIconButton onPress={() => goBack("today")} ariaLabel="Back">
-          <Icon name="chevronLeft" size={20} color={colors.foreground} strokeWidth={2} />
-        </HeaderIconButton>
-      </div>
-      <ScreenHeader title="Semester calendar" />
-      <Note tone="plain" icon="info">This screen is being ported.</Note>
-    </div>
-  );
+import { navigate } from "../router";
+
+/** Where this route sends: Week, on the month. */
+export const SEMESTER_CALENDAR_TARGET = "week?view=month";
+
+export function SemesterCalendarScreen(): null {
+  useEffect(() => {
+    navigate(SEMESTER_CALENDAR_TARGET, { replace: true });
+  }, []);
+  return null;
 }

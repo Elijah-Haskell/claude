@@ -1,18 +1,19 @@
-// Imported syllabi, opened from Classes: one row per import (the class's tag, its name, when it was added and how
-// many tasks it added). A row opens that import's sheet: what it added, the class it belongs to, "Add it again", and
-// the two ways to take it away, each asking first inside the sheet ("Undo this import" takes its tasks out of the
-// plan; "Remove from this list" only forgets the import). What every line says is src/engine/imports-view.ts.
+// Imported syllabi, opened from Classes (the iPhone app's app/syllabus-history.tsx): one row per import (the class's
+// tag, its name, when it was added and how many tasks it added). A row opens that import's sheet: what it added,
+// whether Ask AI can read it, the class it belongs to, "Add it again", and the two ways to take it away, each asking
+// first inside the sheet ("Undo this import" takes its tasks out of the plan; "Remove from this list" only forgets
+// the import). What every line says is src/engine/imports-view.ts.
 
 import { useState } from "react";
 
 import { alpha } from "../engine/design";
-import { importRowFlag, importRowLine, importSheetView } from "../engine/imports-view";
+import { hasNewerReadableImport, importRowFlag, importRowLine, importSheetView } from "../engine/imports-view";
 import type { SyllabusImport } from "../engine/types";
 import { classShortName } from "../engine/week-layout";
 import { goBack, useNavigate } from "../router";
 import { useApp } from "../state/app-provider";
 import { Icon, type IconName } from "../ui/icon";
-import { FieldGroup, FieldPickRow, HeaderIconButton, InlineConfirm, Note, PrimaryButton, ScreenHeader } from "../ui/primitives";
+import { Card, FieldGroup, FieldPickRow, HeaderIconButton, InlineConfirm, Note, PrimaryButton, ScreenHeader } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
 import { useColors } from "../ui/theme";
 import { ClassTag } from "./classes";
@@ -41,16 +42,20 @@ export function ImportsScreen() {
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
   const imports = [...(state.syllabusImports ?? [])].sort((a, b) => b.importedAt.localeCompare(a.importedAt));
+  // The sheet of one import, and the question it is asking (undo its tasks, or only forget it).
   const [openId, setOpenId] = useState<string | null>(null);
   const [asking, setAsking] = useState<"undo" | "remove" | null>(null);
 
   const classOf = (entry: SyllabusImport) => state.classes.find((cls) => cls.id === entry.linkedClassId);
+  const viewOf = (entry: SyllabusImport) => importSheetView(entry, classOf(entry), new Date(), { newerReadable: hasNewerReadableImport(entry, imports) });
   const item = openId ? imports.find((entry) => entry.id === openId) ?? null : null;
-  const view = item ? importSheetView(item, classOf(item), new Date(), { newerReadable: false }) : null;
+  const itemClass = item ? classOf(item) : undefined;
+  const view = item ? viewOf(item) : null;
   const close = () => {
     setOpenId(null);
     setAsking(null);
   };
+  const addSyllabus = (cls?: { id: string }) => navigate(cls ? `syllabus?classId=${encodeURIComponent(cls.id)}` : "syllabus");
 
   return (
     <div className="screen">
@@ -59,64 +64,108 @@ export function ImportsScreen() {
           <Icon name="chevronLeft" size={20} color={colors.foreground} strokeWidth={2} />
         </HeaderIconButton>
       </div>
-      <ScreenHeader eyebrow={`${imports.length} imported`} title="Imported syllabi" subtitle="What each one added, and the way to undo it." />
+      <ScreenHeader eyebrow="Classes" title="Imported syllabi" subtitle="What each syllabus added to your plan." />
 
       {imports.length === 0 ? (
-        <Note tone="plain" icon="file">No syllabus has been imported yet.</Note>
+        <Card tone="surface" radiusSize={18} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <h2 style={{ margin: 0, fontSize: 19, lineHeight: "24px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>No imports yet</h2>
+          <p style={{ margin: "0 0 6px", fontSize: 14, lineHeight: "20px", color: colors.muted }}>Add a syllabus and Trajectory reads the class, when it meets and its deadlines from it.</p>
+          <PrimaryButton size="lg" fullWidth label="Add a syllabus" onPress={() => addSyllabus()} />
+        </Card>
       ) : (
-        <FieldGroup>
-          {imports.map((entry) => {
-            const cls = classOf(entry);
-            const flag = importRowFlag(importSheetView(entry, cls, new Date(), { newerReadable: false }));
-            return (
-              <button key={entry.id} type="button" className="row pressable" onClick={() => setOpenId(entry.id)} aria-label={`${entry.linkedClassName}. ${importRowLine(entry)}. Open it`} style={{ minHeight: 72 }}>
-                <ClassTag cls={cls ?? { name: entry.linkedClassName, color: "" }} />
-                <span className="row-text">
-                  <span className="row-label clamp2" style={{ display: "block" }}>{cls?.name ?? entry.linkedClassName}</span>
-                  <span className="row-detail" style={{ display: "block" }}>{importRowLine(entry)}</span>
-                  {flag ? <span className="row-detail" style={{ display: "block", color: colors.gold }}>{flag}</span> : null}
-                </span>
-                <Icon name="chevronRight" size={18} color={colors.muted} />
-              </button>
-            );
-          })}
-        </FieldGroup>
+        <>
+          <FieldGroup>
+            {imports.map((entry) => {
+              const cls = classOf(entry);
+              const line = importRowLine(entry);
+              // What this import still needs, said on its row so the student need not open each one to find out.
+              const flag = importRowFlag(viewOf(entry));
+              return (
+                <button key={entry.id} type="button" className="row pressable" onClick={() => { setOpenId(entry.id); setAsking(null); }} aria-label={`${entry.linkedClassName}. ${line}. ${flag ? `${flag}. ` : ""}See what it added`} style={{ minHeight: 72 }}>
+                  <ClassTag cls={cls ?? { name: entry.linkedClassName, color: "" }} />
+                  <span className="row-text">
+                    <span className="row-label clamp2" style={{ display: "block" }}>{entry.linkedClassName}</span>
+                    <span className="row-detail" style={{ display: "block" }}>{line}</span>
+                    {flag ? <span className="row-detail clamp2" style={{ display: "block", color: colors.gold }}>{flag}</span> : null}
+                  </span>
+                  <Icon name="chevronRight" size={18} color={colors.muted} />
+                </button>
+              );
+            })}
+          </FieldGroup>
+          <PrimaryButton tone="ghost" size="lg" fullWidth label="Add another syllabus" left={<Icon name="plus" size={20} color={colors.foreground} strokeWidth={2} />} onPress={() => addSyllabus()} />
+        </>
       )}
 
       <Sheet open={item !== null} onClose={close} ariaLabel="Imported syllabus">
         {item && view ? (
           <SheetBody>
-            <SheetHead eyebrow={view.addedLine} title={classOf(item)?.name ?? item.linkedClassName} onClose={close} />
+            <SheetHead eyebrow={view.addedLine} title={item.linkedClassName} onClose={close} />
+
+            {/* What it added */}
             <FieldGroup>
               <Fact icon="list" label={view.added} details={view.addedDetails} />
-              <Fact icon="book" label={view.classLine} details={view.classDetails} tone={view.openClass?.missing ? "gold" : "default"} />
-            </FieldGroup>
-            <FieldGroup>
-              {view.openClass ? <FieldPickRow first icon="edit" label="Open the class" detail={view.openClass.detail} unset={view.openClass.missing} onPress={() => { close(); navigate(`classes?edit=${encodeURIComponent(item.linkedClassId)}`); }} /> : null}
-              <FieldPickRow icon="upload" label="Add it again" detail={view.addAgain.detail} unset={view.addAgain.missing} onPress={() => { close(); navigate(item.linkedClassId && classOf(item) ? `syllabus?classId=${encodeURIComponent(item.linkedClassId)}` : "syllabus"); }} />
+              <Fact icon="book" label={view.classLine} details={view.classDetails} />
+              <Fact icon="spark" tone={view.aiReadable ? "violet" : "gold"} label={view.aiLine} details={view.aiDetail ? [view.aiDetail] : []} />
             </FieldGroup>
 
-            {asking === "undo" && view.undo ? (
-              <InlineConfirm question={view.undo.question} confirmLabel="Undo the import" onConfirm={() => { dispatch({ type: "UNDO_SYLLABUS_IMPORT", payload: item.id }); close(); }} onCancel={() => setAsking(null)} />
-            ) : asking === "remove" ? (
-              <InlineConfirm question={view.removeQuestion} confirmLabel="Remove" onConfirm={() => { dispatch({ type: "DELETE_SYLLABUS_IMPORT", payload: item.id }); close(); }} onCancel={() => setAsking(null)} />
+            {/* What can be done with it */}
+            <FieldGroup>
+              {view.openClass ? (
+                <FieldPickRow
+                  first
+                  icon="book"
+                  label="Open the class"
+                  detail={view.openClass.detail || undefined}
+                  value={view.openClass.missing ? "Set days" : undefined}
+                  unset={view.openClass.missing}
+                  onPress={() => {
+                    close();
+                    navigate(`classes?edit=${encodeURIComponent(item.linkedClassId)}`);
+                  }}
+                  ariaLabel={view.openClass.missing ? "Open the class. It has no class days yet: set when it meets" : "Open the class"}
+                />
+              ) : null}
+              <FieldPickRow
+                first={!view.openClass}
+                icon="upload"
+                label="Add it again"
+                detail={view.addAgain.detail}
+                unset={view.addAgain.missing}
+                onPress={() => {
+                  close();
+                  addSyllabus(itemClass);
+                }}
+                ariaLabel={`Add this syllabus again. ${view.addAgain.detail}`}
+              />
+            </FieldGroup>
+
+            {/* Undo: its tasks, the class it made and their sessions leave the plan. It asks first, here. */}
+            {view.undo ? (
+              asking === "undo" ? (
+                <InlineConfirm question={view.undo.question} confirmLabel="Undo import" cancelLabel="Keep it" onConfirm={() => { dispatch({ type: "UNDO_SYLLABUS_IMPORT", payload: item.id }); close(); }} onCancel={() => setAsking(null)} />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <PrimaryButton tone="danger" fullWidth label="Undo this import" onPress={() => setAsking("undo")} ariaLabel={`Undo this import for ${item.linkedClassName}. It asks first`} />
+                  <p className="caption" style={{ margin: 0, textAlign: "center" }}>{view.undo.caption}</p>
+                </div>
+              )
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {view.undo ? (
-                  <>
-                    <PrimaryButton tone="danger" size="lg" fullWidth label="Undo this import" onPress={() => setAsking("undo")} />
-                    <p className="caption" style={{ margin: "-4px 0 0", textAlign: "center" }}>{view.undo.caption}</p>
-                  </>
-                ) : (
-                  <p className="caption" style={{ margin: 0, textAlign: "center" }}>{view.undoUnavailable}</p>
-                )}
-                <button type="button" className="link" onClick={() => setAsking("remove")} style={{ minHeight: 44, alignSelf: "center", fontSize: 14, fontWeight: 600, color: colors.muted }}>Remove from this list, keep the tasks</button>
-              </div>
+              <p className="caption" style={{ margin: 0, textAlign: "center" }}>{view.undoUnavailable}</p>
+            )}
+
+            {/* Forget the import only: the tasks stay. It asks first, here. */}
+            {asking === "remove" ? (
+              <InlineConfirm question={view.removeQuestion} confirmLabel="Remove" cancelLabel="Keep" onConfirm={() => { dispatch({ type: "DELETE_SYLLABUS_IMPORT", payload: item.id }); close(); }} onCancel={() => setAsking(null)} />
+            ) : (
+              <button type="button" className="link" onClick={() => setAsking("remove")} aria-label="Remove from this list, keep the tasks. It asks first" style={{ minHeight: 44, alignSelf: "center", padding: "0 12px", marginTop: -6, fontSize: 15, lineHeight: "20px", fontWeight: 500, color: colors.muted }}>
+                Remove from this list, keep the tasks
+              </button>
             )}
           </SheetBody>
         ) : (
           <SheetBody>
-            <p className="caption">This import is gone.</p>
+            <Note tone="plain" icon="info">This import is gone.</Note>
           </SheetBody>
         )}
       </Sheet>

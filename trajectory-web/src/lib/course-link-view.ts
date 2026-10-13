@@ -20,7 +20,7 @@ export const COURSE_LINK_COPY = {
   field: "Calendar link from your course site",
   placeholder: "Paste the link",
   /** The lock note. */
-  privacy: "The link is private to you. It stays on this phone and is fetched straight from your school, never through Trajectory's server.",
+  privacy: "The link is private to you. It stays in this browser and is fetched straight from your school, never through Trajectory's server.",
   /** What a link brings in. */
   scope: "Only assignments, quizzes and exams are imported (not lectures or office hours), from today on. Each keeps its course and due time.",
   removeQuestion: "Remove this link? Deadlines it already added stay in your tasks; they just stop following the course site.",

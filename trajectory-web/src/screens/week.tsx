@@ -19,6 +19,7 @@ import { shortDateLabel, taskBadge } from "../engine/task-list";
 import { parseLocalDate, weekStartKeyOf } from "../engine/utils";
 import { defaultAddDate, isFlexibleSession, weekdayName } from "../engine/week-layout";
 import { WEEK_VIEWS, dateRangeTitle, defaultMonthDay, isWeekView, monthCells, monthMarks, monthTitle, periodEyebrow, showsToday, stepAnchor, visibleDates, type WeekView } from "../engine/week-view";
+import { AskAiButton } from "../components/ask-ai-button";
 import { FlexibleSessionsTip } from "../components/block-sheet";
 import { MonthView } from "../components/month-view";
 import { PlanReviewSheet } from "../components/plan-status";
@@ -224,14 +225,17 @@ export function WeekScreen() {
 
   return (
     <div className="screen">
-      {/* 1 · Where in the term, the dates on screen, and Update plan */}
+      {/* 1 · Where in the term, the dates on screen, Ask AI and Update plan */}
       <ScreenHeader
         eyebrow={eyebrow}
         title={title}
         right={
+          <>
+          <AskAiButton />
           <HeaderIconButton ariaLabel={isRefreshing ? "Updating your plan" : "Update plan: run the planner now (you can undo it)"} onPress={handleRefresh}>
             {isRefreshing ? <span className="spinner" style={{ width: 18, height: 18 }} /> : <Icon name="refresh" size={19} color={colors.foreground} strokeWidth={2} />}
           </HeaderIconButton>
+          </>
         }
       />
 

@@ -5,14 +5,14 @@
 // and the link that plans or replans that time; the two ways to practise (flashcards and the quiz); then the reading,
 // on a switch: the topics, or the study guide. Exam study time is ONE task handed to the same planner as every other
 // task (src/engine/exam-runway.ts); before anything changes, the link asks the real planner whether the time fits
-// and says what it found. With a Gemini key in Settings the study guide, flashcards and quiz are written by
-// Gemini; without one, definitions and flashcards are lifted from the student's own notes.
+// and says what it found. The study guide, flashcards and quiz are written by the server's AI (ai.generateExamContent
+// through src/lib/study-api.ts, validated by the engine's parsers), as the mobile app's components/study/exam-prep-*.tsx
+// do; until then, definitions and flashcards lifted from the student's own notes stand in (newExamPrep). Pro only.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { legibleOn, parseHexColor } from "../engine/contrast";
 import { alpha } from "../engine/design";
-import { buildNotesOutline } from "../engine/exam-input";
 import { examPrepsToRelink, findExamTask, withLinkedExam } from "../engine/exam-prep-link";
 import {
   blocksAfterPrepDelete,
@@ -40,6 +40,7 @@ import {
   quizFinished,
   quizMark,
   quizResult,
+  shouldWriteMaterial,
   stepFraction,
   stepLabel,
   studyTimeLine,
@@ -57,22 +58,24 @@ import { buildExamRunway, examTiming, previewRunway, runwayScheduleSummary, runw
 import { sessionLengthFor } from "../engine/intelligent-scheduler";
 import { prettyExamDate } from "../engine/study-free-view";
 import { examStudyGuideExcerpt } from "../engine/study-guides";
-import { daysUntilExam } from "../engine/study-prompts";
+import { MAX_REVIEW_IMAGES } from "../engine/study-images";
+import { EXAM_MATERIAL_CHAR_LIMIT, formatCount } from "../engine/study-text";
 import { comingUpShown, examBadge } from "../engine/study-view";
 import type { ExamPrep, ExamStudyGuide, ExamTopic, MasteryLevel, Task } from "../engine/types";
 import { generateId, localDateKey } from "../engine/utils";
 import { classOfTask, classShortName } from "../engine/week-layout";
-import { AiError } from "../lib/ai-types";
+import { extractDocxText, generateExamContent, readFileAsBase64, readPickedImage, tooLargeFileError, uploadMaterialFile } from "../lib/study-api";
+import { describeStudyError, type StudyErrorInfo } from "../lib/study-errors";
 import { goBack, useNavigate, useRoute } from "../router";
 import { useApp } from "../state/app-provider";
-import { PREF_KEYS, useLocalPref } from "../state/local-prefs";
+import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
+import { AiContentLabel } from "../components/ai-content-label";
+import { ToolError, ToolLink } from "../components/study-parts";
 import { Icon, type IconName } from "../ui/icon";
-import { Card, CourseChip, DateBadge, DateInput, FieldGroup, FieldLabel, FieldRow, HeaderIconButton, InlineConfirm, MONO_FONT, Note, PrimaryButton, ScreenHeader, SectionLabel, Segmented, TimeInput } from "../ui/primitives";
+import { Card, CourseChip, DateBadge, DateInput, FieldGroup, FieldLabel, FieldPickRow, FieldRow, HeaderIconButton, MONO_FONT, Note, PrimaryButton, ScreenHeader, SectionLabel, Segmented, TimeInput } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
 import { useColors } from "../ui/theme";
 import { FoldLink, ThinBar } from "./study";
-
-void examStudyGuideExcerpt;
 
 // ── Small parts ───────────────────────────────────────────────
 
@@ -119,7 +122,7 @@ function StepSheet({ open, onClose, where, fraction, closeLabel, children, foote
 
 // ── Flashcards and the quiz ───────────────────────────────────
 
-function FlashcardsViewer({ open, onClose, cards, chip }: { open: boolean; onClose: () => void; cards: readonly { front: string; back: string }[]; chip?: { label: string; color?: string } | null }) {
+function FlashcardsViewer({ open, onClose, cards, aiGenerated, chip }: { open: boolean; onClose: () => void; cards: readonly { front: string; back: string }[]; aiGenerated?: boolean; chip?: { label: string; color?: string } | null }) {
   const colors = useColors();
   const [index, setIndex] = useState(0);
   const [showBack, setShowBack] = useState(false);
@@ -165,6 +168,8 @@ function FlashcardsViewer({ open, onClose, cards, chip }: { open: boolean; onClo
           {hint}
         </span>
       </button>
+      {/* The cards are the AI's, or "term: definition" lines lifted from the student's notes, which carry no AI label. */}
+      {aiGenerated ? <AiContentLabel surface="exam prep" content={() => `Flashcard\nQ: ${card.front}\nA: ${card.back}`} /> : null}
     </StepSheet>
   );
 }
@@ -236,6 +241,8 @@ function QuizViewer({ open, onClose, questions, over }: { open: boolean; onClose
           <p style={{ margin: 0, fontSize: 15, lineHeight: "22px", color: colors.foreground, whiteSpace: "pre-wrap" }}>{question.answer}</p>
         </div>
       ) : null}
+      {/* Every question of the quiz is written by the AI. */}
+      <AiContentLabel surface="practice exam" content={() => `Practice question\nQ: ${question.question}\nA: ${question.answer}`} />
     </StepSheet>
   );
 }
@@ -259,11 +266,14 @@ function MasteryControl({ topic, onMark }: { topic: ExamTopic; onMark: (level: M
   );
 }
 
-function ExamPrepTopics({ topics, onMark }: { topics: readonly ExamTopic[]; onMark: (topicId: string, level: MasteryLevel) => void }) {
+function ExamPrepTopics({ topics, aiWritten, onMark }: { topics: readonly ExamTopic[]; aiWritten: boolean; onMark: (topicId: string, level: MasteryLevel) => void }) {
   const colors = useColors();
   const [openId, setOpenId] = useState<string | null>(null);
   if (topics.length === 0) return <Note tone="plain" icon="list">This exam prep has no topics.</Note>;
   return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* The topics' descriptions were written by the AI study guide. */}
+      {aiWritten ? <AiContentLabel surface="exam prep" content={() => topics.filter((topic) => topic.description).slice(0, 8).map((topic) => `${topic.title}: ${topic.description}`).join("\n")} /> : null}
     <FieldGroup>
       {topics.map((topic, index) => {
         const open = openId === topic.id;
@@ -292,12 +302,12 @@ function ExamPrepTopics({ topics, onMark }: { topics: readonly ExamTopic[]; onMa
         );
       })}
     </FieldGroup>
+    </div>
   );
 }
 
-function ExamPrepGuide({ guide, writing, canGenerate, onGenerate }: { guide: ExamStudyGuide | undefined; writing: boolean; canGenerate: boolean; onGenerate: () => void }) {
+function ExamPrepGuide({ guide, writing, onGenerate }: { guide: ExamStudyGuide | undefined; writing: boolean; onGenerate: () => void }) {
   const colors = useColors();
-  const navigate = useNavigate();
   const intro = guideIntro(guide, writing);
   const expansions = guide?.topicExpansions ?? [];
   const concepts = guide?.keyConcepts ?? [];
@@ -311,13 +321,14 @@ function ExamPrepGuide({ guide, writing, canGenerate, onGenerate }: { guide: Exa
             <StateTag label="AI study guide" tone="violet" icon="spark" />
           </div>
           <h2 style={{ margin: 0, fontSize: 19, lineHeight: "24px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>{intro.title}</h2>
-          <p style={body}>{canGenerate ? intro.body : "Add your own Gemini API key in Settings and Gemini writes explanations, flashcards and practice questions for these topics. Without one, what is below comes from your own notes."}</p>
-          {intro.action ? (canGenerate ? <PrimaryButton label={intro.action} size="lg" fullWidth onPress={onGenerate} style={{ marginTop: 10 }} /> : <PrimaryButton label="Open Settings" tone="ghost" size="lg" fullWidth onPress={() => navigate("settings")} style={{ marginTop: 10 }} />) : null}
+          <p style={body}>{intro.body}</p>
+          {intro.action ? <PrimaryButton label={intro.action} size="lg" fullWidth onPress={onGenerate} style={{ marginTop: 10 }} /> : null}
         </Card>
       ) : null}
 
       {guide ? (
         <>
+          {guide.aiGenerated ? <AiContentLabel surface="study guide" content={() => examStudyGuideExcerpt(guide)} /> : null}
           {guide.bigPictureSummary ? (
             <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <SectionLabel title="Big picture" />
@@ -381,6 +392,8 @@ function ExamPrepGuide({ guide, writing, canGenerate, onGenerate }: { guide: Exa
 
 // ── The sheet that starts a prep ──────────────────────────────
 
+const MAX_NOTES_CHARS = 200_000;
+
 interface PrepPrefill {
   classId?: string;
   date?: string;
@@ -391,8 +404,13 @@ function ExamPrepCreateSheet({ open, onClose, prefill, onCreated }: { open: bool
   const colors = useColors();
   const { state, dispatch } = useApp();
   const [form, setForm] = useState<PrepForm>(EMPTY_PREP_FORM);
+  const [fileName, setFileName] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<StudyErrorInfo | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  // What the sheet was last opened for: the same exam again keeps what was typed, another one starts clean.
   const openedFor = useRef<string | null>(null);
 
   useEffect(() => {
@@ -400,7 +418,10 @@ function ExamPrepCreateSheet({ open, onClose, prefill, onCreated }: { open: bool
     const key = prefill?.taskId ? `task:${prefill.taskId}` : prefill?.classId || prefill?.date ? `link:${prefill.classId ?? ""}:${prefill.date ?? ""}` : "";
     const patch = prepPrefill(prefill, state.tasks, state.classes);
     if (openedFor.current !== key) {
+      // Another exam (or none): nothing an earlier one left in the sheet carries over.
       setForm({ ...EMPTY_PREP_FORM, ...patch });
+      setFileName("");
+      setUploadError(null);
       setNotesOpen(false);
     } else {
       setForm((current) => ({ ...current, ...patch }));
@@ -411,14 +432,94 @@ function ExamPrepCreateSheet({ open, onClose, prefill, onCreated }: { open: bool
 
   const todayKey = localDateKey(new Date());
   const linkedTask = linkedExamTask(form, state.tasks);
-  const check = prepFormCheck(form, { todayKey, linked: Boolean(linkedTask) });
+  const check = prepFormCheck(form, { todayKey, uploading: isUploading, linked: Boolean(linkedTask) });
   const showNotes = notesOpen || form.notes.length > 0;
   const patch = (changes: Partial<PrepForm>) => setForm((current) => ({ ...current, ...changes }));
 
-  function pickFile(file: File | undefined) {
+  function appendNotes(text: string) {
+    setForm((current) => ({ ...current, notes: (current.notes ? `${current.notes}\n\n${text}` : text).slice(0, MAX_NOTES_CHARS) }));
+  }
+
+  /** A PDF is uploaded for the AI to read; a Word file's text (read by the server) and a text file go into the notes. */
+  async function handlePickFile(file: File | undefined) {
     if (!file) return;
-    file.text().then((content) => patch({ notes: (form.notes ? `${form.notes}\n\n${content.trim()}` : content.trim()).slice(0, 200_000) })).catch(() => undefined);
-    setNotesOpen(true);
+    setUploadError(null);
+    const name = file.name.toLowerCase();
+    const isPlainText = file.type === "text/plain" || file.type === "text/markdown" || name.endsWith(".txt") || name.endsWith(".md");
+    setIsUploading(true);
+    try {
+      if (isPlainText) {
+        // Plain text never needs the server: it goes straight into the notes box.
+        appendNotes((await file.text()).trim());
+        setFileName(`${file.name} (added to your notes)`);
+        setNotesOpen(true);
+        return;
+      }
+      const base64 = await readFileAsBase64(file);
+      const tooLarge = tooLargeFileError(base64);
+      if (tooLarge) {
+        setUploadError(tooLarge);
+        return;
+      }
+      if (name.endsWith(".docx") || file.type.includes("wordprocessingml")) {
+        appendNotes(await extractDocxText(base64));
+        setFileName(`${file.name} (text extracted)`);
+        setNotesOpen(true);
+      } else if (name.endsWith(".pdf") || file.type === "application/pdf") {
+        const uploaded = await uploadMaterialFile({ base64Data: base64, fileName: file.name, mimeType: "application/pdf" });
+        patch({ fileUrl: uploaded.url });
+        setFileName(file.name);
+      } else {
+        setUploadError({ kind: "unsupported", title: "File type not supported", message: "Use a PDF, a Word (.docx) file or a .txt file, or paste the text.", retryable: false });
+      }
+    } catch (e) {
+      setUploadError(describeStudyError(e, "upload that file"));
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  /** Up to six photos of class material, each checked against the server's rules and uploaded one by one. */
+  async function handlePickImages(files: readonly File[]) {
+    setUploadError(null);
+    const already = form.imageUrls;
+    const room = MAX_REVIEW_IMAGES - already.length;
+    if (room <= 0) {
+      setUploadError({ kind: "invalid", title: "Photo limit reached", message: `You can add up to ${MAX_REVIEW_IMAGES} photos. Remove one to add another.`, retryable: false });
+      return;
+    }
+    if (files.length === 0) return;
+    setIsUploading(true);
+    const urls: string[] = [];
+    let firstProblem: StudyErrorInfo | null = null;
+    try {
+      for (const file of files.slice(0, room)) {
+        const picked = await readPickedImage(file);
+        if (!picked.ok) {
+          firstProblem = firstProblem ?? { kind: picked.reason === "too_large" ? "too_large" : "unsupported", title: "Photo skipped", message: picked.message, retryable: false };
+          continue;
+        }
+        try {
+          const uploaded = await uploadMaterialFile({ base64Data: picked.base64, fileName: `photo_${generateId()}.jpg`, mimeType: picked.mimeType });
+          urls.push(uploaded.url);
+        } catch (e) {
+          firstProblem = firstProblem ?? describeStudyError(e, "upload that photo");
+        }
+      }
+    } finally {
+      setIsUploading(false);
+    }
+    if (urls.length > 0) {
+      const all = [...already, ...urls];
+      patch({ imageUrls: all });
+      setFileName(`${all.length} photo${all.length > 1 ? "s" : ""} ready`);
+    }
+    if (firstProblem) setUploadError(firstProblem);
+  }
+
+  function clearMaterial() {
+    patch({ fileUrl: "", imageUrls: [] });
+    setFileName("");
   }
 
   function handleCreate() {
@@ -426,6 +527,8 @@ function ExamPrepCreateSheet({ open, onClose, prefill, onCreated }: { open: bool
     const exam = newExamPrep(form, { classes: state.classes, tasks: state.tasks, id: generateId, now: new Date() });
     dispatch({ type: "ADD_EXAM_PREP", payload: exam });
     setForm(EMPTY_PREP_FORM);
+    setFileName("");
+    setUploadError(null);
     setNotesOpen(false);
     openedFor.current = null;
     onClose();
@@ -482,15 +585,34 @@ function ExamPrepCreateSheet({ open, onClose, prefill, onCreated }: { open: bool
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <FieldLabel style={{ marginBottom: -2 }}>Class material · optional</FieldLabel>
-          {showNotes ? (
-            <textarea className="input" value={form.notes} onChange={(e) => patch({ notes: e.target.value.slice(0, 200_000) })} placeholder="Paste your class notes, definitions and key terms here" rows={5} aria-label="Class notes" />
-          ) : (
-            <div style={{ display: "flex", gap: 8 }}>
-              <PrimaryButton tone="ghost" size="md" label="Paste notes" left={<Icon name="text" size={17} color={colors.foreground} />} onPress={() => setNotesOpen(true)} style={{ flex: 1 }} />
-              <PrimaryButton tone="ghost" size="md" label="Add a text file" left={<Icon name="file" size={17} color={colors.foreground} />} onPress={() => fileInput.current?.click()} style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <PrimaryButton tone="ghost" size="md" label="Add a file" left={<Icon name="file" size={17} color={colors.foreground} />} onPress={() => fileInput.current?.click()} disabled={isUploading} ariaLabel="Add a file: PDF, Word or text" style={{ flex: 1 }} />
+            <PrimaryButton tone="ghost" size="md" label="Add photos" left={<Icon name="image" size={17} color={colors.foreground} />} onPress={() => photoInput.current?.click()} disabled={isUploading} ariaLabel={`Add photos, up to ${MAX_REVIEW_IMAGES}`} style={{ flex: 1 }} />
+          </div>
+          <input ref={fileInput} type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" style={{ display: "none" }} aria-hidden tabIndex={-1} onChange={(e) => { void handlePickFile(e.target.files?.[0]); e.target.value = ""; }} />
+          <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" multiple style={{ display: "none" }} aria-hidden tabIndex={-1} onChange={(e) => { void handlePickImages(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+          {isUploading ? (
+            <div role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="spinner" />
+              <span style={{ fontSize: 13, lineHeight: "18px", color: colors.muted }}>Uploading</span>
             </div>
+          ) : null}
+          {uploadError ? <ToolError info={uploadError} onDismiss={() => setUploadError(null)} /> : null}
+          {fileName ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44, paddingLeft: 12, borderRadius: 12, border: `1px solid ${alpha(colors.success, 0.45)}`, background: alpha(colors.success, 0.1) }}>
+              <Icon name="check" size={16} color={colors.success} />
+              <span className="clamp2" style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: "19px", fontWeight: 500, color: colors.foreground }}>{fileName}</span>
+              <button type="button" onClick={clearMaterial} aria-label="Remove uploaded material" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Icon name="close" size={16} color={colors.muted} />
+              </button>
+            </div>
+          ) : null}
+          {showNotes ? (
+            <textarea className="input" value={form.notes} onChange={(e) => patch({ notes: e.target.value.slice(0, MAX_NOTES_CHARS) })} placeholder="Paste your class notes, definitions and key terms here" rows={5} aria-label="Class notes" />
+          ) : (
+            <TextLink label="Paste notes instead" onPress={() => setNotesOpen(true)} style={{ alignSelf: "center", margin: "-6px 0" }} />
           )}
-          <input ref={fileInput} type="file" accept=".txt,.md,text/plain,text/markdown" style={{ display: "none" }} aria-hidden onChange={(e) => { pickFile(e.target.files?.[0]); e.target.value = ""; }} />
+          {form.notes.length > EXAM_MATERIAL_CHAR_LIMIT ? <span style={{ fontSize: 13, lineHeight: "18px", color: colors.gold }}>Long material: the AI reads only the first {formatCount(EXAM_MATERIAL_CHAR_LIMIT)} characters of your notes.</span> : null}
         </div>
 
         {check.reason ? <p role="alert" style={{ margin: 0, fontSize: 14, lineHeight: "19px", fontWeight: 600, textAlign: "center", color: colors.gold }}>{check.reason}</p> : null}
@@ -507,6 +629,9 @@ export function ExamPrepListScreen() {
   const navigate = useNavigate();
   const route = useRoute();
   const { state, dispatch } = useApp();
+
+  // Pro only, as the study tools are everywhere (waits until it is known whether there is Pro before redirecting).
+  useRedirectToPaywallIfNotPro();
   const [showAll, setShowAll] = useState(false);
   const [showQuizzes, setShowQuizzes] = useState(false);
   const [showPast, setShowPast] = useState(false);
@@ -647,6 +772,8 @@ function PlanNoteCard({ note, onAccept, onDismiss }: { note: PlanNote; onAccept:
 
 export function ExamPrepDetailScreen({ examId }: { examId: string }) {
   const { state } = useApp();
+  // Pro only (waits until it is known whether there is Pro before redirecting).
+  useRedirectToPaywallIfNotPro();
   const exam = useMemo(() => {
     const found = (state.examPreps ?? []).find((candidate) => candidate.id === examId);
     return found ? withLinkedExam(found, state.tasks) : null;
@@ -670,19 +797,34 @@ export function ExamPrepDetailScreen({ examId }: { examId: string }) {
 
 function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
   const colors = useColors();
+  const route = useRoute();
   const { state, dispatch } = useApp();
-  const [apiKey] = useLocalPref(PREF_KEYS.geminiKey);
-  const [aiModel] = useLocalPref(PREF_KEYS.aiModel);
   const questions = exam.studyGuide?.practiceQuestions ?? [];
   const cards = exam.studyGuide?.flashcards ?? [];
 
   const [tab, setTab] = useState<"topics" | "guide">("topics");
   const [cardsOpen, setCardsOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
+  // Each opening of the quiz is a new run: nothing of the last one is kept.
+  const [quizRun, setQuizRun] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isWriting, setIsWriting] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<StudyErrorInfo | null>(null);
+
+  // "Arrive on the quiz" (the Practice list's link, ?tab=quiz): once, as soon as the questions are there.
+  const openQuiz = route.query.tab === "quiz";
+  const arrivalDone = useRef(false);
+  useEffect(() => {
+    if (!openQuiz || arrivalDone.current || questions.length === 0) return;
+    // Marked done only once it has opened: a wait that was cut short (the questions changed meanwhile) starts over.
+    const pending = setTimeout(() => {
+      arrivalDone.current = true;
+      setQuizRun((run) => run + 1);
+      setQuizOpen(true);
+    }, 350);
+    return () => clearTimeout(pending);
+  }, [openQuiz, questions.length]);
   const [plan, setPlan] = useState<{ note: PlanNote; task: Task | null; update: boolean; replanning: boolean } | null>(null);
 
   const examRef = useRef(exam);
@@ -703,17 +845,19 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
     setAiError(null);
     try {
       const source = examRef.current;
-      if (apiKey) {
-        const { writeExamMaterialWithGemini } = await import("../lib/gemini");
-        const material = await writeExamMaterialWithGemini({ apiKey, model: aiModel ?? undefined, topics: source.topics.map((topic) => topic.title), rawInput: source.rawInput || undefined, className: source.className, daysUntil: daysUntilExam(localDateKey(new Date()), source.examDate) });
-        // Merged into the LATEST version of the prep, so what was marked meanwhile is kept.
-        dispatch({ type: "UPDATE_EXAM_PREP", payload: withMaterial(examRef.current, material, new Date()) });
-      } else if (!source.studyGuide) {
-        // No key: what the student's own notes give (definitions and flashcards from "term: definition" lines).
-        dispatch({ type: "UPDATE_EXAM_PREP", payload: { ...examRef.current, studyGuide: buildNotesOutline(source.rawInput ?? "", source.topics) } });
-      }
+      const result = await generateExamContent({
+        topics: source.topics.map((topic) => topic.title),
+        rawInput: source.rawInput || undefined,
+        pdfUrl: source.uploadedFileUrl || undefined,
+        imageUrls: source.uploadedImageUrls || undefined,
+        className: source.className,
+        examDate: source.examDate,
+        today: localDateKey(new Date()),
+      });
+      // Merged into the LATEST version of the prep, so what was marked meanwhile is kept.
+      dispatch({ type: "UPDATE_EXAM_PREP", payload: withMaterial(examRef.current, result, new Date()) });
     } catch (error) {
-      setAiError(error instanceof AiError ? error.message : "Could not write the study material. Try again.");
+      setAiError(describeStudyError(error, "generate your study materials"));
     } finally {
       writing.current = false;
       setIsWriting(false);
@@ -722,8 +866,7 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
 
   // Written once when a prep is first opened (never for an exam that is over, never in a retry loop).
   useEffect(() => {
-    const hasContent = exam.topics.length > 0 || Boolean(exam.rawInput?.trim());
-    if (!exam.studyGuide?.aiGenerated && hasContent && !isPast && !askedFor.has(exam.id)) void writeMaterial();
+    if (shouldWriteMaterial(exam, { past: isPast, alreadyAsked: askedFor.has(exam.id) })) void writeMaterial();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exam.id]);
 
@@ -812,9 +955,9 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", gap: 8 }}>
           <PrimaryButton tone="ghost" label={buttons.cards.label} left={<Icon name="layers" size={18} color={colors.foreground} />} disabled={isWriting || buttons.cards.count === 0} onPress={() => setCardsOpen(true)} ariaLabel={buttons.cards.count > 0 ? `Flashcards, ${buttons.cards.count}` : "Flashcards: none yet"} style={{ flex: 1 }} />
-          <PrimaryButton tone="ghost" label={buttons.quiz.label} left={<Icon name="test" size={18} color={colors.foreground} />} disabled={isWriting || buttons.quiz.count === 0} onPress={() => setQuizOpen(true)} ariaLabel={buttons.quiz.count > 0 ? `Quiz, ${buttons.quiz.count} questions` : "Quiz: no questions yet"} style={{ flex: 1 }} />
+          <PrimaryButton tone="ghost" label={buttons.quiz.label} left={<Icon name="test" size={18} color={colors.foreground} />} disabled={isWriting || buttons.quiz.count === 0} onPress={() => { setQuizRun((run) => run + 1); setQuizOpen(true); }} ariaLabel={buttons.quiz.count > 0 ? `Quiz, ${buttons.quiz.count} questions` : "Quiz: no questions yet"} style={{ flex: 1 }} />
         </div>
-        {buttons.reason && apiKey ? <span style={{ fontSize: 13, lineHeight: "18px", color: colors.muted }}>{buttons.reason}</span> : null}
+        {buttons.reason ? <span style={{ fontSize: 13, lineHeight: "18px", color: colors.muted }}>{buttons.reason}</span> : null}
       </div>
 
       {isWriting ? (
@@ -823,16 +966,8 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
           <span style={{ fontSize: 14, lineHeight: "19px", fontWeight: 500, color: colors.foreground }}>{PREP_COPY.writing}</span>
         </div>
       ) : null}
-      {aiError ? (
-        <Note tone="red" icon="warning" role="alert">
-          <div style={{ fontSize: 14, lineHeight: "20px", color: colors.foreground }}>{aiError}</div>
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <PrimaryButton size="sm" label="Retry" onPress={() => void writeMaterial()} />
-            <PrimaryButton size="sm" tone="ghost" label="Dismiss" onPress={() => setAiError(null)} />
-          </div>
-        </Note>
-      ) : null}
-      {exam.studyGuide?.inputTruncated ? <Note tone="gold" icon="info">Your pasted material was long, so only its beginning was used. Anything after that isn&apos;t covered.</Note> : null}
+      {aiError ? <ToolError info={aiError} onRetry={() => void writeMaterial()} onDismiss={() => setAiError(null)} retryLabel="Retry" /> : null}
+      {exam.studyGuide?.inputTruncated ? <Note tone="gold" icon="info">{`Your pasted material was long, so only its first ${formatCount(EXAM_MATERIAL_CHAR_LIMIT)} characters were used. Anything after that isn't covered.`}</Note> : null}
 
       <Segmented
         value={tab}
@@ -842,35 +977,44 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
           { value: "guide", label: "Study guide" },
         ]}
       />
-      {tab === "topics" ? <ExamPrepTopics topics={exam.topics} onMark={markTopic} /> : <ExamPrepGuide guide={exam.studyGuide} writing={isWriting} canGenerate={Boolean(apiKey)} onGenerate={() => void writeMaterial()} />}
+      {tab === "topics" ? <ExamPrepTopics topics={exam.topics} aiWritten={hasAiGuide && exam.topics.some((topic) => topic.description)} onMark={markTopic} /> : <ExamPrepGuide guide={exam.studyGuide} writing={isWriting} onGenerate={() => void writeMaterial()} />}
 
       {/* The "more" sheet: make the material again, delete the prep */}
-      <Sheet open={moreOpen} onClose={() => { setMoreOpen(false); setConfirmingDelete(false); }} ariaLabel="More">
+      <Sheet open={moreOpen} onClose={() => { setMoreOpen(false); setConfirmingDelete(false); }} ariaLabel="This exam prep">
         <SheetBody>
-          <SheetHead title={named.name} onClose={() => { setMoreOpen(false); setConfirmingDelete(false); }} />
-          {apiKey ? (
+          <SheetHead title="This exam prep" onClose={() => { setMoreOpen(false); setConfirmingDelete(false); }} />
+          {/* "Make the material again" is absent until an AI study guide exists (there is nothing to make again before that). */}
+          {hasAiGuide ? (
             <FieldGroup>
-              <button type="button" className="row pressable" disabled={isWriting} onClick={() => { setMoreOpen(false); void writeMaterial(); }} aria-label="Make the study material again with AI">
-                <span className="well" style={{ background: alpha(colors.violet, 0.16) }}>
-                  <Icon name="spark" size={18} color={colors.violet} />
-                </span>
-                <span className="row-text">
-                  <span className="row-label" style={{ display: "block" }}>{hasAiGuide ? "Make the material again" : "Write the study material"}</span>
-                  <span className="row-detail" style={{ display: "block" }}>Explanations, flashcards and practice questions, written by Gemini with your key</span>
-                </span>
-              </button>
+              {isWriting ? (
+                <div style={{ minHeight: 58, display: "flex", flexDirection: "column", justifyContent: "center", padding: "8px 14px" }}>
+                  <span style={{ fontSize: 16, lineHeight: "21px", fontWeight: 500, color: colors.muted }}>Make the material again</span>
+                  <span style={{ fontSize: 13, lineHeight: "18px", color: colors.muted }}>It is being written right now.</span>
+                </div>
+              ) : (
+                <FieldPickRow icon="refresh" label="Make the material again" detail="The study guide, flashcards and quiz are written again. What you marked on topics is kept." onPress={() => { setMoreOpen(false); void writeMaterial(); }} chevron={false} />
+              )}
             </FieldGroup>
           ) : null}
           {confirmingDelete ? (
-            <InlineConfirm question={`${deleteFacts.title} ${deleteFacts.body}`} confirmLabel="Delete" onConfirm={deletePrep} onCancel={() => setConfirmingDelete(false)} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <Note tone="red" icon="warning" role="alert">
+                <div style={{ fontSize: 15, lineHeight: "20px", fontWeight: 600, color: colors.foreground }}>{deleteFacts.title}</div>
+                <div style={{ fontSize: 14, lineHeight: "20px", marginTop: 2, color: colors.foreground }}>{deleteFacts.body}</div>
+              </Note>
+              <div style={{ display: "flex", justifyContent: "center", gap: 18 }}>
+                <ToolLink label="Delete" color={colors.error} onPress={deletePrep} ariaLabel="Delete this exam prep" />
+                <ToolLink label="Keep" onPress={() => setConfirmingDelete(false)} ariaLabel="Keep this exam prep" />
+              </div>
+            </div>
           ) : (
-            <PrimaryButton tone="danger" size="lg" fullWidth label="Delete this exam prep" onPress={() => setConfirmingDelete(true)} />
+            <ToolLink label="Delete this exam prep" color={colors.error} onPress={() => setConfirmingDelete(true)} style={{ alignSelf: "center" }} />
           )}
         </SheetBody>
       </Sheet>
 
-      <FlashcardsViewer open={cardsOpen} onClose={() => setCardsOpen(false)} cards={cards} chip={tag ? { label: tag, color: cls?.color } : null} />
-      <QuizViewer open={quizOpen} onClose={() => setQuizOpen(false)} questions={questions} over={named.name} />
+      <FlashcardsViewer open={cardsOpen} onClose={() => setCardsOpen(false)} cards={cards} aiGenerated={hasAiGuide} chip={tag ? { label: tag, color: cls?.color } : null} />
+      <QuizViewer key={quizRun} open={quizOpen} onClose={() => setQuizOpen(false)} questions={questions} over={named.name} />
     </div>
   );
 }

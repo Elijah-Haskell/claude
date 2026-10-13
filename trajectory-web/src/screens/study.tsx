@@ -1,21 +1,25 @@
 // Study — the fourth screen. Top to bottom: how much is ahead and "Study"; the next exam as one card (its countdown,
 // its class and date, the study time planned for it and how much is done, "Open study plan"); the exams after it as
-// plain rows; quizzes and what is over folded away; and the study tool (exam prep) at the bottom.
+// plain rows; quizzes and what is over folded away; and the study tools, labelled "Pro" once, at the bottom.
 // The exams are the same for every student (src/engine/study-view.ts): those from a syllabus, those added with the
-// add button, and exam preps. An exam opens its own screen (src/screens/exam.tsx).
+// add button, and exam preps. An exam opens its own screen (src/screens/exam.tsx). The four tools are Pro: with Pro a
+// row opens the tool, without it the row opens Trajectory Pro. Gating waits until it is known whether there is Pro.
 
 import { useEffect, useMemo, useState } from "react";
 
 import { alpha } from "../engine/design";
 import { examPrepsToRelink } from "../engine/exam-prep-link";
 import { buildFreeStudyView, prettyExamDate, type FreeExam } from "../engine/study-free-view";
-import { buildStudyHub } from "../engine/study-hub";
-import { comingUpShown, examBadge, examLinks, examProgress, examSessions, studyEyebrow } from "../engine/study-view";
+import { buildPracticeList, buildStudyHub } from "../engine/study-hub";
+import { comingUpShown, examBadge, examLinks, examProgress, examSessions, STUDY_TOOLS, studyEyebrow, type StudyToolKey } from "../engine/study-view";
 import { formatTime, localDateKey } from "../engine/utils";
 import { classOfTask, classShortName } from "../engine/week-layout";
+import { decideSyllabusUpload } from "../lib/subscription-plans";
 import { useNavigate } from "../router";
 import { useApp } from "../state/app-provider";
 import { useGlobalModal } from "../state/modal-context";
+import { useProStatus } from "../state/subscription-context";
+import { useProGate } from "../state/use-pro-gate";
 import { Icon } from "../ui/icon";
 import { Card, CourseChip, DateBadge, FieldGroup, MONO_FONT, PrimaryButton, ScreenHeader, SectionLabel } from "../ui/primitives";
 import { useColors } from "../ui/theme";
@@ -43,6 +47,8 @@ export function StudyScreen() {
   const colors = useColors();
   const navigate = useNavigate();
   const { openAdd } = useGlobalModal();
+  const requirePro = useProGate();
+  const { isPro, isLoading: isProLoading } = useProStatus();
   const { state, dispatch } = useApp();
   const [showAll, setShowAll] = useState(false);
   const [showQuizzes, setShowQuizzes] = useState(false);
@@ -71,6 +77,29 @@ export function StudyScreen() {
     return { label: classShortName(cls, exam.courseName), color: cls?.color };
   };
   const openExam = (exam: FreeExam) => navigate(`exam/${encodeURIComponent(exam.key)}`);
+
+  function addSyllabus() {
+    const decision = decideSyllabusUpload({ isPro, isLoading: isProLoading, syllabusCount: state.syllabusImports?.length ?? 0 });
+    if (decision === "wait") return;
+    navigate(decision === "allow" ? "syllabus" : "paywall");
+  }
+
+  // The tools: each has its own screen (what you have made with it, and the way to make more).
+  const practiceCount = useMemo(() => buildPracticeList(state).length, [state]);
+  function openTool(key: StudyToolKey) {
+    if (!requirePro()) return;
+    if (key === "prep") navigate("exam-prep");
+    else if (key === "guide") navigate("study-guides");
+    else if (key === "practice") navigate("practice");
+    else navigate("test-review");
+  }
+  /** What a Pro student already has of a tool, said at the right of its row. */
+  const toolCount = (key: StudyToolKey): string => {
+    const n = key === "prep" ? hub.stats.exams : key === "guide" ? hub.guides.length : key === "practice" ? practiceCount : 0;
+    return n > 0 ? String(n) : "";
+  };
+  // "Pro" is said once, on the section's label, and only to a student known not to have it.
+  const showProTag = !isProLoading && !isPro;
 
   const hero = view.exams[0] ?? view.quizzes[0];
   const comingUp = view.exams.filter((exam) => exam !== hero);
@@ -141,7 +170,7 @@ export function StudyScreen() {
         <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: "21px", color: colors.muted }}>
           {noSyllabus ? "Trajectory finds your exams in it and plans study time before each one." : "Exams from a syllabus appear here by themselves. Add one for anything else, and study time is planned before it."}
         </p>
-        <PrimaryButton label={noSyllabus ? "Add a syllabus" : "Add an exam"} fullWidth size="lg" onPress={noSyllabus ? () => navigate("syllabus") : () => openAdd({ kind: "exam" })} style={{ marginTop: 18 }} />
+        <PrimaryButton label={noSyllabus ? "Add a syllabus" : "Add an exam"} fullWidth size="lg" onPress={noSyllabus ? addSyllabus : () => openAdd({ kind: "exam" })} style={{ marginTop: 18 }} />
         {noSyllabus ? <button type="button" className="link" onClick={() => openAdd({ kind: "exam" })} aria-label="Add an exam by hand" style={{ minHeight: 44, marginTop: 4, fontSize: 15, fontWeight: 600, color: colors.peri }}>Add an exam by hand</button> : null}
       </Card>
     );
@@ -173,20 +202,40 @@ export function StudyScreen() {
       ) : null}
 
       <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <SectionLabel title="Study tools" />
+        <SectionLabel
+          title="Study tools"
+          right={
+            showProTag ? (
+              <span aria-label="Part of Trajectory Pro" style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 7px", borderRadius: 6, border: `1px solid ${alpha(colors.violet, 0.5)}`, background: alpha(colors.violet, 0.16) }}>
+                <Icon name="crown" size={13} color={colors.violet} />
+                <span style={{ fontFamily: MONO_FONT, fontSize: 12, lineHeight: "16px", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: colors.violet }}>Pro</span>
+              </span>
+            ) : undefined
+          }
+        />
         <FieldGroup>
-          <button type="button" className="row pressable" onClick={() => navigate("exam-prep")} aria-label={`Exam prep. Topics, flashcards and a practice quiz for one exam${hub.stats.exams > 0 ? `. ${hub.stats.exams} saved` : ""}`} style={{ minHeight: 62 }}>
-            <span className="well" style={{ background: alpha(colors.violet, 0.16) }}>
-              <Icon name="layers" size={18} color={colors.violet} />
-            </span>
-            <span className="row-text">
-              <span className="row-label" style={{ display: "block" }}>Exam prep</span>
-              <span className="row-detail" style={{ display: "block" }}>Topics, flashcards and a practice quiz for one exam</span>
-            </span>
-            {hub.stats.exams > 0 ? count(hub.stats.exams) : null}
-            <Icon name="chevronRight" size={18} color={colors.muted} />
-          </button>
+          {STUDY_TOOLS.map((tool) => {
+            const have = showProTag ? "" : toolCount(tool.key);
+            return (
+              <button key={tool.key} type="button" className="row pressable" onClick={() => openTool(tool.key)} aria-label={`${tool.title}. ${tool.sub}${showProTag ? ". Part of Trajectory Pro" : have ? `. ${have} saved` : ""}`} style={{ minHeight: 62 }}>
+                <span className="well" style={{ background: alpha(colors.violet, 0.16) }}>
+                  <Icon name={tool.icon} size={18} color={colors.violet} />
+                </span>
+                <span className="row-text">
+                  <span className="row-label" style={{ display: "block" }}>{tool.title}</span>
+                  <span className="row-detail" style={{ display: "block" }}>{tool.sub}</span>
+                </span>
+                {have ? count(Number(have)) : null}
+                <Icon name="chevronRight" size={18} color={colors.muted} />
+              </button>
+            );
+          })}
         </FieldGroup>
+        {showProTag && hub.guides.length > 0 ? (
+          <p style={{ margin: 0, padding: "0 2px", fontSize: 13, lineHeight: "18px", color: colors.muted }}>
+            Your {hub.guides.length === 1 ? "study guide is still saved and opens" : `${hub.guides.length} study guides are still saved and open`} again with Pro.
+          </p>
+        ) : null}
       </section>
 
       {view.past.length > 0 ? (

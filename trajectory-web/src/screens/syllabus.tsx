@@ -1,17 +1,23 @@
-// The syllabus import: paste it ONCE and the whole semester is planned. Four steps, counted at the top of each:
+// The syllabus import: upload ONCE and the whole semester is planned. Four steps, counted at the top of each:
 //
-//   1. Add your syllabus   pasted text or a text file; read by the built-in reader, or by Gemini with your own key
+//   1. Add your syllabus   a file, photos or pasted text; then the wait while the server reads it (the live list)
 //   2. Check your class    the class and its short name, days and times (prefilled), the term (asked once), breaks
 //   3. Check the dates     only the doubtful ones ask for attention; nothing without a date is planned
 //   4. Building your plan  duplicate-aware; the plan is built right away
 //
 // It ends on Today, which shows what was planned and how to undo it (src/engine/setup-recap.ts). All decisions live
-// in src/engine/syllabus-*.ts (pure and tested); this file only collects the student's choices.
+// in src/engine/syllabus-*.ts (pure and tested); this file only collects the student's choices. The reading is the
+// one server-backed step: the file goes up (components/syllabus/use-syllabus-source.ts), the server reads it as a job
+// that is polled once a second (src/engine/poll-job.ts) and reports the deadlines it has found so far
+// (src/lib/live-list.ts), and the job id is kept in this browser (src/lib/pending-extraction.ts) so a reload picks
+// the result up instead of paying for a second reading.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { latestImportFor } from "../engine/classes-view";
 import { findBestClassMatch } from "../engine/course-matcher";
 import { alpha } from "../engine/design";
+import { JobFailed, LIVE_READING_POLL_OPTIONS, pollJob, type JobPollProgress } from "../engine/poll-job";
 import { buildSetupRecap } from "../engine/setup-recap";
 import { semesterNameFor } from "../engine/syllabus-dates";
 import { resolveCourseTerm, resolveExtractedItems, serializeExtraction, SYLLABUS_ITEM_TYPES, type MeetingPattern, type SyllabusExtraction, type SyllabusItemType } from "../engine/syllabus-extraction-utils";
@@ -35,78 +41,31 @@ import {
   type SemesterOutcome,
   type TermAssessment,
 } from "../engine/syllabus-import";
-import { classNameFromSyllabus, classStepBlocker, flowStepNumber, lookLine, lookReasonOf, planButtonLabel, plannedCount, reviewBuckets, reviewDate, reviewSummary, shownImportWarnings, termRangeLabel, type FlowStep } from "../engine/syllabus-review";
+import { describeIntakeFailure, PASTE_PICTURE_NOTE, type IntakeFailure } from "../engine/syllabus-messages";
+import { classNameFromSyllabus, classStepBlocker, flowStepNumber, lookLine, lookReasonOf, planButtonLabel, plannedCount, readingExpectation, readingRows, reviewBuckets, reviewDate, reviewSummary, shownImportWarnings, termRangeLabel, type FlowStep, type SourceKind } from "../engine/syllabus-review";
 import type { ClassBlock, DayOfWeek, Semester } from "../engine/types";
-import { localDateKey, parseLocalDate, todayString } from "../engine/utils";
+import { todayString } from "../engine/utils";
 import { classShortName, normalizeShortName, SHORT_NAME_MAX, suggestShortName } from "../engine/week-layout";
-import { AiError } from "../lib/ai-types";
-import { extractSyllabusHeuristically } from "../lib/syllabus-heuristic";
+import { mutate, query, type SyllabusExtractionResult } from "../lib/api";
+import { liveCourseName, liveItemsOf, liveModeAfter, mergeLiveItems, showsLiveList, type LiveItem, type LiveMode } from "../lib/live-list";
+import { clearPendingExtraction, isSameSource, loadPendingExtraction, savePendingExtraction } from "../lib/pending-extraction";
+import { decideSyllabusUpload } from "../lib/subscription-plans";
+import { readingOfResult } from "../lib/syllabus-result";
+import { pendingSourceOf, sourceWords, type ExtractionSource } from "../lib/syllabus-source";
+import { FREE_SYLLABUS_LIMIT_ERR_MSG, PRO_GATE_CODES } from "../shared/pro";
 import { goBack, useNavigate, useRoute } from "../router";
 import { useApp } from "../state/app-provider";
-import { PREF_KEYS, useLocalPref, writePref } from "../state/local-prefs";
-import { Icon, type IconName } from "../ui/icon";
+import { useAuth } from "../state/auth";
+import { PREF_KEYS, writePref } from "../state/local-prefs";
+import { useProStatus } from "../state/subscription-context";
+import { Icon } from "../ui/icon";
 import { AppSwitch, CheckBox, DateInput, FieldGroup, FieldLabel, FieldRow, MONO_FONT, Note, PrimaryButton, SectionLabel, Segmented, TimeInput, DayToggles } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
 import { useColors } from "../ui/theme";
-
-// ── Shared pieces ─────────────────────────────────────────────
-
-const TYPE_ICON: Record<string, IconName> = { exam: "flag", quiz: "flag", assignment: "file", project: "layers", reading: "book", other: "list" };
-
-/** The top of every step: the way back (or out) on the left, "STEP 2 OF 4" on the right, four thin segments under. */
-function StepBar({ step, total = 4, icon = "back", label, onPress, disabled }: { step: number; total?: number; icon?: "back" | "close"; label: string; onPress: () => void; disabled?: boolean }) {
-  const colors = useColors();
-  return (
-    <div style={{ paddingTop: 6, paddingBottom: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <button type="button" className="pressable" onClick={onPress} disabled={disabled} aria-label={label} style={{ width: 44, height: 44, borderRadius: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", background: colors.surface, border: `1px solid ${colors.borderStrong}`, opacity: disabled ? 0.5 : 1 }}>
-          <Icon name={icon === "close" ? "close" : "chevronLeft"} size={20} color={colors.foreground} strokeWidth={2} />
-        </button>
-        <span style={{ fontFamily: MONO_FONT, fontSize: 12, lineHeight: "16px", fontWeight: 600, letterSpacing: 1.4, textTransform: "uppercase", color: colors.peri }}>Step {step} of {total}</span>
-      </div>
-      <div role="progressbar" aria-label={`Step ${step} of ${total}`} aria-valuemin={0} aria-valuemax={total} aria-valuenow={step} style={{ display: "flex", gap: 6, marginTop: 14 }}>
-        {Array.from({ length: total }, (_, index) => (
-          <span key={index} style={{ flex: 1, height: 3, borderRadius: 2, background: index < step ? colors.accent : colors.borderStrong }} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FlowTitle({ title, sub }: { title: string; sub?: string }) {
-  const colors = useColors();
-  return (
-    <div>
-      <h1 style={{ margin: 0, fontSize: 26, lineHeight: "32px", fontWeight: 800, letterSpacing: -0.6, color: colors.foreground }}>{title}</h1>
-      {sub ? <p style={{ margin: "6px 0 0", fontSize: 14.5, lineHeight: "20px", color: colors.muted }}>{sub}</p> : null}
-    </div>
-  );
-}
-
-/** The bar at the bottom of a step: an optional line over the button (what is still missing), then the button(s). */
-function FlowFooter({ hint, hintTone = "quiet", children }: { hint?: string | null; hintTone?: "quiet" | "gold" | "red"; children: ReactNode }) {
-  const colors = useColors();
-  return (
-    <div className="flow-footer">
-      {hint ? <p role={hintTone === "quiet" ? undefined : "alert"} style={{ margin: 0, fontSize: 13.5, lineHeight: "18px", textAlign: "center", color: hintTone === "quiet" ? colors.muted : hintTone === "gold" ? colors.gold : colors.error, fontWeight: hintTone === "quiet" ? 400 : 600 }}>{hint}</p> : null}
-      {children}
-    </div>
-  );
-}
-
-function TextLink({ label, onPress, color, ariaLabel, style }: { label: string; onPress: () => void; color?: string; ariaLabel?: string; style?: React.CSSProperties }) {
-  const colors = useColors();
-  return (
-    <button type="button" className="link" onClick={onPress} aria-label={ariaLabel ?? label} style={{ minHeight: 44, fontSize: 14, lineHeight: "19px", fontWeight: 600, color: color ?? colors.peri, ...style }}>
-      {label}
-    </button>
-  );
-}
-
-const formatShortDate = (key: string) => {
-  const date = parseLocalDate(key);
-  return Number.isNaN(date.getTime()) ? key : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-};
+import { ReadingStep } from "../components/syllabus/reading-step";
+import { FlowFooter, FlowTitle, formatShortDate, StepBar, TextLink, TYPE_ICON } from "../components/syllabus/shared";
+import { effectiveSourceMode, SourceStep, type SourceMode } from "../components/syllabus/source-step";
+import { describeFailure, useSyllabusSource } from "../components/syllabus/use-syllabus-source";
 
 // ── Step 2: the class ─────────────────────────────────────────
 
@@ -594,11 +553,9 @@ function DuplicateSheet({ open, duplicates, onCancel, onContinue }: { open: bool
 
 // ── The screen ────────────────────────────────────────────────
 
-type Reader = "ai" | "builtin";
-
 interface Run {
   runId: string;
-  kind: "paste";
+  kind: SourceKind;
   rawText: string;
   extractionJson: string;
   course: { name: string; code: string; isAsynchronous: boolean; meetingPattern: MeetingPattern | null };
@@ -611,31 +568,111 @@ interface Run {
   resolvedBreaks: { name: string; startDate: string; endDate: string }[];
 }
 
-const WAYS_IN = "Paste the text of the syllabus, or choose a .txt file.";
+const WAYS_IN = "A PDF, a Word file, photos or pasted text all work.";
+
+/** The server's refusal of a second free syllabus, as the app itself can foresee it (the same card, before any upload). */
+function freeSyllabusLimitError(): Error {
+  return Object.assign(new Error(FREE_SYLLABUS_LIMIT_ERR_MSG), { data: { code: "FORBIDDEN", appCode: PRO_GATE_CODES.freeSyllabusLimit } });
+}
+
+/** "No assignments found": the reading worked, but nothing in it can be planned. */
+function nothingFound(kind: SourceKind, warnings: readonly string[]): IntakeFailure {
+  return {
+    title: "No assignments found",
+    message:
+      kind === "paste"
+        ? warnings[0] ?? "We could not find any assignments or exams in this text."
+        : `${warnings[0] ?? "We could not find any assignments or exams in this document."} If the text is readable, pasting it may work. ${PASTE_PICTURE_NOTE}`,
+    canRetry: false,
+    offerPaste: kind !== "paste",
+  };
+}
+
+function errorCode(error: unknown): string {
+  const code = (error as { data?: { code?: unknown } } | null)?.data?.code;
+  return typeof code === "string" ? code : "";
+}
 
 export function SyllabusScreen() {
-  const colors = useColors();
   const navigate = useNavigate();
   const route = useRoute();
   const { state, dispatch } = useApp();
-  const [apiKey] = useLocalPref(PREF_KEYS.geminiKey);
-  const [aiModel] = useLocalPref(PREF_KEYS.aiModel);
   const today = todayString();
 
   const prefilledClass = useMemo(() => (route.query.classId ? state.classes.find((c) => c.id === route.query.classId) ?? null : null), [route.query.classId, state.classes]);
 
+  // Reading a syllabus is the one server-backed step here; the rest happens in this browser. It runs under the
+  // account's session (ensureSession below).
+  const { user } = useAuth();
+  const hasSession = user !== null;
+  const hasSessionRef = useRef(hasSession);
+  useEffect(() => {
+    hasSessionRef.current = hasSession;
+  }, [hasSession]);
+  /**
+   * True when server calls can be made: there is a session. An account is required here, and the gate above every
+   * route shows the sign-in screen when the session goes; on false nothing is sent and nothing picked is dropped.
+   */
+  const ensureSession = useCallback(async (): Promise<boolean> => hasSessionRef.current, []);
+
+  // The free plan plans one syllabus; the server is the authority (it remembers every syllabus an account imported)
+  // and refuses a second one with FREE_SYLLABUS_LIMIT. This local check only saves a pointless upload when the app
+  // already knows (src/lib/subscription-plans.ts decideSyllabusUpload). Adding a class's syllabus AGAIN is left to the
+  // server: it allows the same syllabus a second time.
+  const { isPro, isLoading: isProLoading } = useProStatus();
+  const imports = state.syllabusImports ?? [];
+  const addingAgain = prefilledClass !== null && latestImportFor(prefilledClass.id, imports) !== undefined;
+  const uploadDecision = addingAgain ? "allow" : decideSyllabusUpload({ isPro, isLoading: isProLoading, syllabusCount: imports.length });
+
   const [step, setStep] = useState<FlowStep>("source");
-  const [text, setText] = useState("");
-  const [courseHint, setCourseHint] = useState(prefilledClass?.name ?? "");
-  const [reader, setReader] = useState<Reader>(apiKey ? "ai" : "builtin");
-  const [isReading, setIsReading] = useState(false);
-  const [failure, setFailure] = useState<{ title: string; message: string; offerBuiltin: boolean } | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const [sourceMode, setSourceMode] = useState<SourceMode>("pick");
+  // The class the import was opened for (from Classes) is passed to the reader as a hint for the course's name; a
+  // resumed read brings back the hint it started with, so "Try again" sends the same one.
+  const [courseHint, setCourseHint] = useState(route.query.className ?? prefilledClass?.name ?? "");
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [failure, setFailure] = useState<IntakeFailure | null>(null);
+  const lastSource = useRef<ExtractionSource | null>(null);
+  const extractingRef = useRef(false);
+  // Each read gets a token; Cancel (or leaving the screen) moves the token on, which stops the polling and
+  // makes a late answer from the old read land nowhere. The server keeps reading; the job id is remembered
+  // (src/lib/pending-extraction.ts) so coming back picks the result up.
+  const runToken = useRef(0);
+
+  // The clock of the wait runs in this browser, from when the read began (a resumed read: from when it first began).
+  const [readStartedAt, setReadStartedAt] = useState<number | null>(null);
+  const [clockMs, setClockMs] = useState(0);
+  const [progress, setProgress] = useState<JobPollProgress | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
+  // The live import (the mobile repo's docs/live-import.md): the deadlines the server has found so far, shown while it
+  // reads. A preview for the wait only. The class and the dates the student checks are built from the reading's result.
+  const [liveMode, setLiveMode] = useState<LiveMode>("unknown");
+  const [liveItems, setLiveItems] = useState<readonly LiveItem[] | null>(null);
+  const [liveCourse, setLiveCourse] = useState<string | null>(null);
+  const [resumedRead, setResumedRead] = useState(false);
+
+  // False once the screen is gone: a plan that finishes building after that is still applied (and Today says so),
+  // but a late answer must not move the student off whatever screen they have gone to.
+  const mounted = useRef(true);
+  useEffect(() => {
+    const tokens = runToken;
+    return () => {
+      mounted.current = false;
+      tokens.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isExtracting || readStartedAt === null) return;
+    const tick = () => setClockMs(Math.max(0, Date.now() - readStartedAt));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [isExtracting, readStartedAt]);
 
   const [run, setRun] = useState<Run | null>(null);
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
   const [basics, setBasics] = useState<BasicsDraft>({ name: "", code: "", shortName: "", isAsynchronous: false, days: [], startTime: "", endTime: "", location: "" });
+  // The student changed the days, times or room themselves: choosing another class then keeps what they entered.
   const [meetingTouched, setMeetingTouched] = useState(false);
   const [linkedClass, setLinkedClass] = useState<ClassBlock | null>(null);
   const [termChoice, setTermChoice] = useState<TermChoiceKind>("create");
@@ -652,23 +689,26 @@ export function SyllabusScreen() {
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
-
-  const takenShortNames = (except?: ClassBlock | null) => state.classes.filter((cls) => cls.id !== except?.id).map((cls) => classShortName(cls));
+  /** The short names the student's other classes already use (a new class is offered one that differs). */
+  const takenShortNames = useCallback((except?: ClassBlock | null) => state.classes.filter((cls) => cls.id !== except?.id).map((cls) => classShortName(cls)), [state.classes]);
 
   // ── 1. Reading ──────────────────────────────────────────────
 
-  function finishRead(extraction: SyllabusExtraction, rawText: string) {
+  /**
+   * The reading's result becomes the class and the dates steps. `courseName` is the name the server settled (the
+   * document's, else the hint); `kind` is where the syllabus came from. False when nothing in it can be planned.
+   */
+  function finishRead(extraction: SyllabusExtraction, rawText: string, kind: SourceKind = "paste", courseName = ""): boolean {
     const term = resolveCourseTerm(extraction.course, today);
     const termStartKey = term.termStart ?? state.semester?.startDate ?? null;
     const termEndKey = term.termEnd ?? state.semester?.endDate ?? null;
     const items = resolveExtractedItems(extraction.items, { today, termStart: termStartKey, termEnd: termEndKey, breaks: term.breaks });
     if (items.length === 0) {
-      setFailure({ title: "No assignments found", message: extraction.warnings[0] ?? "No assignments or exams were found in this text.", offerBuiltin: false });
-      return;
+      setFailure(nothingFound(kind, extraction.warnings));
+      return false;
     }
     const runId = `syl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const detectedName = extraction.course.name || courseHint.trim();
+    const detectedName = extraction.course.name || courseName || courseHint.trim();
     const match = findBestClassMatch(detectedName, state.classes, extraction.course.code);
     const linked = prefilledClass ?? (match.isConfident ? match.matchedClass : null);
     const prefill = prefillBasics({ ...extraction.course, name: detectedName }, linked);
@@ -676,13 +716,14 @@ export function SyllabusScreen() {
     const pattern = extraction.course.meetingPattern;
     setRun({
       runId,
-      kind: "paste",
+      kind,
       rawText,
       extractionJson: serializeExtraction({ course: extraction.course, items: extraction.items, warnings: extraction.warnings, truncated: extraction.truncated }),
       course: { name: detectedName, code: extraction.course.code, isAsynchronous: extraction.course.isAsynchronous, meetingPattern: pattern },
-      warnings: [...extraction.warnings, ...term.warnings],
+      warnings: [...extraction.warnings, ...term.warnings.filter((warning) => !extraction.warnings.includes(warning))],
       truncated: extraction.truncated,
       assessment,
+      // What the SYLLABUS lacks (a class the dates join may still fill the times in).
       meetingMissing: !extraction.course.isAsynchronous && !isValidMeeting(pattern?.days ?? [], pattern?.startTime ?? "", pattern?.endTime ?? ""),
       resolvedStart: termStartKey,
       resolvedEnd: termEndKey,
@@ -690,6 +731,8 @@ export function SyllabusScreen() {
     });
     setDrafts(buildDraftItems(items, { today, idPrefix: runId }));
     setLinkedClass(linked);
+    // One name field: a course code the syllabus gave is part of the name ("FINC 3100: Principles of Finance"),
+    // and its letters are the short name offered ("FINC").
     setBasics({
       name: classNameFromSyllabus(prefill.name, prefill.code),
       code: "",
@@ -710,52 +753,207 @@ export function SyllabusScreen() {
     setCommitError(null);
     setSemesterOutcome(null);
     setMeetingTouched(false);
+    setSourceMode("pick"); // coming back to step 1 shows the ways in, not an emptied text box
     setStep("basics");
+    return true;
   }
+  const finishReadRef = useRef(finishRead);
+  finishReadRef.current = finishRead;
 
-  async function read(withReader: Reader = reader) {
-    const source = text.trim();
-    if (source.length < 20 || isReading) return;
-    setFailure(null);
-    if (withReader === "ai" && apiKey) {
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setIsReading(true);
+  /** Forgets the picked file once it has been read (set from the source hook below). */
+  const clearPickedRef = useRef<() => void>(() => undefined);
+
+  const startExtraction = useCallback(
+    async (source: ExtractionSource, resume?: { jobId: string; startedAt: number; courseHint: string }) => {
+      if (extractingRef.current) return; // ignore a second click while reading
+      extractingRef.current = true;
+      const token = ++runToken.current;
+      const stale = () => runToken.current !== token;
+      lastSource.current = source;
+      setFailure(null);
+      const hint = resume?.courseHint ?? courseHint;
+      let jobId: string | null = resume?.jobId ?? null;
       try {
-        // The Gemini client is loaded only when a key is used, so the app itself stays small.
-        const { readSyllabusWithGemini } = await import("../lib/gemini");
-        const extraction = await readSyllabusWithGemini({ apiKey, model: aiModel ?? undefined, text: source, courseHint, today, semesterStart: state.semester?.startDate, semesterEnd: state.semester?.endDate, signal: controller.signal });
-        if (controller.signal.aborted) return;
-        finishRead(extraction, source);
+        // Without a session nothing is sent, and the source stays on screen.
+        if (!resume && !(await ensureSession())) return;
+        if (stale()) return;
+        // The free syllabus is used, and the app already knows: the same card the server would answer with, with
+        // "See plans", before anything is sent. The source stays on screen for "Try again" after upgrading.
+        if (!resume && uploadDecision === "paywall") {
+          setFailure(describeIntakeFailure(freeSyllabusLimitError(), "extract"));
+          return;
+        }
+        setIsExtracting(true);
+        setProgress(null);
+        setReconnecting(false);
+        setLiveMode("unknown");
+        setLiveItems(null);
+        setLiveCourse(null);
+        setResumedRead(Boolean(resume));
+        setClockMs(resume ? Math.max(0, Date.now() - resume.startedAt) : 0);
+        setReadStartedAt(resume ? resume.startedAt : Date.now());
+        const input = { ...source.input, ...(source.input.rawText ? { rawText: source.input.rawText.slice(0, 200_000) } : {}) };
+        if (input.rawText !== undefined && !input.rawText.trim()) throw new Error("This file has no readable text.");
+        const request = {
+          pdfUrl: input.pdfUrl,
+          pdfUrls: input.pdfUrls,
+          rawText: input.rawText,
+          courseName: hint.trim().slice(0, 300),
+          today,
+          ...(state.semester ? { semesterStart: state.semester.startDate, semesterEnd: state.semester.endDate } : {}),
+        };
+        // Every reading runs as a job on the server and is polled (src/engine/poll-job.ts) until it is done: a PDF or
+        // photos go through a multimodal model that can take minutes, and a browser's request cannot wait that long
+        // either; pasted text is quick, but as a job it shows its deadlines as they are read and survives a reload.
+        // The job id is remembered so a dropped connection or a closed tab resumes the same reading instead of
+        // starting (and paying for) a new one.
+        if (!jobId) {
+          const started = await mutate("ai.startSyllabusExtraction", request);
+          jobId = started.jobId;
+          await savePendingExtraction({ jobId, startedAt: Date.now(), source: pendingSourceOf(source), courseHint: hint });
+          // Cancelled while the job was being started: forget it again, so it is not resumed next time.
+          if (stale()) {
+            void clearPendingExtraction(jobId);
+            return;
+          }
+        }
+        const id = jobId;
+        const result = await pollJob<SyllabusExtractionResult>(
+          async () => {
+            const s = await query("ai.syllabusExtractionStatus", { jobId: id });
+            const elapsedMs = typeof s.elapsedMs === "number" ? s.elapsedMs : 0;
+            if (s.status === "done") return { status: "done", elapsedMs, result: (s.result ?? { count: 0 }) as SyllabusExtractionResult };
+            if (s.status === "failed") return { status: "failed", elapsedMs, error: s.error };
+            return { status: s.status, elapsedMs, progress: s.progress };
+          },
+          {
+            // Asked once a second, so the list of deadlines found so far fills in as they arrive.
+            ...LIVE_READING_POLL_OPTIONS,
+            onTick: (status) => {
+              if (stale()) return;
+              setReconnecting(false);
+              const reading = status.status === "running" || status.status === "queued";
+              const now = reading ? status.progress ?? null : null;
+              setProgress(now);
+              // The list only grows while the reading runs. The answer that ends it carries no list: the result
+              // takes over from there, and what was shown is dropped below.
+              if (!reading) return;
+              setLiveMode((mode) => liveModeAfter(mode, now));
+              setLiveItems((shown) => mergeLiveItems(shown, liveItemsOf(now)));
+              setLiveCourse((shown) => liveCourseName(shown, now));
+            },
+            onCheckError: () => {
+              if (!stale()) setReconnecting(true);
+            },
+            isCancelled: () => stale() || !extractingRef.current,
+          },
+        );
+        void clearPendingExtraction(id);
+        if (stale()) return; // cancelled while the server was reading
+
+        const reading = readingOfResult(result);
+        if (!reading) throw new Error("The server's answer could not be read.");
+        if (reading.count === 0) {
+          setFailure(nothingFound(source.kind, reading.extraction.warnings));
+          return;
+        }
+        // The server answers the document's text for a transcribed file; pasted text is the text that was sent.
+        if (finishReadRef.current(reading.extraction, reading.rawText || input.rawText || "", source.kind, reading.courseName)) {
+          clearPickedRef.current(); // read: the picked file is no longer needed
+        }
       } catch (error) {
-        if (controller.signal.aborted) return;
-        const failed = error instanceof AiError ? error : new AiError("other", "Something went wrong while reading.");
-        setFailure({ title: failed.kind === "refusal" ? "The AI declined" : "Could not read it with AI", message: failed.message, offerBuiltin: true });
+        if (stale()) return; // the student cancelled: nothing to report
+        // A definitive answer (the reading failed, or the server no longer has it) ends that job; a
+        // connection problem keeps it, so "Try again" resumes it.
+        if (jobId && (error instanceof JobFailed || errorCode(error) === "NOT_FOUND")) void clearPendingExtraction(jobId);
+        setFailure(describeFailure(error, "extract"));
       } finally {
-        if (abortRef.current === controller) abortRef.current = null;
-        setIsReading(false);
+        if (!stale()) {
+          extractingRef.current = false;
+          setIsExtracting(false);
+          setReconnecting(false);
+          // The wait is over (read, failed or nothing found): the preview list goes with it.
+          setLiveItems(null);
+          setLiveCourse(null);
+        }
       }
-      return;
+    },
+    [courseHint, ensureSession, state.semester, today, uploadDecision],
+  );
+
+  const source = useSyllabusSource((s) => void startExtraction(s), { ensureSession });
+  const shownFailure = failure ?? source.failure;
+  const dismissFailure = () => {
+    setFailure(null);
+    source.clearFailure();
+  };
+  useEffect(() => {
+    clearPickedRef.current = source.clearPendingFile;
+  });
+
+  // The free syllabus is already used when the screen opens: said at once, before a file is picked, with "See plans".
+  const gateSaid = useRef(false);
+  useEffect(() => {
+    if (uploadDecision !== "paywall" || gateSaid.current || step !== "source" || isExtracting) return;
+    gateSaid.current = true;
+    setFailure(describeIntakeFailure(freeSyllabusLimitError(), "extract"));
+  }, [uploadDecision, step, isExtracting]);
+
+  /**
+   * "Try again" after a failed reading: resume the remembered job when there is one for this file (a dropped
+   * connection: the server may be done already), otherwise send the source again (a file or photos are uploaded
+   * again, because the server deletes an uploaded syllabus when its reading is over).
+   */
+  const retryLast = async () => {
+    const last = lastSource.current;
+    if (!last) return;
+    setFailure(null);
+    if (last.input.pdfUrl || last.input.pdfUrls?.length) {
+      const pending = await loadPendingExtraction();
+      if (pending && isSameSource(pending.source, last)) {
+        void startExtraction(last, { jobId: pending.jobId, startedAt: pending.startedAt, courseHint: pending.courseHint });
+        return;
+      }
     }
-    finishRead(extractSyllabusHeuristically(source, { courseHint }), source);
-  }
+    source.resend(last);
+  };
+  const retry = () => {
+    if (failure) void retryLast();
+    else if (source.pendingFile) source.continuePendingFile();
+    else if (source.scannedPages.length > 0) void source.submitScan();
+  };
+  const canRetry = (failure !== null && lastSource.current !== null) || (source.failure !== null && (source.pendingFile !== null || source.scannedPages.length > 0));
 
-  function cancelRead() {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setIsReading(false);
-  }
+  // Coming back to the screen (or reloading the page) while a reading is still on the server: pick it up.
+  const resumeRef = useRef<{ start: typeof startExtraction; restore: typeof source.restore }>({ start: startExtraction, restore: source.restore });
+  useEffect(() => {
+    resumeRef.current = { start: startExtraction, restore: source.restore };
+  });
+  useEffect(() => {
+    let alive = true;
+    void loadPendingExtraction().then((pending) => {
+      if (!alive || !pending || extractingRef.current) return;
+      const resumed: ExtractionSource = { kind: pending.source.kind, input: pending.source.input, local: pending.source.local, pageUris: pending.source.pageUris };
+      if (pending.courseHint) setCourseHint(pending.courseHint);
+      resumeRef.current.restore(resumed);
+      void resumeRef.current.start(resumed, { jobId: pending.jobId, startedAt: pending.startedAt, courseHint: pending.courseHint });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-  function pickFile(file: File | undefined) {
-    if (!file) return;
-    file.text().then((content) => setText(content.slice(0, 200_000))).catch(() => setFailure({ title: "Could not read the file", message: "Choose a plain text file (.txt or .md), or paste the text.", offerBuiltin: false }));
-  }
+  // The free syllabus is used: the failure card offers "See plans" (the picked file stays for "Try again"). The
+  // paywall is not opened from here when the server refuses: the API client already answers that 403 with the
+  // app-wide "See Pro plans" question (src/state/subscription-context.tsx).
 
   // ── 2. The class ────────────────────────────────────────────
 
   const linkClass = (cls: ClassBlock | null) => {
     setLinkedClass(cls);
     if (run) {
+      // Days, times and room: what the student entered here if they did, otherwise the syllabus's own, with the
+      // chosen class filling what the syllabus leaves out. Never the times of the class that was chosen before.
       const pattern = meetingTouched ? (basics.days.length > 0 || basics.startTime ? { days: basics.days, startTime: basics.startTime || null, endTime: basics.endTime || null, location: basics.location } : null) : run.course.meetingPattern;
       const p = prefillBasics({ name: run.course.name, code: run.course.code, isAsynchronous: meetingTouched ? basics.isAsynchronous : run.course.isAsynchronous, meetingPattern: pattern }, cls);
       setBasics((b) => ({ ...b, shortName: cls ? normalizeShortName(classShortName(cls)) : suggestShortName({ name: run.course.name, code: run.course.code, taken: takenShortNames() }), isAsynchronous: p.isAsynchronous, days: p.days, startTime: p.startTime, endTime: p.endTime, location: p.location }));
@@ -764,6 +962,8 @@ export function SyllabusScreen() {
 
   const continueFromBasics = () => {
     if (!run) return;
+    // The step's own line over Continue says what is missing (src/engine/syllabus-review.ts classStepBlocker); these
+    // are the same rules once more, so nothing unchecked can reach the plan.
     if (!basics.name.trim() && !linkedClass) return setBasicsError("Give the class a name to continue");
     if (!basics.isAsynchronous && !isValidMeeting(basics.days, basics.startTime, basics.endTime)) return setBasicsError("Choose the class days and times, or turn on “No set class time”");
     const { assessment } = run;
@@ -777,6 +977,7 @@ export function SyllabusScreen() {
     if (!outcome.ok) return setBasicsError(outcome.error);
     setBasicsError(null);
     setSemesterOutcome(outcome);
+    // The confirmed term decides how week numbers and month/day dates are read.
     const term = outcome.semester;
     setDrafts((current) => reresolveDrafts(current, { today, termStart: term?.startDate ?? run.resolvedStart, termEnd: term?.endDate ?? run.resolvedEnd, breaks: term?.breaks ?? run.resolvedBreaks }));
     setStep("items");
@@ -803,6 +1004,7 @@ export function SyllabusScreen() {
     const draft = drafts.find((d) => d.id === id);
     if (!draft) return null;
     let next = draft;
+    // Saving the sheet with a date the app had worked out is the student saying it is right: it becomes theirs.
     const confirms = patch.date !== "" && draft.dateConfidence !== "explicit" && draft.dateConfidence !== "user";
     if (patch.date !== (draft.dueDate ?? "") || confirms) {
       const changed = setDraftDate(draft, patch.date, dateContext());
@@ -856,19 +1058,21 @@ export function SyllabusScreen() {
           extractionJson: run.extractionJson,
           newClassId,
         });
+        // What the planner will do with this import, worked out BEFORE committing (the same pure code the reducer runs).
         let plannedMinutes: number | null = null;
         try {
           const after = applySyllabusImport(state, built.payload);
           const ids = new Set([...built.payload.tasks.map((t) => t.id), ...built.payload.taskUpdates.map((t) => t.id)]);
           plannedMinutes = summarizeImportPlan(after, ids, { now, needDate: built.counts.excludedUndated }).plannedMinutes;
         } catch {
-          plannedMinutes = null;
+          plannedMinutes = null; // the import itself is fine; only that number is unknown
         }
         dispatch({ type: "APPLY_SYLLABUS_IMPORT", payload: built.payload });
         if (built.counts.added + built.counts.overwritten > 0) dispatch({ type: "AUTO_BUILD_WEEK" });
         const before = linkedClass;
         const updated = built.payload.classToUpdate;
         const classUpdated = Boolean(updated) && before !== null && (before.days.join() !== updated!.days.join() || before.startTime !== updated!.startTime || before.endTime !== updated!.endTime || (before.location ?? "") !== (updated!.location ?? "") || Boolean(before.isAsynchronous) !== Boolean(updated!.isAsynchronous));
+        // The flow ends on Today, which shows what was planned and offers the undo (src/engine/setup-recap.ts).
         writePref(
           PREF_KEYS.setupRecap,
           JSON.stringify(
@@ -889,7 +1093,7 @@ export function SyllabusScreen() {
           ),
         );
         writePref(PREF_KEYS.setupListHidden, null);
-        navigate("today", { replace: true });
+        if (mounted.current) navigate("today", { replace: true });
       } catch (error) {
         setStep("items");
         setCommitError(error instanceof Error && error.message ? `${error.message} Nothing was added. Try again.` : "Something went wrong and nothing was added. Try again.");
@@ -902,7 +1106,44 @@ export function SyllabusScreen() {
   // ── Render ──────────────────────────────────────────────────
 
   const leave = () => goBack("classes");
+
+  /**
+   * Stop waiting for the server (the polling ends on the next tick); the chosen source stays on screen. The
+   * reading is forgotten in this browser, so it is not resumed the next time the screen opens.
+   */
+  const cancelExtraction = () => {
+    runToken.current += 1;
+    extractingRef.current = false;
+    setIsExtracting(false);
+    setReadStartedAt(null);
+    setClockMs(0);
+    setProgress(null);
+    setReconnecting(false);
+    setLiveItems(null);
+    setLiveCourse(null);
+    void clearPendingExtraction();
+  };
+
+  // A picked file on its way to the server, before the read begins (an open picker, pages being added, or an unread
+  // file that is only remembered are not "sending").
+  const sendingFile = step === "source" && !isExtracting && source.isSendingFile && source.pendingFile !== null;
+  const mode = effectiveSourceMode(sourceMode, source.scannedPages.length);
+  const waiting = step === "source" && (isExtracting || sendingFile);
+
+  // What the wait is reading, in words.
+  const last = lastSource.current;
+  const waitFile = sendingFile ? source.pendingFile : last?.local ?? null;
+  const waitKind: SourceKind = sendingFile ? "file" : last?.kind ?? "file";
+  // A Word or text file is read in this browser and sent as text: quick, like pasted text, so no usual time and no bar.
+  const quick = !sendingFile && last?.input.rawText !== undefined;
+  const pageCount = last?.pageUris?.length ?? last?.input.pdfUrls?.length ?? 0;
+  const words = sourceWords({ kind: waitKind, file: waitFile, pageCount, textLength: last?.input.rawText?.length ?? 0 });
+  const copyKind: SourceKind = quick ? "paste" : waitKind;
+  // Every reading runs as a job on the server, which reports what it has found so far: every wait has the list.
+  const liveList = showsLiveList({ isJob: isExtracting && !sendingFile, mode: liveMode });
+
   const lead = prefilledClass ? `For ${prefilledClass.name}. ${WAYS_IN}` : state.classes.length === 0 && (state.syllabusImports?.length ?? 0) === 0 ? `Start with one class. ${WAYS_IN}` : `One class at a time. ${WAYS_IN}`;
+
   const bar =
     step === "plan"
       ? { icon: "back" as const, label: "Back", onPress: () => undefined, disabled: true }
@@ -910,72 +1151,73 @@ export function SyllabusScreen() {
         ? { icon: "back" as const, label: "Back to your class", onPress: () => setStep("basics"), disabled: isCommitting }
         : step === "basics"
           ? { icon: "back" as const, label: "Back to adding a syllabus", onPress: () => setStep("source") }
-          : isReading
-            ? { icon: "close" as const, label: "Cancel reading the syllabus", onPress: cancelRead }
-            : { icon: "close" as const, label: "Close", onPress: leave };
-  const chars = text.trim().length;
+          : isExtracting
+            ? { icon: "close" as const, label: "Cancel reading the syllabus", onPress: cancelExtraction }
+            : mode === "paste" && !sendingFile
+              ? { icon: "back" as const, label: "Back to the ways to add a syllabus", onPress: () => setSourceMode("pick") }
+              : mode === "scan" && !sendingFile
+                ? {
+                    icon: "back" as const,
+                    label: "Discard these pages and go back",
+                    onPress: () => {
+                      source.setScannedPages([]);
+                      setSourceMode("pick");
+                    },
+                  }
+                : { icon: "close" as const, label: "Close", onPress: leave };
 
   return (
     <div className="screen" style={{ gap: 14 }}>
       <StepBar step={flowStepNumber(step)} icon={bar.icon} label={bar.label} onPress={bar.onPress} disabled={bar.disabled} />
 
+      {waiting ? (
+        <ReadingStep
+          title={sendingFile ? "Uploading your syllabus" : "Reading your syllabus"}
+          sourceName={words.name}
+          sourceDetail={words.detail}
+          rows={readingRows({ kind: copyKind === "paste" ? "paste" : waitKind, phase: sendingFile ? "sending" : "reading", progress, pages: pageCount })}
+          elapsedMs={sendingFile ? undefined : clockMs}
+          expectation={sendingFile ? null : readingExpectation({ kind: copyKind, elapsedMs: clockMs, reconnecting })}
+          showBar={!sendingFile && copyKind !== "paste"}
+          leaveNote={!sendingFile ? "You can leave this page. It keeps reading, and the result will be here when you come back." : null}
+          onCancel={sendingFile ? undefined : cancelExtraction}
+          live={liveList ? { items: liveItems ?? [], courseName: liveCourse, stage: progress?.stage ?? null, reconnecting, resumed: resumedRead, answered: liveMode === "live", today } : null}
+        />
+      ) : null}
+
+      {/* Kept mounted (just hidden) during the wait, so a pasted text or picked pages survive a failure or Cancel. */}
       {step === "source" ? (
-        <>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <FlowTitle title="Add your syllabus" sub={lead} />
-            {failure ? (
-              <div role="alert" style={{ padding: 14, borderRadius: 14, border: `1px solid ${alpha(colors.error, 0.45)}`, background: alpha(colors.error, 0.08), display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                  <Icon name="warning" size={20} color={colors.error} style={{ marginTop: 1 }} />
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-                    <span style={{ fontSize: 15, lineHeight: "20px", fontWeight: 600, color: colors.foreground }}>{failure.title}</span>
-                    <span style={{ fontSize: 14, lineHeight: "20px", color: colors.muted }}>{failure.message}</span>
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <PrimaryButton size="sm" label="Try again" onPress={() => void read()} />
-                  {failure.offerBuiltin ? <PrimaryButton size="sm" tone="ghost" label="Use the built-in reader" onPress={() => { setReader("builtin"); void read("builtin"); }} /> : null}
-                  <PrimaryButton size="sm" tone="ghost" label="Dismiss" onPress={() => setFailure(null)} />
-                </div>
-              </div>
-            ) : null}
-            <div>
-              <FieldLabel>The syllabus</FieldLabel>
-              <textarea className="input" value={text} onChange={(e) => setText(e.target.value.slice(0, 200_000))} placeholder={"Paste the whole syllabus here: the schedule with its dates, the exams, the assignments…"} aria-label="Syllabus text" rows={10} style={{ minHeight: 220 }} disabled={isReading} />
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 6 }}>
-                <span className="caption mono" style={{ fontSize: 12 }}>{chars > 0 ? `${chars.toLocaleString("en-US")} characters` : "Tables saved as pictures do not paste as text."}</span>
-                <button type="button" className="link" onClick={() => fileInput.current?.click()} style={{ fontSize: 14, fontWeight: 600, color: colors.peri, minHeight: 32 }} disabled={isReading}>Choose a .txt file</button>
-                <input ref={fileInput} type="file" accept=".txt,.md,.text,text/plain,text/markdown" style={{ display: "none" }} aria-hidden onChange={(e) => { pickFile(e.target.files?.[0]); e.target.value = ""; }} />
-              </div>
-            </div>
-            <div>
-              <FieldLabel>Which class is it for? · optional</FieldLabel>
-              <input className="input" value={courseHint} onChange={(e) => setCourseHint(e.target.value)} placeholder="Principles of Finance" maxLength={300} aria-label="Course name, optional" disabled={isReading} />
-            </div>
-            <FieldGroup>
-              {apiKey ? (
-                <FieldRow first icon="spark" label="Read with AI" detail="Gemini reads the whole document with your own key" tint={colors.violet}>
-                  <AppSwitch value={reader === "ai"} onValueChange={(on) => setReader(on ? "ai" : "builtin")} ariaLabel="Read with AI, using your own Gemini key" disabled={isReading} />
-                </FieldRow>
-              ) : (
-                <FieldRow first icon="spark" label="Built-in reader" detail="Finds dated items line by line. For messy syllabi, add a Gemini API key in Settings and Gemini reads it instead" tint={colors.violet} />
-              )}
-            </FieldGroup>
-          </div>
-          <FlowFooter hint={isReading ? (reader === "ai" ? "Gemini is reading your syllabus. This usually takes under a minute." : null) : chars > 0 && chars < 20 ? "Paste a little more of the syllabus to continue" : null} hintTone="quiet">
-            {isReading ? (
-              <>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, minHeight: 54 }}>
-                  <span className="spinner" />
-                  <span style={{ fontSize: 15, fontWeight: 600, color: colors.foreground }}>Reading your syllabus…</span>
-                </div>
-                <PrimaryButton size="lg" fullWidth tone="ghost" label="Cancel" onPress={cancelRead} />
-              </>
-            ) : (
-              <PrimaryButton size="lg" fullWidth label={reader === "ai" && apiKey ? "Read it with AI" : "Read the syllabus"} onPress={() => void read()} disabled={chars < 20} ariaLabel={chars < 20 ? "Read the syllabus. Paste the text first" : "Read the syllabus"} />
-            )}
-          </FlowFooter>
-        </>
+        <div style={{ display: waiting ? "none" : "contents" }}>
+          <SourceStep
+            mode={sourceMode}
+            onMode={setSourceMode}
+            lead={lead}
+            isBusy={isExtracting || source.isUploading}
+            failure={shownFailure}
+            canRetryLast={canRetry}
+            onRetry={retry}
+            onDismissFailure={dismissFailure}
+            onOpenPaywall={() => navigate("paywall")}
+            onFilePicked={(file) => void source.filePicked(file)}
+            onPhotosPicked={(files) => void source.photosPicked(files)}
+            pendingFile={source.pendingFile}
+            onContinuePending={() => {
+              dismissFailure();
+              source.continuePendingFile();
+            }}
+            onRemovePending={() => {
+              dismissFailure();
+              source.clearPendingFile();
+            }}
+            scannedPages={source.scannedPages}
+            onRemovePage={(index) => source.setScannedPages((pages) => pages.filter((_, i) => i !== index))}
+            onSubmitScan={() => void source.submitScan()}
+            onSubmit={(s) => void startExtraction(s)}
+            courseHint={courseHint}
+            onCourseHint={setCourseHint}
+            note="Your syllabus is read by AI on Trajectory's server."
+          />
+        </div>
       ) : null}
 
       {step === "basics" && run ? (
@@ -993,12 +1235,16 @@ export function SyllabusScreen() {
           onLinkClass={linkClass}
           assessment={run.assessment}
           termChoice={termChoice}
-          onTermChoice={(choice) => { setBasicsError(null); setTermChoice(choice); }}
+          onTermChoice={(choice) => {
+            setBasicsError(null);
+            setTermChoice(choice);
+          }}
           termName={termName}
           termStart={termStart}
           termEnd={termEnd}
           onTerm={(patch) => {
             setBasicsError(null);
+            // The term is named after when it starts ("Fall 2026"); it can be renamed later from Classes.
             if (patch.start !== undefined) {
               setTermStart(patch.start);
               setTermName(patch.start ? semesterNameFor(patch.start) : "");
@@ -1021,18 +1267,24 @@ export function SyllabusScreen() {
       ) : null}
 
       {step === "plan" ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "60px 20px", textAlign: "center" }} role="status" aria-live="polite">
-          <span className="spinner" style={{ width: 28, height: 28 }} />
-          <h1 style={{ margin: 0, fontSize: 24, lineHeight: "30px", fontWeight: 800, letterSpacing: -0.5, color: colors.foreground }}>Building your plan</h1>
-          <p style={{ margin: 0, fontSize: 14.5, lineHeight: "20px", color: colors.muted }}>{linkedClass?.name ?? courseLabel} · {plannedCount(drafts)} items go into the plan.</p>
-        </div>
+        <ReadingStep
+          title="Building your plan"
+          sourceName={linkedClass?.name ?? courseLabel}
+          sourceDetail={run?.kind === "paste" ? "Pasted text" : run?.kind === "scan" ? "Photos of the pages" : "Syllabus"}
+          rows={readingRows({ kind: run?.kind ?? "file", phase: "planning", toPlan: plannedCount(drafts) })}
+        />
       ) : null}
 
       <EditItemSheet item={editing} onClose={() => setEditing(null)} onSave={saveEdit} />
-      <DuplicateSheet open={showDuplicates} duplicates={pendingDuplicates} onCancel={() => setShowDuplicates(false)} onContinue={(overwrite) => { setShowDuplicates(false); commit(overwrite); }} />
+      <DuplicateSheet
+        open={showDuplicates}
+        duplicates={pendingDuplicates}
+        onCancel={() => setShowDuplicates(false)}
+        onContinue={(overwrite) => {
+          setShowDuplicates(false);
+          commit(overwrite);
+        }}
+      />
     </div>
   );
 }
-
-// Keeps the localDateKey import honest for the plan step's "today" (same clock as the rest of the app).
-void localDateKey;
