@@ -53,6 +53,7 @@ import { Icon, type IconName } from "../ui/icon";
 import { HeaderIconButton, MONO_FONT, PrimaryButton, SectionLabel } from "../ui/primitives";
 import { Sheet } from "../ui/sheet";
 import { useColors } from "../ui/theme";
+import { useDesktop } from "../ui/layout";
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -99,6 +100,7 @@ interface Applied {
 
 export function AiScreen() {
   const colors = useColors();
+  const desktop = useDesktop();
   const route = useRoute();
   const { state, dispatch } = useApp();
   const { isPro, isLoading: isProLoading } = useProStatus();
@@ -799,6 +801,12 @@ export function AiScreen() {
     goBack("today");
   }
 
+  // A computer: the page fills the window exactly (the frame's padding is 34px over it and 72px under it), so the box
+  // sits at the bottom of the window without the page scrolling.
+  const pageStyle = desktop ? { minHeight: "calc(100dvh - 106px)" } : undefined;
+  // A computer: the box and any proposal float over the end of the conversation, with no rule over them.
+  const footerStyle = desktop ? { borderTop: "none", background: "linear-gradient(to bottom, transparent, var(--background) 22px)", padding: "22px 0 20px", gap: 12 } : undefined;
+
   const head = (extra?: ReactNode, pro?: boolean) => (
     <div style={{ display: "flex", alignItems: "flex-end", gap: 8, paddingTop: 4 }}>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -821,7 +829,7 @@ export function AiScreen() {
   // Entitlement still loading: don't flash the Pro note at a paying student.
   if (isProLoading) {
     return (
-      <div className="screen ai-page">
+      <div className="screen ai-page" style={pageStyle}>
         {head()}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Spinner color={colors.violet} track={colors.borderStrong} />
@@ -835,7 +843,7 @@ export function AiScreen() {
   if (!isPro) {
     const openPaywall = () => navigate("paywall");
     return (
-      <div className="screen ai-page">
+      <div className="screen ai-page" style={pageStyle}>
         {head(undefined, true)}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14, paddingTop: 4, paddingBottom: 14 }}>
           <ExampleList colors={colors} prompts={EXAMPLE_PROMPTS} onPick={openPaywall} pickHint={PRO_HINT} />
@@ -849,7 +857,7 @@ export function AiScreen() {
             <FreeRow icon="plus" title="Add a task" detail="Type it in yourself" label="Add a task yourself" onPress={() => openAdd({ kind: "task" })} />
           </div>
         </div>
-        <div className="flow-footer">
+        <div className="flow-footer" style={footerStyle}>
           <Composer colors={colors} inputRef={inputRef} value={inputText} onChangeText={setInputText} placeholder={PLACEHOLDER} canSend={Boolean(inputText.trim())} onSend={openPaywall} sendHint={PRO_HINT} />
         </div>
       </div>
@@ -867,14 +875,19 @@ export function AiScreen() {
   const dockLine = { fontSize: 13, lineHeight: "18px", color: colors.muted, margin: 0 } as const;
 
   return (
-    <div className="screen ai-page">
+    <div className="screen ai-page" style={pageStyle}>
       {head(hasConversation ? <HeadButton icon="trash" label="Clear the conversation" onPress={clearChat} /> : undefined)}
 
       {/* The conversation (before anything is said: what this is for, and four things to try) */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14, paddingTop: 4, paddingBottom: 14 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: desktop ? 20 : 14, paddingTop: 4, paddingBottom: 14, justifyContent: desktop && visibleMessages.length === 0 && !isLoading ? "center" : undefined }}>
         {visibleMessages.length === 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <p style={{ margin: 0, fontSize: 15, lineHeight: "22px", color: colors.muted }}>{LEDE}</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: desktop ? 18 : 14 }}>
+            {desktop ? (
+              <span aria-hidden style={{ width: 56, height: 56, borderRadius: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.violet, 0.16), border: `1px solid ${alpha(colors.violet, 0.4)}` }}>
+                <Icon name="spark" size={26} color={ink} />
+              </span>
+            ) : null}
+            <p style={{ margin: 0, fontSize: desktop ? 18 : 15, lineHeight: desktop ? "26px" : "22px", color: desktop ? colors.foreground : colors.muted, maxWidth: desktop ? 560 : undefined }}>{LEDE}</p>
             <ExampleList colors={colors} prompts={EXAMPLE_PROMPTS} onPick={pickExample} />
             <p style={{ margin: 0, fontSize: 13, lineHeight: "18px", color: colors.muted }}>{FOOTNOTE}</p>
           </div>
@@ -884,7 +897,7 @@ export function AiScreen() {
         {isLoading ? <ThinkingRow colors={colors} copy={thinkingCopy} /> : null}
       </div>
 
-      <div className="flow-footer">
+      <div className="flow-footer" style={footerStyle}>
         {/* Things to add: check them (click a task to correct it), then add them all at once */}
         {foundCount > 0 && showConfirm ? (
           <ReviewDock

@@ -10,6 +10,7 @@ import { alpha } from "../engine/design";
 import type { TagTone } from "../engine/study-tools-view";
 import type { StudyErrorInfo } from "../lib/study-errors";
 import { Icon, type IconName } from "../ui/icon";
+import { useDesktop } from "../ui/layout";
 import { MONO_FONT, Note } from "../ui/primitives";
 import { useColors } from "../ui/theme";
 
@@ -39,14 +40,23 @@ export function ToolTop({ onBack, backLabel = "Back", backIcon = "chevronLeft", 
  * A screen's head: the small line over the title (mono capitals, or `lead`: a class's chip and what this is), the
  * title, and a sentence or two under it.
  */
-export function ToolHead({ eyebrow, lead, title, sub, children, style }: { eyebrow?: string; lead?: ReactNode; title: string; sub?: string | null; children?: ReactNode; style?: CSSProperties }) {
+export function ToolHead({ eyebrow, lead, title, sub, children, style, right }: { eyebrow?: string; lead?: ReactNode; title: string; sub?: string | null; children?: ReactNode; style?: CSSProperties; right?: ReactNode }) {
   const colors = useColors();
-  return (
-    <div style={{ padding: "0 4px", ...style }}>
+  // A computer: the title at the size of the other screens' titles, and room on the right for the page's main button.
+  const desktop = useDesktop();
+  const text = (
+    <div style={right ? { flex: 1, minWidth: 0 } : { padding: "0 4px", ...style }}>
       {lead ? <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>{lead}</div> : eyebrow ? <div className="eyebrow clamp2" style={{ marginBottom: 4 }}>{eyebrow}</div> : null}
-      <h1 style={{ margin: 0, fontSize: 30, lineHeight: "35px", fontWeight: 800, letterSpacing: -0.75, color: colors.foreground }}>{title}</h1>
-      {sub ? <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: "21px", color: colors.muted }}>{sub}</p> : null}
+      <h1 style={{ margin: 0, fontSize: desktop ? 34 : 30, lineHeight: desktop ? "40px" : "35px", fontWeight: 800, letterSpacing: desktop ? -1 : -0.75, color: colors.foreground }}>{title}</h1>
+      {sub ? <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: "21px", color: colors.muted, maxWidth: desktop ? 720 : undefined }}>{sub}</p> : null}
       {children}
+    </div>
+  );
+  if (!right) return text;
+  return (
+    <div style={{ padding: "0 4px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24, ...style }}>
+      {text}
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>{right}</div>
     </div>
   );
 }

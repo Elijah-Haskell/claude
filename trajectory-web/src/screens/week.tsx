@@ -10,7 +10,7 @@
 // button at the end of the tab bar. Clicking a block opens its sheet; clicking what is due opens the task's sheet.
 // The left and right arrow keys turn the page.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { alpha } from "../engine/design";
 import { planStatusFor } from "../engine/plan-alerts";
@@ -30,6 +30,7 @@ import { PREF_KEYS, readPref, writePref } from "../state/local-prefs";
 import { useGlobalModal } from "../state/modal-context";
 import { useClock } from "../state/use-clock";
 import { Icon, IconWell } from "../ui/icon";
+import { useDesktop } from "../ui/layout";
 import { DateBadge, HeaderIconButton, PrimaryButton, ScreenHeader, Segmented, TileRow, eyebrowStyle } from "../ui/primitives";
 import { Sheet, SheetBody } from "../ui/sheet";
 import { useColors } from "../ui/theme";
@@ -46,6 +47,7 @@ function PageButton({ back, label, onPress }: { back?: boolean; label: string; o
 
 export function WeekScreen() {
   const colors = useColors();
+  const desktop = useDesktop();
   const navigate = useNavigate();
   const route = useRoute();
   const { state, dispatch, isHydrated } = useApp();
@@ -223,6 +225,14 @@ export function WeekScreen() {
     </div>
   ) : undefined;
 
+  const viewSwitch = (style: CSSProperties) => <Segmented style={style} options={WEEK_VIEWS.map((option) => ({ value: option.value, label: option.label, ariaLabel: option.accessibilityLabel }))} value={view} onChange={changeView} />;
+  const statusButton = planStatus ? (
+    <button type="button" className="pressable" onClick={() => setReviewOpen(true)} aria-label={`Plan status: ${planStatus.headline}. ${planStatus.summary}. Review ${planStatus.items.length}, each with its fix`} style={{ height: 28, padding: "0 10px", borderRadius: 9, border: `1px solid ${alpha(statusColor, 0.5)}`, background: alpha(statusColor, 0.12), fontSize: 13, fontWeight: 600, color: statusColor }}>
+      {`${planStatus.items.length} to review`}
+    </button>
+  ) : null;
+  const todayLink = <button type="button" className="link" onClick={goToToday} aria-label="Back to today" style={{ fontSize: 14, fontWeight: 600, color: colors.peri, minHeight: 28 }}>Back to today</button>;
+
   return (
     <div className="screen">
       {/* 1 · Where in the term, the dates on screen, Ask AI and Update plan */}
@@ -239,28 +249,37 @@ export function WeekScreen() {
         }
       />
 
-      {/* 2 · Back, the three views, forward */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <PageButton back label={`Earlier: the ${pageWord} before`} onPress={() => page(-1)} />
-        <Segmented style={{ flex: 1 }} options={WEEK_VIEWS.map((option) => ({ value: option.value, label: option.label, ariaLabel: option.accessibilityLabel }))} value={view} onChange={changeView} />
-        <PageButton label={`Later: the next ${pageWord}`} onPress={() => page(1)} />
-      </div>
-
-      {/* Only when there is something to say: the plan needs a look, or this page does not show today */}
-      {planStatus || !onToday ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 28 }}>
-          {planStatus ? (
-            <button type="button" className="pressable" onClick={() => setReviewOpen(true)} aria-label={`Plan status: ${planStatus.headline}. ${planStatus.summary}. Review ${planStatus.items.length}, each with its fix`} style={{ height: 28, padding: "0 10px", borderRadius: 9, border: `1px solid ${alpha(statusColor, 0.5)}`, background: alpha(statusColor, 0.12), fontSize: 13, fontWeight: 600, color: statusColor }}>
-              {`${planStatus.items.length} to review`}
-            </button>
-          ) : (
-            <span />
-          )}
-          {!onToday ? (
-            <button type="button" className="link" onClick={goToToday} aria-label="Back to today" style={{ fontSize: 14, fontWeight: 600, color: colors.peri, minHeight: 28 }}>Back to today</button>
-          ) : null}
+      {/* 2 · Back, the three views, forward. A computer: one toolbar, the plan status and "Back to today" on its left
+          and the views between the two arrows on its right, the control at its own width. */}
+      {desktop ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, minHeight: 44 }}>
+            {planStatus ? statusButton : null}
+            {!onToday ? todayLink : null}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <PageButton back label={`Earlier: the ${pageWord} before`} onPress={() => page(-1)} />
+            {viewSwitch({ width: 330 })}
+            <PageButton label={`Later: the next ${pageWord}`} onPress={() => page(1)} />
+          </div>
         </div>
-      ) : null}
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <PageButton back label={`Earlier: the ${pageWord} before`} onPress={() => page(-1)} />
+            {viewSwitch({ flex: 1 })}
+            <PageButton label={`Later: the next ${pageWord}`} onPress={() => page(1)} />
+          </div>
+
+          {/* Only when there is something to say: the plan needs a look, or this page does not show today */}
+          {planStatus || !onToday ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 28 }}>
+              {planStatus ? statusButton : <span />}
+              {!onToday ? todayLink : null}
+            </div>
+          ) : null}
+        </>
+      )}
 
       {/* Once: what the dashed (flexible) sessions on this grid are, and how to keep one */}
       <FlexibleSessionsTip visible={showsFlexible} />

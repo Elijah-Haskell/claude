@@ -22,6 +22,7 @@ import { useNavigate } from "../router";
 import { useApp } from "../state/app-provider";
 import { useGlobalModal } from "../state/modal-context";
 import { Icon, IconWell } from "../ui/icon";
+import { useDesktop, useWideLayout } from "../ui/layout";
 import { Card, CheckBox, CourseChip, DateBadge, MONO_FONT, PrimaryButton, ScreenHeader, SectionLabel, Segmented } from "../ui/primitives";
 import { useColors } from "../ui/theme";
 
@@ -83,6 +84,61 @@ const TaskRow = memo(function TaskRow({ task, chip, chipColor, badge, shortBy, o
   );
 });
 
+/** The same row on a computer: a table line with the class, the time it needs and the due badge in their own columns. */
+const DesktopTaskRow = memo(function DesktopTaskRow({ task, chip, chipColor, className, roomy, badge, shortBy, onToggle, onOpen, showClass }: {
+  task: Task;
+  chip?: string;
+  chipColor?: string;
+  /** The class's full name beside its tag. */
+  className?: string;
+  /** A wide window: the class column has room for the class's full name. */
+  roomy: boolean;
+  badge: TaskBadge;
+  shortBy?: number;
+  onToggle: (taskId: string) => void;
+  onOpen: (taskId: string) => void;
+  /** Whether the list has a class column (By date); By class says the class in the group's header. */
+  showClass: boolean;
+}) {
+  const colors = useColors();
+  const closed = task.status === "done" || task.status === "skipped";
+  const kind = classifyTaskKind(task);
+  const assessment = kind === "exam" || kind === "quiz";
+  const short = !closed && shortBy !== undefined && shortBy > 0;
+  const course = task.courseName && task.courseName !== "General" ? task.courseName : "no class";
+
+  return (
+    <div className="row" style={{ padding: "0 6px 0 8px", gap: 0, minHeight: 64 }}>
+      <CheckBox checked={task.status === "done"} onPress={() => onToggle(task.id)} ariaLabel={task.status === "done" ? `${task.name}, done. Tick to undo` : `Mark ${task.name} done`} />
+      <button
+        type="button"
+        className="pressable"
+        onClick={() => onOpen(task.id)}
+        aria-label={`${task.name}, ${course}, ${formatDuration(task.estimatedMinutes)}, ${badge.spoken}${short ? `. Needs ${describeMoreTime(shortBy!)} to fit before the deadline` : ""}. Opens the task`}
+        style={{ flex: 1, minWidth: 0, minHeight: 64, display: "grid", gridTemplateColumns: showClass ? roomy ? "minmax(0, 1.7fr) minmax(0, 1fr) 64px 118px" : "minmax(0, 1fr) 72px 64px 118px" : "minmax(0, 1fr) 64px 118px", alignItems: "center", columnGap: 16, padding: "10px 12px 10px 8px", borderRadius: 12, textAlign: "left" }}
+      >
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            {assessment ? <Icon name="flag" size={16} color={closed ? colors.muted : colors.gold} strokeWidth={2} /> : null}
+            <span className="truncate" style={{ flexShrink: 1, fontSize: 15.5, lineHeight: "21px", fontWeight: 500, color: closed ? colors.muted : colors.foreground, textDecoration: closed ? "line-through" : "none" }}>{task.name}</span>
+          </span>
+          {short ? <span style={{ display: "block", fontSize: 13, lineHeight: "18px", marginTop: 3, color: colors.error }}>Needs {describeMoreTime(shortBy!)} to fit before the deadline</span> : null}
+        </span>
+        {showClass ? (
+          <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            {chip ? <CourseChip label={chip} color={chipColor} /> : null}
+            {chip && className && roomy ? <span className="truncate" style={{ fontSize: 13, lineHeight: "18px", color: colors.muted }}>{className}</span> : null}
+          </span>
+        ) : null}
+        <span className="truncate" style={{ fontFamily: MONO_FONT, fontSize: 13, lineHeight: "18px", fontWeight: 500, color: colors.muted }}>{formatDuration(task.estimatedMinutes)}</span>
+        <span style={{ display: "flex", justifyContent: "flex-end", minWidth: 0 }}>
+          <DateBadge label={badge.label} tone={badge.tone} />
+        </span>
+      </button>
+    </div>
+  );
+});
+
 // ── The screen ────────────────────────────────────────────────
 
 export function TasksScreen() {
@@ -90,6 +146,8 @@ export function TasksScreen() {
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
   const { openReplan, openAdd, openTask } = useGlobalModal();
+  const desktop = useDesktop();
+  const wide = useWideLayout();
   const [mode, setMode] = useState<Mode>("date");
   const [query, setQuery] = useState("");
   // Finished work starts folded away.
@@ -125,9 +183,10 @@ export function TasksScreen() {
   const link = { display: "inline-flex", alignItems: "center", gap: 6, minHeight: 24, fontSize: 14, lineHeight: "19px", fontWeight: 600, color: colors.peri } as const;
 
   return (
-    <div className="screen">
+    <div className={desktop ? "screen medium" : "screen"} style={desktop ? { gap: 20 } : undefined}>
       <ScreenHeader eyebrow={tasksSummary(state.tasks, today)} title="Tasks" />
-      <div style={{ display: "flex", alignItems: "center", gap: 10, height: 46, borderRadius: 12, border: `1px solid ${colors.borderStrong}`, background: colors.panel, paddingLeft: 14, paddingRight: 6 }}>
+      <div style={desktop ? { display: "flex", alignItems: "center", gap: 12 } : { display: "contents" }}>
+      <div style={{ flex: desktop ? 1 : undefined, minWidth: 0, display: "flex", alignItems: "center", gap: 10, height: 46, borderRadius: 12, border: `1px solid ${colors.borderStrong}`, background: colors.panel, paddingLeft: 14, paddingRight: 6 }}>
         <Icon name="search" size={18} color={colors.muted} />
         <input
           type="search"
@@ -152,10 +211,25 @@ export function TasksScreen() {
           { value: "date", label: "By date", ariaLabel: "Group by due date" },
           { value: "class", label: "By class", ariaLabel: "Group by class" },
         ]}
+        style={desktop ? { width: 280, flexShrink: 0 } : undefined}
       />
+      </div>
 
       {sections.length === 0 ? (
         state.tasks.length === 0 ? (
+          desktop ? (
+            <Card tone="surface" radiusSize={20} style={{ marginTop: 4, padding: 32, display: "flex", alignItems: "flex-start", gap: 24 }}>
+              <IconWell name="list" color={colors.peri} background={alpha(colors.peri, 0.12)} size={60} />
+              <div style={{ flex: 1, minWidth: 0, maxWidth: 560 }}>
+                <div style={{ fontSize: 22, lineHeight: "28px", fontWeight: 700, letterSpacing: -0.4, color: colors.foreground }}>No tasks yet</div>
+                <div style={{ marginTop: 6, fontSize: 15, lineHeight: "22px", color: colors.muted }}>Add an assignment or a reading, or paste in a syllabus and Trajectory lists every deadline in it.</div>
+                <div style={{ display: "flex", gap: 12, marginTop: 20, flexWrap: "wrap" }}>
+                  <PrimaryButton label="Add a task" left={<Icon name="plus" size={18} color="#fff" strokeWidth={2.2} />} onPress={() => openAdd({ kind: "task" })} style={{ minWidth: 170 }} />
+                  <PrimaryButton label="Add a syllabus" tone="ghost" left={<Icon name="upload" size={17} color={colors.foreground} />} onPress={() => navigate("syllabus")} style={{ minWidth: 170 }} />
+                </div>
+              </div>
+            </Card>
+          ) : (
           <Card tone="surface" radiusSize={16} style={{ marginTop: 8, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12 }}>
             <IconWell name="list" color={colors.peri} background={alpha(colors.peri, 0.12)} size={44} />
             <div style={{ fontSize: 19, lineHeight: "24px", fontWeight: 700, letterSpacing: -0.4, color: colors.foreground }}>No tasks yet</div>
@@ -163,6 +237,7 @@ export function TasksScreen() {
             <PrimaryButton label="Add a task" fullWidth left={<Icon name="plus" size={18} color="#fff" strokeWidth={2.2} />} onPress={() => openAdd({ kind: "task" })} />
             <PrimaryButton label="Add a syllabus" tone="ghost" fullWidth left={<Icon name="upload" size={17} color={colors.foreground} />} onPress={() => navigate("syllabus")} />
           </Card>
+          )
         ) : (
           <div style={{ marginTop: 28, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
             <div style={{ fontSize: 14, lineHeight: "20px", color: colors.muted }}>No task matches “{query.trim()}”.</div>
@@ -175,7 +250,7 @@ export function TasksScreen() {
             <SectionLabel
               title={section.title}
               color={section.key === "overdue" ? colors.error : section.color ? legibleOn(section.color, colors.background, 5.5) : undefined}
-              style={{ marginTop: 8, marginBottom: 8 }}
+              style={desktop ? { marginTop: 4, marginBottom: 10 } : { marginTop: 8, marginBottom: 8 }}
               right={
                 section.key === "overdue" ? (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
@@ -199,11 +274,12 @@ export function TasksScreen() {
               }
             />
             {section.data.length > 0 ? (
-              <div className="group">
+              <div className="group" style={desktop ? { borderRadius: 18 } : undefined}>
                 {section.data.map((item) => {
                   const cls = classById.get(item.courseId) ?? classOfTask(item, state.classes);
                   const named = item.courseName && item.courseName !== "General" ? item.courseName : "";
                   const chip = mode === "date" ? classShortName(cls, named) : "";
+                  if (desktop) return <DesktopTaskRow key={item.id} task={item} chip={chip || undefined} chipColor={cls?.color} className={cls?.name ?? (named || undefined)} roomy={wide} badge={taskBadge(item, today)} shortBy={shortByTask.get(item.id)} onToggle={handleToggle} onOpen={openTask} showClass={mode === "date"} />;
                   return <TaskRow key={item.id} task={item} chip={chip || undefined} chipColor={cls?.color} badge={taskBadge(item, today)} shortBy={shortByTask.get(item.id)} onToggle={handleToggle} onOpen={openTask} />;
                 })}
               </div>

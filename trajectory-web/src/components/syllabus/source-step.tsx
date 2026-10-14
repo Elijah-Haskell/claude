@@ -9,9 +9,10 @@ import { alpha } from "../../engine/design";
 import { PASTE_PICTURE_NOTE, type IntakeFailure } from "../../engine/syllabus-messages";
 import { FILE_ACCEPT, PHOTO_ACCEPT, type ExtractionSource, type LocalFile, type ScannedPage } from "../../lib/syllabus-source";
 import { Icon } from "../../ui/icon";
+import { useDesktop } from "../../ui/layout";
 import { FieldLabel, MONO_FONT, Note, PrimaryButton } from "../../ui/primitives";
 import { useColors } from "../../ui/theme";
-import { BigOption, FlowFooter, FlowTitle, TextLink } from "./shared";
+import { BigOption, DropOption, FlowFooter, FlowTitle, TextLink } from "./shared";
 
 export type SourceMode = "pick" | "paste" | "scan";
 
@@ -54,6 +55,7 @@ const FILE_HELP = "PDF, Word (.docx), image or .txt. A PDF is read as a picture 
 
 export function SourceStep(props: Props) {
   const colors = useColors();
+  const desktop = useDesktop();
   const [pasted, setPasted] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
@@ -239,10 +241,18 @@ export function SourceStep(props: Props) {
         {failureCard()}
         {pendingCard}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
-          <BigOption icon="file" title="Choose a file" sub="PDF or Word" onPress={() => fileInput.current?.click()} disabled={isBusy} busy={isBusy} ariaLabel="Choose a PDF or Word file" hint={FILE_HELP} />
-          <BigOption icon="image" title="Choose photos" sub="Screenshots or pictures of the pages" onPress={() => photoInput.current?.click()} disabled={isBusy} ariaLabel="Choose photos of the pages" />
-        </div>
+        {desktop ? (
+          // A computer: the two ways in as large dashed cards side by side, each taking a file dropped on it too.
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginTop: 4 }}>
+            <DropOption icon="file" title="Choose a file" sub="PDF or Word" onPress={() => fileInput.current?.click()} onDropFiles={(files) => props.onFilePicked(files[0])} disabled={isBusy} busy={isBusy} ariaLabel="Choose a PDF or Word file" hint={FILE_HELP} />
+            <DropOption icon="image" title="Choose photos" sub="Screenshots or pictures of the pages" onPress={() => photoInput.current?.click()} onDropFiles={props.onPhotosPicked} disabled={isBusy} ariaLabel="Choose photos of the pages" />
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+            <BigOption icon="file" title="Choose a file" sub="PDF or Word" onPress={() => fileInput.current?.click()} disabled={isBusy} busy={isBusy} ariaLabel="Choose a PDF or Word file" hint={FILE_HELP} />
+            <BigOption icon="image" title="Choose photos" sub="Screenshots or pictures of the pages" onPress={() => photoInput.current?.click()} disabled={isBusy} ariaLabel="Choose photos of the pages" />
+          </div>
+        )}
 
         <TextLink label="Paste the text instead" onPress={() => props.onMode("paste")} style={{ alignSelf: "center", marginTop: -8 }} />
 

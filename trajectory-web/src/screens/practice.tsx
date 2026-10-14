@@ -26,6 +26,7 @@ import { PracticeResult } from "../components/practice-result";
 import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
 import { ChoiceRow, ExamTop, FlowFooter, FoldText, MonoCount, SmallLabel, Tag, ToolHead, ToolTop, type ChoiceState } from "../components/study-parts";
 import { Icon } from "../ui/icon";
+import { useDesktop } from "../ui/layout";
 import { Card, FieldGroup, Note, PrimaryButton, SectionLabel } from "../ui/primitives";
 import { useColors } from "../ui/theme";
 
@@ -35,6 +36,7 @@ export function PracticeScreen() {
   const colors = useColors();
   const navigate = useNavigate();
   const { state } = useApp();
+  const desktop = useDesktop();
 
   // Pro only (waits until it is known whether there is Pro before redirecting).
   useRedirectToPaywallIfNotPro();
@@ -45,6 +47,53 @@ export function PracticeScreen() {
     if (entry.kind === "practice_exam") navigate(`practice-exam/${encodeURIComponent(entry.guideId)}`);
     // An exam prep's quiz lives inside the exam prep: it opens there, on the quiz.
     else navigate(`exam-prep/${encodeURIComponent(entry.examId)}?tab=quiz`);
+  }
+
+  // A computer: what there is to practise with as cards side by side.
+  if (desktop) {
+    return (
+      <div className="screen full" style={{ gap: 22 }}>
+        <ToolTop onBack={() => goBack("study")} backLabel="Back" />
+        <ToolHead eyebrow={PRACTICE_HEAD.eyebrow} title={PRACTICE_HEAD.title} sub={PRACTICE_HEAD.sub} />
+        {entries.length > 0 ? (
+          <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <SectionLabel title="Practice" right={<MonoCount>{entries.length}</MonoCount>} />
+            <div className="card-grid" style={{ ["--card-min" as string]: "280px", gap: 16 }}>
+              {entries.map((entry) => {
+                const quiz = entry.kind === "exam_quiz";
+                const line = practiceRowLine(entry);
+                const tint = quiz ? colors.gold : colors.violet;
+                return (
+                  <button key={entry.key} type="button" className="card lift" onClick={() => open(entry)} aria-label={`${entry.title}. ${line}`} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 14, padding: 18, minHeight: 150, textAlign: "left" }}>
+                    <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ width: 42, height: 42, borderRadius: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(tint, quiz ? 0.14 : 0.16) }}>
+                        <Icon name={quiz ? "flag" : "test"} size={20} color={tint} />
+                      </span>
+                      <Icon name="arrow" size={18} color={colors.muted} />
+                    </span>
+                    <span>
+                      <span className="clamp2" style={{ display: "block", fontSize: 17, lineHeight: "22px", fontWeight: 600, color: colors.foreground }}>{entry.title}</span>
+                      <span className="clamp2" style={{ display: "block", marginTop: 4, fontSize: 13.5, lineHeight: "19px", color: colors.muted }}>{line}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ) : (
+          <Card tone="surface" padded={false} radiusSize={20} style={{ padding: 28, display: "flex", alignItems: "flex-start", gap: 20 }}>
+            <span style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.violet, 0.16) }}>
+              <Icon name="test" size={26} color={colors.violet} />
+            </span>
+            <div style={{ flex: 1, minWidth: 0, maxWidth: 560 }}>
+              <h2 style={{ margin: 0, fontSize: 21, lineHeight: "27px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>{PRACTICE_EMPTY.title}</h2>
+              <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: "22px", color: colors.muted }}>{PRACTICE_EMPTY.body}</p>
+              <PrimaryButton size="md" label={PRACTICE_EMPTY.action} onPress={() => navigate("study-guides")} style={{ marginTop: 20, minWidth: 200 }} />
+            </div>
+          </Card>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -96,6 +145,7 @@ const optionCount = (question: PracticeQuestion | undefined) => (question && Arr
 /** The route carries the study guide's id (as the mobile app's does); an exam's own id opens it too. */
 export function PracticeExamScreen({ examId }: { examId: string }) {
   const colors = useColors();
+  const desktop = useDesktop();
   const { state } = useApp();
   const exams = state.practiceExams || [];
   const exam = exams.find((candidate) => candidate.studyGuideId === examId) ?? exams.find((candidate) => candidate.id === examId);
@@ -174,17 +224,18 @@ export function PracticeExamScreen({ examId }: { examId: string }) {
   const noteText = { fontSize: 14, lineHeight: "20px", marginTop: 4, color: colors.foreground } as const;
 
   return (
-    <div className="screen" style={{ gap: 14, maxWidth: 640 }}>
+    <div className="screen" style={{ gap: desktop ? 18 : 14, maxWidth: desktop ? 720 : 640 }}>
       <ExamTop onClose={() => goBack("practice")} label={questionCounter(currentIndex, total)} fraction={(currentIndex + 1) / total} />
 
-      <div key={currentIndex} style={{ display: "flex", flexDirection: "column", gap: 14, padding: "6px 4px 0" }}>
+      {/* On a computer the question sits on a card in the middle of the page. */}
+      <div key={currentIndex} className={desktop ? "card" : undefined} style={desktop ? { display: "flex", flexDirection: "column", gap: 16, padding: "24px 26px", borderRadius: 20 } : { display: "flex", flexDirection: "column", gap: 14, padding: "6px 4px 0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* An older save may carry no difficulty: then none is claimed. */}
           {DIFFICULTY_LABEL[question.difficulty] ? <Tag label={DIFFICULTY_LABEL[question.difficulty]} /> : null}
           <span className="clamp2" style={{ flex: 1, fontSize: 13, lineHeight: "18px", color: colors.muted }}>{questionMetaLine(question)}</span>
         </div>
         <AiContentLabel surface="practice exam" content={() => practiceQuestionExcerpt(question)} />
-        <h1 style={{ margin: 0, fontSize: 19, lineHeight: "26px", fontWeight: 600, letterSpacing: -0.2, color: colors.foreground }}>{question.question}</h1>
+        <h1 style={{ margin: 0, fontSize: desktop ? 22 : 19, lineHeight: desktop ? "30px" : "26px", fontWeight: 600, letterSpacing: -0.2, color: colors.foreground }}>{question.question}</h1>
         {truncation ? <p style={{ margin: 0, fontSize: 13, lineHeight: "18px", color: colors.gold }}>{truncation}</p> : null}
 
         {question.type === "multiple_choice" && Array.isArray(question.options) ? (

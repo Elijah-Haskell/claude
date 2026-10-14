@@ -29,6 +29,7 @@ import { StudyGuideMoreSheet } from "../components/study-guide-more-sheet";
 import { StudyGuideNewSheet } from "../components/study-guide-new-sheet";
 import { Chips, FlowFooter, FoldRow, FoldText, LeadText, MonoCount, SmallLabel, Tag, ToolError, ToolHead, ToolIconButton, ToolTop } from "../components/study-parts";
 import { Icon } from "../ui/icon";
+import { useDesktop, useWideLayout } from "../ui/layout";
 import { Card, CourseChip, FieldGroup, MONO_FONT, Note, PrimaryButton, SectionLabel, Segmented } from "../ui/primitives";
 import { useColors } from "../ui/theme";
 
@@ -39,6 +40,7 @@ export function StudyGuidesScreen() {
   const navigate = useNavigate();
   const { state } = useApp();
   const { isPro, isLoading: isProLoading } = useProStatus();
+  const desktop = useDesktop();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // Building a guide uses the AI: Pro only (waits until it is known whether there is Pro before redirecting).
@@ -57,6 +59,58 @@ export function StudyGuidesScreen() {
     const decision = decideSyllabusUpload({ isPro, isLoading: isProLoading, syllabusCount: state.syllabusImports?.length ?? 0 });
     if (decision === "wait") return;
     afterSheet(() => navigate(decision === "allow" ? "syllabus" : "paywall"));
+  }
+
+  const sheet = (
+    <StudyGuideNewSheet
+      open={sheetOpen}
+      onClose={() => setSheetOpen(false)}
+      onBuilt={(guideId) => afterSheet(() => openGuide(guideId))}
+      onOpenGuide={(guideId) => afterSheet(() => openGuide(guideId))}
+      onUpload={openImport}
+    />
+  );
+
+  // A computer: the guides as cards side by side, "New study guide" beside the title.
+  if (desktop) {
+    return (
+      <div className="screen full" style={{ gap: 22 }}>
+        <ToolTop onBack={() => goBack("study")} backLabel="Back" />
+        <ToolHead eyebrow={STUDY_GUIDES_HEAD.eyebrow} title={STUDY_GUIDES_HEAD.title} sub={STUDY_GUIDES_HEAD.sub} right={<PrimaryButton size="md" label="New study guide" left={<Icon name="plus" size={18} color="#FFFFFF" strokeWidth={2.2} />} onPress={() => setSheetOpen(true)} />} />
+        {rows.length > 0 ? (
+          <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <SectionLabel title="Your study guides" right={<MonoCount>{rows.length}</MonoCount>} />
+            <div className="card-grid" style={{ ["--card-min" as string]: "280px", gap: 16 }}>
+              {rows.map((row) => (
+                <button key={row.id} type="button" className="card lift" onClick={() => openGuide(row.id)} aria-label={`Study guide: ${row.title}. ${row.line}`} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 14, padding: 18, minHeight: 150, textAlign: "left" }}>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ width: 42, height: 42, borderRadius: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.violet, 0.16) }}>
+                      <Icon name="file" size={20} color={colors.violet} />
+                    </span>
+                    <Icon name="arrow" size={18} color={colors.muted} />
+                  </span>
+                  <span>
+                    <span className="clamp2" style={{ display: "block", fontSize: 17, lineHeight: "22px", fontWeight: 600, color: colors.foreground }}>{row.title}</span>
+                    <span className="clamp2" style={{ display: "block", marginTop: 4, fontSize: 13.5, lineHeight: "19px", color: colors.muted }}>{row.line}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <Card tone="surface" padded={false} radiusSize={20} style={{ padding: 28, display: "flex", alignItems: "flex-start", gap: 20 }}>
+            <span style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.violet, 0.16) }}>
+              <Icon name="file" size={26} color={colors.violet} />
+            </span>
+            <div style={{ flex: 1, minWidth: 0, maxWidth: 560 }}>
+              <h2 style={{ margin: 0, fontSize: 21, lineHeight: "27px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>{STUDY_GUIDES_EMPTY.title}</h2>
+              <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: "22px", color: colors.muted }}>{STUDY_GUIDES_EMPTY.body}</p>
+            </div>
+          </Card>
+        )}
+        {sheet}
+      </div>
+    );
   }
 
   return (
@@ -93,13 +147,7 @@ export function StudyGuidesScreen() {
         <PrimaryButton size="lg" fullWidth label="New study guide" left={<Icon name="plus" size={20} color="#FFFFFF" strokeWidth={2} />} onPress={() => setSheetOpen(true)} />
       </FlowFooter>
 
-      <StudyGuideNewSheet
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        onBuilt={(guideId) => afterSheet(() => openGuide(guideId))}
-        onOpenGuide={(guideId) => afterSheet(() => openGuide(guideId))}
-        onUpload={openImport}
-      />
+      {sheet}
     </div>
   );
 }
@@ -110,6 +158,8 @@ export function StudyGuideScreen({ guideId }: { guideId: string }) {
   const colors = useColors();
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
+  const desktop = useDesktop();
+  const wide = useWideLayout();
   const [openTopics, setOpenTopics] = useState<number[]>([]);
   const [filter, setFilter] = useState<ImportanceFilter>("all");
   const [examError, setExamError] = useState<StudyErrorInfo | null>(null);
@@ -194,10 +244,10 @@ export function StudyGuideScreen({ guideId }: { guideId: string }) {
     goBack("study-guides");
   }
 
-  return (
-    <div className="screen" style={{ gap: 16, maxWidth: 640 }}>
-      <ToolTop onBack={() => goBack("study-guides")} right={<ToolIconButton icon="more" onPress={() => setMoreOpen(true)} ariaLabel="More: delete this study guide" />} />
+  const top = <ToolTop onBack={() => goBack("study-guides")} right={<ToolIconButton icon="more" onPress={() => setMoreOpen(true)} ariaLabel="More: delete this study guide" />} />;
 
+  const head = (
+    <>
       <ToolHead
         lead={
           <>
@@ -209,63 +259,109 @@ export function StudyGuideScreen({ guideId }: { guideId: string }) {
         sub={meta || null}
       >
         {truncation ? <p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: "18px", color: colors.gold }}>{truncation}</p> : null}
-        {guide.overview ? <p style={{ margin: "10px 0 0", fontSize: 15, lineHeight: "22px", color: colors.foreground }}>{guide.overview}</p> : null}
+        {guide.overview ? <p style={{ margin: "10px 0 0", fontSize: 15, lineHeight: "22px", color: colors.foreground, maxWidth: desktop ? 760 : undefined }}>{guide.overview}</p> : null}
       </ToolHead>
 
       <AiContentLabel surface="study guide" content={() => studyGuideExcerpt(guide)} style={{ padding: "0 4px", marginTop: -6 }} />
+    </>
+  );
 
-      <Segmented<ImportanceFilter> options={importanceOptions(topics).map((option) => ({ value: option.value, label: option.label, ariaLabel: option.accessibilityLabel }))} value={filter} onChange={setFilter} scroll />
+  const filterBar = <Segmented<ImportanceFilter> options={importanceOptions(topics).map((option) => ({ value: option.value, label: option.label, ariaLabel: option.accessibilityLabel }))} value={filter} onChange={setFilter} scroll style={desktop ? { alignSelf: "flex-start", maxWidth: "100%" } : undefined} />;
 
-      <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <SectionLabel title="Topics" right={<MonoCount>{shown.length}</MonoCount>} />
-        {shown.length > 0 ? (
-          <FieldGroup>
-            {shown.map(({ topic, index }) => {
-              const tag = importanceTag(topic.importance);
-              const terms = Array.isArray(topic.keyTerms) ? topic.keyTerms : [];
-              return (
-                <FoldRow
-                  key={index}
-                  open={openTopics.includes(index)}
-                  onToggle={() => toggleTopic(index)}
-                  title={topic.title}
-                  sub={topic.week || null}
-                  right={<Tag label={tag.label} tone={tag.strong ? "blue" : "neutral"} />}
-                  ariaLabel={`${topic.title}, ${tag.label} importance${topic.week ? `, ${topic.week}` : ""}`}
-                >
-                  {topic.description ? <FoldText>{topic.description}</FoldText> : null}
-                  {terms.length > 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      <SmallLabel>Key terms</SmallLabel>
-                      <Chips items={terms} />
-                    </div>
-                  ) : null}
-                </FoldRow>
-              );
-            })}
-          </FieldGroup>
-        ) : (
-          <Note tone="plain">{topics.length === 0 ? "This guide has no topics." : `No topics of ${filter} importance in this guide.`}</Note>
-        )}
-      </section>
+  const topicList = (
+    <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <SectionLabel title="Topics" right={<MonoCount>{shown.length}</MonoCount>} />
+      {shown.length > 0 ? (
+        <FieldGroup>
+          {shown.map(({ topic, index }) => {
+            const tag = importanceTag(topic.importance);
+            const terms = Array.isArray(topic.keyTerms) ? topic.keyTerms : [];
+            return (
+              <FoldRow
+                key={index}
+                open={openTopics.includes(index)}
+                onToggle={() => toggleTopic(index)}
+                title={topic.title}
+                sub={topic.week || null}
+                right={<Tag label={tag.label} tone={tag.strong ? "blue" : "neutral"} />}
+                ariaLabel={`${topic.title}, ${tag.label} importance${topic.week ? `, ${topic.week}` : ""}`}
+              >
+                {topic.description ? <FoldText>{topic.description}</FoldText> : null}
+                {terms.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <SmallLabel>Key terms</SmallLabel>
+                    <Chips items={terms} />
+                  </div>
+                ) : null}
+              </FoldRow>
+            );
+          })}
+        </FieldGroup>
+      ) : (
+        <Note tone="plain">{topics.length === 0 ? "This guide has no topics." : `No topics of ${filter} importance in this guide.`}</Note>
+      )}
+    </section>
+  );
 
-      {tips.length > 0 ? (
-        <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <SectionLabel title="Study tips" />
-          <FieldGroup>
-            {tips.map((tip, index) => (
-              <div key={index} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px" }}>
-                <span style={{ fontFamily: MONO_FONT, fontSize: 13, lineHeight: "21px", fontWeight: 600, width: 18, flexShrink: 0, color: colors.muted }}>{index + 1}</span>
-                <span style={{ flex: 1, fontSize: 15, lineHeight: "21px", color: colors.foreground }}>{tip}</span>
+  const tipList = tips.length > 0 ? (
+    <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <SectionLabel title="Study tips" />
+      <FieldGroup>
+        {tips.map((tip, index) => (
+          <div key={index} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px" }}>
+            <span style={{ fontFamily: MONO_FONT, fontSize: 13, lineHeight: "21px", fontWeight: 600, width: 18, flexShrink: 0, color: colors.muted }}>{index + 1}</span>
+            <span style={{ flex: 1, fontSize: 15, lineHeight: "21px", color: colors.foreground }}>{tip}</span>
+          </div>
+        ))}
+      </FieldGroup>
+    </section>
+  ) : null;
+
+  const examErrorNote = examError ? <ToolError info={examError} onRetry={() => void openPracticeExam()} onDismiss={() => setExamError(null)} /> : undefined;
+  const practiceButton = <PrimaryButton size="lg" fullWidth label={action.label} loading={making} disabled={making} onPress={() => void openPracticeExam()} ariaLabel={action.label} />;
+
+  // A wide computer screen: the topics in the main column; the practice exam and the study tips in the rail beside them.
+  if (desktop && wide) {
+    return (
+      <div className="screen full" style={{ gap: 18 }}>
+        {top}
+        {head}
+        <div className="split" style={{ marginTop: 6 }}>
+          <div className="split-main">
+            {filterBar}
+            {topicList}
+          </div>
+          <aside className="split-rail">
+            <Card tone="surface" padded={false} radiusSize={18} style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12, background: `linear-gradient(140deg, ${alpha(colors.primary, 0.14)}, ${colors.surface} 70%)` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.violet, 0.16) }}>
+                  <Icon name="test" size={20} color={colors.violet} />
+                </span>
+                <span style={{ fontSize: 17, lineHeight: "22px", fontWeight: 600, color: colors.foreground }}>Practice exam</span>
               </div>
-            ))}
-          </FieldGroup>
-        </section>
-      ) : null}
+              {examErrorNote}
+              {action.wait ? <p style={{ margin: 0, fontSize: 13.5, lineHeight: "18px", color: colors.muted }}>{action.wait}</p> : null}
+              {practiceButton}
+            </Card>
+            {tipList}
+          </aside>
+        </div>
+        <StudyGuideMoreSheet open={moreOpen} title={guide.courseTitle} onClose={() => setMoreOpen(false)} onDelete={deleteGuide} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={desktop ? "screen medium" : "screen"} style={{ gap: 16, maxWidth: desktop ? undefined : 640 }}>
+      {top}
+      {head}
+      {filterBar}
+      {topicList}
+      {tipList}
 
       {/* A failure is said over the button that failed: the footer is always on screen, the end of the guide is not. */}
-      <FlowFooter hint={action.wait} above={examError ? <ToolError info={examError} onRetry={() => void openPracticeExam()} onDismiss={() => setExamError(null)} /> : undefined}>
-        <PrimaryButton size="lg" fullWidth label={action.label} loading={making} disabled={making} onPress={() => void openPracticeExam()} ariaLabel={action.label} />
+      <FlowFooter hint={action.wait} above={examErrorNote}>
+        {practiceButton}
       </FlowFooter>
 
       <StudyGuideMoreSheet open={moreOpen} title={guide.courseTitle} onClose={() => setMoreOpen(false)} onDelete={deleteGuide} />

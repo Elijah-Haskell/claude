@@ -22,6 +22,9 @@ import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
 import { ReviewPages, type ReviewPage } from "../components/test-review-pages";
 import { TestReviewResultView } from "../components/test-review-result";
 import { ReviewTextSheet } from "../components/test-review-text-sheet";
+import { alpha } from "../engine/design";
+import { Icon } from "../ui/icon";
+import { useDesktop, useWideLayout } from "../ui/layout";
 import { FieldGroup, FieldPickRow, Note, PrimaryButton, SectionLabel } from "../ui/primitives";
 import { useColors } from "../ui/theme";
 
@@ -31,6 +34,9 @@ const IMAGE_TYPES = "image/jpeg,image/png,image/webp";
 export function TestReviewScreen() {
   const colors = useColors();
   const { state } = useApp();
+  const desktop = useDesktop();
+  const wide = useWideLayout();
+  const [dragging, setDragging] = useState(false);
 
   // Photos are uploaded and reviewed by the AI: Pro only (waits until it is known whether there is Pro).
   useRedirectToPaywallIfNotPro();
@@ -164,69 +170,101 @@ export function TestReviewScreen() {
   const failedPages = pages.filter((page) => page.status === "failed" && page.error);
   const line = { margin: 0, padding: "0 2px", fontSize: 13, lineHeight: "18px" } as const;
 
-  return (
-    <div className="screen" style={{ gap: 16, maxWidth: 640 }}>
-      <ToolTop onBack={() => goBack("study")} right={result ? <ToolIconButton icon="refresh" onPress={() => askReset("top")} ariaLabel="Review another test" /> : undefined} />
+  const fileField = (
+    <input
+      ref={fileInput}
+      type="file"
+      accept={IMAGE_TYPES}
+      multiple
+      style={{ display: "none" }}
+      aria-hidden
+      tabIndex={-1}
+      onChange={(event) => {
+        const files = Array.from(event.target.files ?? []);
+        event.target.value = "";
+        if (files.length > 0) void addFiles(files);
+      }}
+    />
+  );
 
-      {result ? (
-        <TestReviewResultView
-          result={result}
-          cls={cls ? { label: classShortName(cls), color: cls.color } : undefined}
-          asking={asking}
-          onAsk={askReset}
-          onKeep={() => setAsking(null)}
-          onReset={reset}
-          onChooseDifferent={() => setResult(null)}
-        />
-      ) : (
-        <>
-          <ToolHead eyebrow={TEST_REVIEW_HEAD.eyebrow} title={TEST_REVIEW_HEAD.title} sub={TEST_REVIEW_HEAD.sub} />
+  /** On a computer: "Choose photos" as a large dashed area that also takes photos dropped on it. */
+  const dropArea = (
+    <button
+      type="button"
+      onClick={pickImages}
+      disabled={pickDisabled}
+      aria-label={`Choose photos. ${lines.photos}`}
+      aria-busy={isUploading || undefined}
+      className="pressable"
+      onDragOver={(event) => {
+        if (pickDisabled) return;
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragging(false);
+        if (pickDisabled) return;
+        const files = Array.from(event.dataTransfer.files ?? []);
+        if (files.length > 0) void addFiles(files);
+      }}
+      style={{ width: "100%", minHeight: pages.length > 0 ? 150 : 230, borderRadius: 20, border: `1.5px dashed ${dragging ? colors.accent : colors.borderStrong}`, background: dragging ? alpha(colors.primary, 0.12) : alpha(colors.surface, 0.6), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 24, textAlign: "center", opacity: pickDisabled && !isUploading ? 0.55 : 1, transition: "border-color 120ms ease, background 120ms ease" }}
+    >
+      <span style={{ width: 56, height: 56, borderRadius: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.primary, 0.18) }}>
+        {isUploading ? <span className="spinner" /> : <Icon name="image" size={26} color={colors.peri} />}
+      </span>
+      <span>
+        <span style={{ display: "block", fontSize: 18, lineHeight: "24px", fontWeight: 600, color: colors.foreground }}>Choose photos</span>
+        <span style={{ display: "block", marginTop: 4, fontSize: 13.5, lineHeight: "19px", color: colors.muted }}>{lines.photos}</span>
+      </span>
+    </button>
+  );
 
-          <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <SectionLabel title="Pages" right={<MonoCount>{pagesCountLabel(pages.length)}</MonoCount>} />
-            {pages.length > 0 ? <ReviewPages pages={pages} onRemove={removePage} onRetry={(page) => void uploadPage(page)} /> : null}
-            {failedPages.map((page) => (
-              <p key={page.id} role="alert" style={{ ...line, color: colors.error }}>{page.error}</p>
-            ))}
-            {notices.map((notice, index) => (
-              <p key={index} role="alert" style={{ ...line, color: colors.gold }}>{notice}</p>
-            ))}
-            {/* The iPhone has its camera here; this browser has the file picker (a phone's offers its camera too). */}
-            <BigOption icon="image" title="Choose photos" sub={lines.photos} onPress={pickImages} disabled={pickDisabled} busy={isUploading} ariaLabel={`Choose photos. ${lines.photos}`} />
-            <input
-              ref={fileInput}
-              type="file"
-              accept={IMAGE_TYPES}
-              multiple
-              style={{ display: "none" }}
-              aria-hidden
-              tabIndex={-1}
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? []);
-                event.target.value = "";
-                if (files.length > 0) void addFiles(files);
-              }}
-            />
-            <Note tone="plain">{GRADED_ONLY_NOTE}</Note>
-          </section>
+  const pagesSection = (
+    <section style={{ display: "flex", flexDirection: "column", gap: desktop ? 12 : 10 }}>
+      <SectionLabel title="Pages" right={<MonoCount>{pagesCountLabel(pages.length)}</MonoCount>} />
+      {pages.length > 0 ? <ReviewPages pages={pages} onRemove={removePage} onRetry={(page) => void uploadPage(page)} /> : null}
+      {failedPages.map((page) => (
+        <p key={page.id} role="alert" style={{ ...line, color: colors.error }}>{page.error}</p>
+      ))}
+      {notices.map((notice, index) => (
+        <p key={index} role="alert" style={{ ...line, color: colors.gold }}>{notice}</p>
+      ))}
+      {/* The iPhone has its camera here; this browser has the file picker (a phone's offers its camera too). */}
+      {desktop ? dropArea : <BigOption icon="image" title="Choose photos" sub={lines.photos} onPress={pickImages} disabled={pickDisabled} busy={isUploading} ariaLabel={`Choose photos. ${lines.photos}`} />}
+      {fileField}
+      <Note tone="plain">{GRADED_ONLY_NOTE}</Note>
+    </section>
+  );
 
-          <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <SectionLabel title="Optional" />
-            <FieldGroup>
-              <FieldPickRow icon="book" label="Class" value={reviewClassValue(courseName)} onPress={() => setSheet("class")} ariaLabel={`Class, optional: ${reviewClassValue(courseName)}`} />
-              <FieldPickRow icon="text" label="Ask about your test" detail={reviewQuestionDetail(userQuestion)} onPress={() => setSheet("question")} />
-            </FieldGroup>
-          </section>
-        </>
-      )}
+  const optionalSection = (
+    <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <SectionLabel title="Optional" />
+      <FieldGroup>
+        <FieldPickRow icon="book" label="Class" value={reviewClassValue(courseName)} onPress={() => setSheet("class")} ariaLabel={`Class, optional: ${reviewClassValue(courseName)}`} />
+        <FieldPickRow icon="text" label="Ask about your test" detail={reviewQuestionDetail(userQuestion)} onPress={() => setSheet("question")} />
+      </FieldGroup>
+    </section>
+  );
 
-      {result ? null : (
-        // A failure is said over the button that failed (the footer is always on screen).
-        <FlowFooter hint={step.reason} hintTone={step.reasonTone} above={reviewError ? <ToolError info={reviewError} onRetry={() => void review()} onDismiss={() => setReviewError(null)} /> : undefined}>
-          <PrimaryButton size="lg" fullWidth label={step.label} loading={step.busy} disabled={!step.enabled} onPress={() => void review()} ariaLabel="Review my test" />
-        </FlowFooter>
-      )}
+  const reviewErrorNote = reviewError ? <ToolError info={reviewError} onRetry={() => void review()} onDismiss={() => setReviewError(null)} /> : undefined;
+  const reviewButton = <PrimaryButton size="lg" fullWidth label={step.label} loading={step.busy} disabled={!step.enabled} onPress={() => void review()} ariaLabel="Review my test" />;
+  const top = <ToolTop onBack={() => goBack("study")} right={result ? <ToolIconButton icon="refresh" onPress={() => askReset("top")} ariaLabel="Review another test" /> : undefined} />;
+  const resultView = result ? (
+    <TestReviewResultView
+      result={result}
+      cls={cls ? { label: classShortName(cls), color: cls.color } : undefined}
+      asking={asking}
+      onAsk={askReset}
+      onKeep={() => setAsking(null)}
+      onReset={reset}
+      onChooseDifferent={() => setResult(null)}
+    />
+  ) : null;
 
+  const sheets = (
+    <>
       <ReviewTextSheet
         open={sheet === "class"}
         title="Class"
@@ -253,6 +291,55 @@ export function TestReviewScreen() {
         multiline
         countLine={questionCountLine(userQuestion.length)}
       />
+    </>
+  );
+
+  // A wide computer screen: the pages in the main column, the optional details and the main button in the rail.
+  if (desktop && wide && !result) {
+    return (
+      <div className="screen full" style={{ gap: 20 }}>
+        {top}
+        <ToolHead eyebrow={TEST_REVIEW_HEAD.eyebrow} title={TEST_REVIEW_HEAD.title} sub={TEST_REVIEW_HEAD.sub} />
+        <div className="split" style={{ marginTop: 6 }}>
+          <div className="split-main">{pagesSection}</div>
+          <aside className="split-rail">
+            {optionalSection}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+              {reviewErrorNote}
+              {step.reason ? (
+                <p role={step.reasonTone === "quiet" ? undefined : "alert"} style={{ margin: 0, fontSize: 13.5, lineHeight: "18px", textAlign: "center", color: step.reasonTone === "quiet" ? colors.muted : step.reasonTone === "gold" ? colors.gold : colors.error, fontWeight: step.reasonTone === "quiet" ? 400 : 600 }}>{step.reason}</p>
+              ) : null}
+              {reviewButton}
+            </div>
+          </aside>
+        </div>
+        {sheets}
+      </div>
+    );
+  }
+
+  return (
+    <div className={desktop ? (result && wide ? "screen full" : "screen medium") : "screen"} style={{ gap: 16, maxWidth: desktop ? undefined : 640 }}>
+      {top}
+
+      {result ? (
+        resultView
+      ) : (
+        <>
+          <ToolHead eyebrow={TEST_REVIEW_HEAD.eyebrow} title={TEST_REVIEW_HEAD.title} sub={TEST_REVIEW_HEAD.sub} />
+          {pagesSection}
+          {optionalSection}
+        </>
+      )}
+
+      {result ? null : (
+        // A failure is said over the button that failed (the footer is always on screen).
+        <FlowFooter hint={step.reason} hintTone={step.reasonTone} above={reviewErrorNote}>
+          {reviewButton}
+        </FlowFooter>
+      )}
+
+      {sheets}
     </div>
   );
 }

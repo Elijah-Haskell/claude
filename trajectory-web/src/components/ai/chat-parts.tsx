@@ -22,6 +22,7 @@ import {
   type ParsedTask,
 } from "../../lib/ai-items";
 import { Icon, type IconName } from "../../ui/icon";
+import { useDesktop } from "../../ui/layout";
 import { DateInput, MONO_FONT, PrimaryButton, SectionLabel } from "../../ui/primitives";
 import { useColors, type Palette } from "../../ui/theme";
 import { AiReportSheet, type AiSurface } from "../ai-content-label";
@@ -92,6 +93,30 @@ export function ExampleList({ colors, prompts, onPick, pickHint }: {
   /** What picking an example does when it is not "put it in the box" (without Pro: it opens Trajectory Pro). */
   pickHint?: string;
 }) {
+  // A computer: the examples as cards, two by two.
+  const desktop = useDesktop();
+  if (desktop) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <SectionLabel title="Try saying" />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+          {prompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              className="card lift"
+              aria-label={pickHint ? `Use the example: ${prompt}. ${pickHint}` : `Use the example: ${prompt}`}
+              onClick={() => onPick(prompt)}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 68, padding: "14px 16px", textAlign: "left" }}
+            >
+              <span style={{ flex: 1, minWidth: 0, fontSize: 15, lineHeight: "21px", fontWeight: 500, color: colors.foreground }}>{prompt}</span>
+              <Icon name="arrow" size={16} color={colors.muted} strokeWidth={2} />
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <SectionLabel title="Try saying" />
@@ -203,9 +228,11 @@ export function Composer({ colors, inputRef, value, onChangeText, placeholder, c
     }
   }
 
+  // A computer: the box is a raised card that floats over the end of the conversation.
+  const desktop = useDesktop();
   return (
-    <div className="ai-composer" style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
-      <div style={{ flex: 1, minWidth: 0, minHeight: 52, border: `1px solid ${colors.borderStrong}`, background: colors.background, borderRadius: radius.md, padding: "0 14px", display: "flex", alignItems: "center" }}>
+    <div className="ai-composer" style={desktop ? { display: "flex", alignItems: "flex-end", gap: 8, padding: 8, borderRadius: 18, border: `1px solid ${colors.borderStrong}`, background: colors.surface, boxShadow: "0 14px 34px rgba(0, 0, 0, 0.32)" } : { display: "flex", alignItems: "flex-end", gap: 8 }}>
+      <div style={desktop ? { flex: 1, minWidth: 0, minHeight: 52, padding: "0 10px", display: "flex", alignItems: "center" } : { flex: 1, minWidth: 0, minHeight: 52, border: `1px solid ${colors.borderStrong}`, background: colors.background, borderRadius: radius.md, padding: "0 14px", display: "flex", alignItems: "center" }}>
         <textarea
           ref={inputRef}
           value={value}
@@ -244,8 +271,11 @@ export function ReviewDock({ title, right, children, footer, actions, note }: {
   actions: ReactNode;
   note: { surface: AiSurface; content: () => string; text: string };
 }) {
+  // A computer: the proposal is a card of its own above the box.
+  const desktop = useDesktop();
+  const colors = useColors();
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 2 }}>
+    <div style={desktop ? { display: "flex", flexDirection: "column", gap: 12, padding: 18, borderRadius: 18, border: `1px solid ${alpha(colors.violet, 0.45)}`, background: `linear-gradient(160deg, ${alpha(colors.violet, 0.12)}, ${colors.panel} 55%)`, boxShadow: "0 14px 34px rgba(0, 0, 0, 0.32)" } : { display: "flex", flexDirection: "column", gap: 10, paddingTop: 2 }}>
       <SectionLabel title={title} right={right} />
       {children}
       {footer}

@@ -72,6 +72,7 @@ import { AiContentLabel } from "../components/ai-content-label";
 import { ToolError, ToolLink } from "../components/study-parts";
 import { useRedirectToPaywallIfNotPro } from "../state/use-pro-gate";
 import { Icon, type IconName } from "../ui/icon";
+import { useDesktop, useWideLayout } from "../ui/layout";
 import { Card, CourseChip, DateBadge, DateInput, FieldGroup, FieldLabel, FieldPickRow, FieldRow, HeaderIconButton, MONO_FONT, Note, PrimaryButton, ScreenHeader, SectionLabel, Segmented, TimeInput } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
 import { useColors } from "../ui/theme";
@@ -629,6 +630,7 @@ export function ExamPrepListScreen() {
   const navigate = useNavigate();
   const route = useRoute();
   const { state, dispatch } = useApp();
+  const desktop = useDesktop();
 
   // Pro only, as the study tools are everywhere (waits until it is known whether there is Pro before redirecting).
   useRedirectToPaywallIfNotPro();
@@ -699,6 +701,105 @@ export function ExamPrepListScreen() {
   const shownExams = showAll ? list.exams : list.exams.slice(0, folded);
   const onlyPast = list.preps.length === 0 && list.exams.length === 0 && list.quizzes.length === 0;
   const pastOpen = showPast || onlyPast;
+
+  // ── The computer layout: the same sections as cards side by side, the button in the header ──
+
+  function prepCard(row: PrepRow) {
+    const tag = tagOf(row.classId, row.className, row.courseName);
+    return (
+      <button key={row.id} type="button" className="card lift" onClick={() => navigate(`exam-prep/${encodeURIComponent(row.id)}`)} aria-label={`${row.spoken}. Open it`} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 10, padding: 18, minHeight: 168, textAlign: "left", opacity: row.past ? 0.8 : 1 }}>
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <span style={{ width: 40, height: 40, borderRadius: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(row.past ? colors.muted : colors.violet, 0.16) }}>
+            <Icon name="layers" size={19} color={row.past ? colors.muted : colors.violet} />
+          </span>
+          <DateBadge label={row.badge.label} tone={row.badge.tone} />
+        </span>
+        <span className="clamp2" style={{ fontSize: 17, lineHeight: "22px", fontWeight: 600, color: row.past ? colors.muted : colors.foreground }}>{row.name}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+          {tag.label ? <CourseChip label={tag.label} color={tag.color} /> : null}
+          <span className="truncate" style={{ fontSize: 13.5, lineHeight: "19px", color: colors.muted }}>{row.when}</span>
+        </span>
+        <span style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 7 }}>
+          <span className="truncate" style={{ fontSize: 13, lineHeight: "18px", color: colors.muted }}>{row.counts.line}</span>
+          {row.counts.total > 0 ? <ThinBar fraction={row.counts.fraction} /> : null}
+        </span>
+      </button>
+    );
+  }
+
+  function syllabusCard(row: SyllabusRow) {
+    const tag = tagOf(row.courseId, row.courseName, row.courseName);
+    return (
+      <button key={row.taskId} type="button" className="card lift" onClick={() => setCreating({ prefill: { taskId: row.taskId } })} aria-label={row.spoken} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 10, padding: 16, minHeight: 128, textAlign: "left" }}>
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <span className="well" style={{ background: alpha(colors.gold, 0.14) }}>
+            <Icon name="flag" size={18} color={colors.gold} />
+          </span>
+          <DateBadge label={row.badge.label} tone={row.badge.tone} />
+        </span>
+        <span className="clamp2" style={{ fontSize: 16, lineHeight: "21px", fontWeight: 600, color: colors.foreground }}>{row.name}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, marginTop: "auto" }}>
+          {tag.label ? <CourseChip label={tag.label} color={tag.color} /> : null}
+          <span className="truncate" style={{ fontSize: 13.5, lineHeight: "19px", color: colors.muted }}>{row.when}</span>
+        </span>
+      </button>
+    );
+  }
+
+  if (desktop) {
+    const grid = (min: string, children: React.ReactNode) => <div className="card-grid" style={{ ["--card-min" as string]: min, gap: 16 }}>{children}</div>;
+    const section = { display: "flex", flexDirection: "column", gap: 12 } as const;
+    return (
+      <div className="screen full" style={{ gap: 22 }}>
+        <div style={{ paddingTop: 4 }}>
+          <HeaderIconButton onPress={() => goBack("study")} ariaLabel="Back to Study">
+            <Icon name="chevronLeft" size={20} color={colors.foreground} strokeWidth={2} />
+          </HeaderIconButton>
+        </div>
+        <ScreenHeader eyebrow={PREP_COPY.eyebrow} title={PREP_COPY.title} subtitle={PREP_COPY.sub} right={<PrimaryButton size="md" label={PREP_COPY.newPrep} left={<Icon name="plus" size={18} color="#FFFFFF" strokeWidth={2.2} />} onPress={() => setCreating({})} />} />
+
+        {list.empty ? (
+          <Card tone="surface" padded={false} radiusSize={20} style={{ padding: "28px 28px", display: "flex", alignItems: "flex-start", gap: 20 }}>
+            <span style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.violet, 0.16) }}>
+              <Icon name="layers" size={26} color={colors.violet} />
+            </span>
+            <div style={{ flex: 1, minWidth: 0, maxWidth: 560 }}>
+              <h2 style={{ margin: 0, fontSize: 21, lineHeight: "27px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>{PREP_COPY.emptyTitle}</h2>
+              <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: "22px", color: colors.muted }}>{PREP_COPY.emptySub}</p>
+            </div>
+          </Card>
+        ) : null}
+
+        {list.preps.length > 0 ? (
+          <section style={section}>
+            <SectionLabel title={PREP_COPY.yours} right={count(list.preps.length)} />
+            {grid("280px", list.preps.map(prepCard))}
+          </section>
+        ) : null}
+        {list.exams.length > 0 ? (
+          <section style={section}>
+            <SectionLabel title={PREP_COPY.without} right={count(list.exams.length)} />
+            {grid("240px", shownExams.map(syllabusCard))}
+            {list.exams.length > folded ? <TextLink label={showAll ? "Show fewer" : `Show all ${list.exams.length}`} onPress={() => setShowAll((value) => !value)} style={{ alignSelf: "center" }} /> : null}
+          </section>
+        ) : null}
+        {list.quizzes.length > 0 ? (
+          <section style={section}>
+            <SectionLabel title={foldTitle("Quizzes", list.quizzes.length)} right={<FoldLink open={showQuizzes} onPress={() => setShowQuizzes((value) => !value)} what="the quizzes that have no exam prep yet" />} />
+            {showQuizzes ? grid("240px", list.quizzes.map(syllabusCard)) : null}
+          </section>
+        ) : null}
+        {list.past.length > 0 ? (
+          <section style={section}>
+            <SectionLabel title={foldTitle("Past", list.past.length)} color={colors.muted} right={onlyPast ? undefined : <FoldLink open={showPast} onPress={() => setShowPast((value) => !value)} what="the exam preps of exams that are over" />} />
+            {pastOpen ? grid("280px", list.past.map(prepCard)) : null}
+          </section>
+        ) : null}
+
+        <ExamPrepCreateSheet open={creating !== null} onClose={() => setCreating(null)} prefill={creating?.prefill} onCreated={(id) => navigate(`exam-prep/${encodeURIComponent(id)}`)} />
+      </div>
+    );
+  }
 
   return (
     <div className="screen" style={{ gap: 14 }}>
@@ -797,6 +898,8 @@ export function ExamPrepDetailScreen({ examId }: { examId: string }) {
 
 function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
   const colors = useColors();
+  const desktop = useDesktop();
+  const wide = useWideLayout();
   const route = useRoute();
   const { state, dispatch } = useApp();
   const questions = exam.studyGuide?.practiceQuestions ?? [];
@@ -912,54 +1015,64 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
 
   const deleteFacts = deletePrepFacts(exam);
 
-  return (
-    <div className="screen" style={{ gap: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 4 }}>
-        <HeaderIconButton onPress={() => goBack("exam-prep")} ariaLabel="Back to Exam prep">
-          <Icon name="chevronLeft" size={20} color={colors.foreground} strokeWidth={2} />
-        </HeaderIconButton>
-        <HeaderIconButton onPress={() => setMoreOpen(true)} ariaLabel={hasAiGuide ? "More: make the material again, or delete this exam prep" : "More: delete this exam prep"}>
-          <Icon name="more" size={20} color={colors.foreground} strokeWidth={2} />
-        </HeaderIconButton>
+  const topBar = (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 4 }}>
+      <HeaderIconButton onPress={() => goBack("exam-prep")} ariaLabel="Back to Exam prep">
+        <Icon name="chevronLeft" size={20} color={colors.foreground} strokeWidth={2} />
+      </HeaderIconButton>
+      <HeaderIconButton onPress={() => setMoreOpen(true)} ariaLabel={hasAiGuide ? "More: make the material again, or delete this exam prep" : "More: delete this exam prep"}>
+        <Icon name="more" size={20} color={colors.foreground} strokeWidth={2} />
+      </HeaderIconButton>
+    </div>
+  );
+
+  const head = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 4px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {tag ? <CourseChip label={tag} color={cls?.color} /> : null}
+        <span style={{ fontSize: 14, lineHeight: "19px", color: colors.muted }}>Exam prep</span>
       </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 4px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {tag ? <CourseChip label={tag} color={cls?.color} /> : null}
-          <span style={{ fontSize: 14, lineHeight: "19px", color: colors.muted }}>Exam prep</span>
-        </div>
-        <h1 style={{ margin: 0, fontSize: 30, lineHeight: "35px", fontWeight: 800, letterSpacing: -0.75, color: colors.foreground }}>{named.name}</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 15, lineHeight: "21px", color: colors.muted }}>{examWhen(exam.examDate, exam.examTime)}</span>
-          <DateBadge label={badge.label} tone={badge.tone} />
-        </div>
+      <h1 style={{ margin: 0, fontSize: desktop ? 34 : 30, lineHeight: desktop ? "40px" : "35px", fontWeight: 800, letterSpacing: desktop ? -1 : -0.75, color: colors.foreground }}>{named.name}</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 15, lineHeight: "21px", color: colors.muted }}>{examWhen(exam.examDate, exam.examTime)}</span>
+        <DateBadge label={badge.label} tone={badge.tone} />
       </div>
+    </div>
+  );
 
-      <Card tone="surface" padded={false} radiusSize={18} style={{ padding: "14px 16px 4px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <span className="clamp2" style={{ flex: 1, fontSize: 16, lineHeight: "21px", fontWeight: 600, color: counts.total > 0 ? colors.foreground : colors.muted }}>{counts.line}</span>
-          {counts.reviewLine ? <span style={{ fontFamily: MONO_FONT, fontSize: 12.5, fontWeight: 500, color: colors.muted, flexShrink: 0 }}>{counts.reviewLine}</span> : null}
-        </div>
-        {counts.total > 0 ? <ThinBar fraction={counts.fraction} style={{ marginTop: 10 }} /> : null}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 44, padding: "6px 0" }}>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: "18px", color: colors.muted }}>
-            <div>{time.text}</div>
-            {time.next ? <div>{time.next}</div> : null}
-          </div>
-          {time.link ? <TextLink label={time.link} onPress={offerPlan} ariaLabel={`${time.link}: see what the plan would place before anything changes`} style={{ padding: "0 0 0 8px", flexShrink: 0 }} /> : null}
-        </div>
-      </Card>
-
-      {plan ? <PlanNoteCard note={plan.note} onAccept={acceptPlan} onDismiss={() => setPlan(null)} /> : null}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ display: "flex", gap: 8 }}>
-          <PrimaryButton tone="ghost" label={buttons.cards.label} left={<Icon name="layers" size={18} color={colors.foreground} />} disabled={isWriting || buttons.cards.count === 0} onPress={() => setCardsOpen(true)} ariaLabel={buttons.cards.count > 0 ? `Flashcards, ${buttons.cards.count}` : "Flashcards: none yet"} style={{ flex: 1 }} />
-          <PrimaryButton tone="ghost" label={buttons.quiz.label} left={<Icon name="test" size={18} color={colors.foreground} />} disabled={isWriting || buttons.quiz.count === 0} onPress={() => { setQuizRun((run) => run + 1); setQuizOpen(true); }} ariaLabel={buttons.quiz.count > 0 ? `Quiz, ${buttons.quiz.count} questions` : "Quiz: no questions yet"} style={{ flex: 1 }} />
-        </div>
-        {buttons.reason ? <span style={{ fontSize: 13, lineHeight: "18px", color: colors.muted }}>{buttons.reason}</span> : null}
+  const progressCard = (
+    <Card tone="surface" padded={false} radiusSize={18} style={{ padding: desktop ? "18px 20px 6px" : "14px 16px 4px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <span className="clamp2" style={{ flex: 1, fontSize: 16, lineHeight: "21px", fontWeight: 600, color: counts.total > 0 ? colors.foreground : colors.muted }}>{counts.line}</span>
+        {counts.reviewLine ? <span style={{ fontFamily: MONO_FONT, fontSize: 12.5, fontWeight: 500, color: colors.muted, flexShrink: 0 }}>{counts.reviewLine}</span> : null}
       </div>
+      {counts.total > 0 ? <ThinBar fraction={counts.fraction} style={{ marginTop: 10 }} /> : null}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 44, padding: "6px 0" }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: "18px", color: colors.muted }}>
+          <div>{time.text}</div>
+          {time.next ? <div>{time.next}</div> : null}
+        </div>
+        {time.link ? <TextLink label={time.link} onPress={offerPlan} ariaLabel={`${time.link}: see what the plan would place before anything changes`} style={{ padding: "0 0 0 8px", flexShrink: 0 }} /> : null}
+      </div>
+    </Card>
+  );
 
+  const planNote = plan ? <PlanNoteCard note={plan.note} onAccept={acceptPlan} onDismiss={() => setPlan(null)} /> : null;
+
+  const cardsButton = <PrimaryButton tone="ghost" label={buttons.cards.label} left={<Icon name="layers" size={18} color={colors.foreground} />} disabled={isWriting || buttons.cards.count === 0} onPress={() => setCardsOpen(true)} ariaLabel={buttons.cards.count > 0 ? `Flashcards, ${buttons.cards.count}` : "Flashcards: none yet"} style={{ flex: 1 }} />;
+  const quizButton = <PrimaryButton tone="ghost" label={buttons.quiz.label} left={<Icon name="test" size={18} color={colors.foreground} />} disabled={isWriting || buttons.quiz.count === 0} onPress={() => { setQuizRun((run) => run + 1); setQuizOpen(true); }} ariaLabel={buttons.quiz.count > 0 ? `Quiz, ${buttons.quiz.count} questions` : "Quiz: no questions yet"} style={{ flex: 1 }} />;
+  const practice = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        {cardsButton}
+        {quizButton}
+      </div>
+      {buttons.reason ? <span style={{ fontSize: 13, lineHeight: "18px", color: colors.muted }}>{buttons.reason}</span> : null}
+    </div>
+  );
+
+  const status = (
+    <>
       {isWriting ? (
         <div role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px" }}>
           <span className="spinner" style={{ width: 18, height: 18 }} />
@@ -968,7 +1081,11 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
       ) : null}
       {aiError ? <ToolError info={aiError} onRetry={() => void writeMaterial()} onDismiss={() => setAiError(null)} retryLabel="Retry" /> : null}
       {exam.studyGuide?.inputTruncated ? <Note tone="gold" icon="info">{`Your pasted material was long, so only its first ${formatCount(EXAM_MATERIAL_CHAR_LIMIT)} characters were used. Anything after that isn't covered.`}</Note> : null}
+    </>
+  );
 
+  const reading = (
+    <>
       <Segmented
         value={tab}
         onChange={setTab}
@@ -976,8 +1093,37 @@ function ExamPrepDetail({ exam }: { exam: ExamPrep }) {
           { value: "topics", label: "Topics" },
           { value: "guide", label: "Study guide" },
         ]}
+        style={desktop ? { maxWidth: 360 } : undefined}
       />
       {tab === "topics" ? <ExamPrepTopics topics={exam.topics} aiWritten={hasAiGuide && exam.topics.some((topic) => topic.description)} onMark={markTopic} /> : <ExamPrepGuide guide={exam.studyGuide} writing={isWriting} onGenerate={() => void writeMaterial()} />}
+    </>
+  );
+
+  return (
+    <div className={desktop ? (wide ? "screen full" : "screen medium") : "screen"} style={{ gap: desktop ? 18 : 14 }}>
+      {topBar}
+      {head}
+      {desktop && wide ? (
+        <div className="split" style={{ marginTop: 6 }}>
+          <div className="split-main">
+            {status}
+            {reading}
+          </div>
+          <aside className="split-rail">
+            {progressCard}
+            {planNote}
+            {practice}
+          </aside>
+        </div>
+      ) : (
+        <>
+          {progressCard}
+          {planNote}
+          {practice}
+          {status}
+          {reading}
+        </>
+      )}
 
       {/* The "more" sheet: make the material again, delete the prep */}
       <Sheet open={moreOpen} onClose={() => { setMoreOpen(false); setConfirmingDelete(false); }} ariaLabel="This exam prep">

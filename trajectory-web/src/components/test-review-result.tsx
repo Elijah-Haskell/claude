@@ -8,6 +8,7 @@
 import { useState } from "react";
 
 import { mistakeTitle, NO_MISTAKES_BODY, notReviewedTitle, REVIEW_RESET_COPY, reviewCourseLabel, reviewExcerpt, reviewHeadline, reviewScoreLine, TEST_REVIEW_HEAD, type TestReviewResult } from "../engine/study-tools-view";
+import { useDesktop, useWideLayout } from "../ui/layout";
 import { CourseChip, FieldGroup, Note, PrimaryButton, SectionLabel } from "../ui/primitives";
 import { useColors } from "../ui/theme";
 import { AiContentLabel } from "./ai-content-label";
@@ -45,6 +46,8 @@ interface Props {
 
 export function TestReviewResultView({ result, cls, asking, onAsk, onKeep, onReset, onChooseDifferent }: Props) {
   const colors = useColors();
+  const desktop = useDesktop();
+  const wide = useWideLayout();
   const [openMistake, setOpenMistake] = useState<number | null>(null);
   const [openProblem, setOpenProblem] = useState<number | null>(null);
   const ai = { padding: "0 4px", marginTop: -6 } as const;
@@ -58,7 +61,7 @@ export function TestReviewResultView({ result, cls, asking, onAsk, onKeep, onRes
           <div style={{ fontSize: 16, lineHeight: "21px", fontWeight: 600, color: colors.foreground }}>{notReviewedTitle(result.gradedStatus)}</div>
           <div style={{ fontSize: 14, lineHeight: "20px", marginTop: 4, color: colors.foreground }}>{result.encouragement}</div>
         </Note>
-        <PrimaryButton label="Choose different photos" size="lg" fullWidth onPress={onChooseDifferent} />
+        <PrimaryButton label="Choose different photos" size="lg" fullWidth={!desktop} onPress={onChooseDifferent} style={desktop ? { alignSelf: "flex-start", minWidth: 260 } : undefined} />
       </>
     );
   }
@@ -97,6 +100,8 @@ export function TestReviewResultView({ result, cls, asking, onAsk, onKeep, onRes
         </div>
       ) : null}
 
+      {/* On a wide computer screen the mistakes and the practice problems stand side by side. */}
+      <div style={desktop && wide && mistakes.length > 0 && problems.length > 0 ? { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 24, alignItems: "start" } : { display: "contents" }}>
       {mistakes.length > 0 ? (
         <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <SectionLabel title="Mistakes" right={<MonoCount>{mistakes.length}</MonoCount>} />
@@ -141,6 +146,7 @@ export function TestReviewResultView({ result, cls, asking, onAsk, onKeep, onRes
           </FieldGroup>
         </section>
       ) : null}
+      </div>
 
       <ResetAsk asking={asking === "end"} onAsk={() => onAsk("end")} onReset={onReset} onKeep={onKeep} />
     </>

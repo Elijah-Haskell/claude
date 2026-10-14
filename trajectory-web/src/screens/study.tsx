@@ -5,7 +5,7 @@
 // add button, and exam preps. An exam opens its own screen (src/screens/exam.tsx). The four tools are Pro: with Pro a
 // row opens the tool, without it the row opens Trajectory Pro. Gating waits until it is known whether there is Pro.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { alpha } from "../engine/design";
 import { examPrepsToRelink } from "../engine/exam-prep-link";
@@ -21,6 +21,7 @@ import { useGlobalModal } from "../state/modal-context";
 import { useProGate } from "../state/use-pro-gate";
 import { useProStatus } from "../state/subscription-context";
 import { Icon } from "../ui/icon";
+import { useDesktop } from "../ui/layout";
 import { Card, CourseChip, DateBadge, FieldGroup, MONO_FONT, PrimaryButton, ScreenHeader, SectionLabel } from "../ui/primitives";
 import { useColors } from "../ui/theme";
 
@@ -43,6 +44,20 @@ export function ThinBar({ fraction, style }: { fraction: number; style?: React.C
   );
 }
 
+/** Whether the window is at least this wide (the four study tools sit in one row from there, two by two below it). */
+function useMinWidth(px: number): boolean {
+  const query = `(min-width: ${px}px)`;
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window.matchMedia !== "function") return () => undefined;
+      const list = window.matchMedia(query);
+      list.addEventListener("change", onChange);
+      return () => list.removeEventListener("change", onChange);
+    },
+    () => typeof window.matchMedia === "function" && window.matchMedia(query).matches,
+  );
+}
+
 export function StudyScreen() {
   const colors = useColors();
   const navigate = useNavigate();
@@ -50,6 +65,8 @@ export function StudyScreen() {
   const requirePro = useProGate();
   const { isPro, isLoading: isProLoading } = useProStatus();
   const { state, dispatch } = useApp();
+  const desktop = useDesktop();
+  const toolsInOneRow = useMinWidth(1360);
   const [showAll, setShowAll] = useState(false);
   const [showQuizzes, setShowQuizzes] = useState(false);
   const [showPast, setShowPast] = useState(false);
@@ -173,6 +190,170 @@ export function StudyScreen() {
         <PrimaryButton label={noSyllabus ? "Add a syllabus" : "Add an exam"} fullWidth size="lg" onPress={noSyllabus ? addSyllabus : () => openAdd({ kind: "exam" })} style={{ marginTop: 18 }} />
         {noSyllabus ? <button type="button" className="link" onClick={() => openAdd({ kind: "exam" })} aria-label="Add an exam by hand" style={{ minHeight: 44, marginTop: 4, fontSize: 15, fontWeight: 600, color: colors.peri }}>Add an exam by hand</button> : null}
       </Card>
+    );
+  }
+
+  // ── The computer layout: the same sections, as cards side by side ──
+
+  const proTag = (
+    <span aria-label="Part of Trajectory Pro" style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 7px", borderRadius: 6, border: `1px solid ${alpha(colors.violet, 0.5)}`, background: alpha(colors.violet, 0.16) }}>
+      <Icon name="crown" size={13} color={colors.violet} />
+      <span style={{ fontFamily: MONO_FONT, fontSize: 12, lineHeight: "16px", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: colors.violet }}>Pro</span>
+    </span>
+  );
+
+  /** An exam as a card in a grid (the phone's row, with its study progress said under it). */
+  function examCard(exam: FreeExam, muted = false) {
+    const badge = examBadge(exam.timing);
+    const tag = tagOf(exam);
+    const progress = progressOf(exam);
+    return (
+      <button key={exam.key} type="button" className="card lift" onClick={() => openExam(exam)} aria-label={`${exam.courseName ? `${exam.courseName}, ` : ""}${exam.name}, ${prettyExamDate(exam.date)}, ${badge.label}. ${progress.line}`} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 10, padding: 16, minHeight: 148, textAlign: "left", opacity: muted ? 0.8 : 1 }}>
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <span className="well" style={{ background: alpha(muted ? colors.muted : colors.gold, 0.14) }}>
+            <Icon name="flag" size={18} color={muted ? colors.muted : colors.gold} />
+          </span>
+          <DateBadge label={badge.label} tone={badge.tone} />
+        </span>
+        <span className="clamp2" style={{ fontSize: 16.5, lineHeight: "22px", fontWeight: 600, color: colors.foreground }}>{exam.name}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+          {tag.label ? <CourseChip label={tag.label} color={tag.color} /> : null}
+          <span className="truncate" style={{ fontSize: 13.5, lineHeight: "19px", color: colors.muted }}>{prettyExamDate(exam.date)}</span>
+        </span>
+        <span style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 7 }}>
+          <span className="truncate" style={{ fontSize: 13, lineHeight: "18px", color: progress.total > 0 ? colors.foreground : colors.muted }}>{progress.line}</span>
+          {progress.total > 0 ? <ThinBar fraction={progress.fraction} /> : null}
+        </span>
+      </button>
+    );
+  }
+
+  /** The next exam, laid out across the page: what and when on the left, the study progress and the button on the right. */
+  function heroWide(exam: FreeExam) {
+    const badge = examBadge(exam.timing);
+    const tag = tagOf(exam);
+    const progress = progressOf(exam);
+    return (
+      <div className="card" style={{ padding: "24px 26px", borderRadius: 20, display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 340px)", gap: 32, alignItems: "center", background: `linear-gradient(120deg, ${alpha(colors.primary, 0.18)}, ${colors.surface} 62%)`, borderColor: alpha(colors.accent, 0.35) }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className="eyebrow" style={{ color: colors.peri }}>{exam.kind === "quiz" ? "Next quiz" : "Next exam"}</span>
+            <DateBadge label={badge.label} tone={badge.tone} />
+          </div>
+          <h2 className="clamp2" style={{ margin: "10px 0 0", fontSize: 28, lineHeight: "34px", fontWeight: 700, letterSpacing: -0.6, color: colors.foreground }}>{exam.name}</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+            {tag.label ? <CourseChip label={tag.label} color={tag.color} /> : null}
+            <span className="truncate" style={{ fontSize: 15, lineHeight: "20px", color: colors.muted }}>
+              {prettyExamDate(exam.date)}{exam.time ? ` at ${formatTime(exam.time)}` : ""}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+            <span className="clamp2" style={{ flex: 1, fontSize: 14, lineHeight: "19px", color: progress.total > 0 ? colors.foreground : colors.muted }}>{progress.line}</span>
+            {progress.doneLine ? <span style={{ fontFamily: MONO_FONT, fontSize: 12.5, fontWeight: 500, color: colors.muted, flexShrink: 0 }}>{progress.doneLine}</span> : null}
+          </div>
+          {progress.total > 0 ? <ThinBar fraction={progress.fraction} /> : null}
+          <PrimaryButton label="Open study plan" fullWidth size="md" onPress={() => openExam(exam)} ariaLabel={`Open the study plan for ${exam.name}`} style={{ marginTop: 4 }} />
+        </div>
+      </div>
+    );
+  }
+
+  /** Nothing ahead, on a computer: the same words and buttons, composed across the card. */
+  function emptyWide() {
+    const noSyllabus = hub.emptyState === "no_syllabus";
+    return (
+      <div className="card" style={{ padding: "32px 32px", borderRadius: 20, display: "flex", alignItems: "flex-start", gap: 24, background: `linear-gradient(120deg, ${alpha(colors.primary, 0.14)}, ${colors.surface} 60%)` }}>
+        <span style={{ width: 64, height: 64, borderRadius: 18, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.primary, 0.18) }}>
+          <Icon name={noSyllabus ? "file" : "flag"} size={30} color={colors.peri} />
+        </span>
+        <div style={{ flex: 1, minWidth: 0, maxWidth: 560 }}>
+          <h2 style={{ margin: 0, fontSize: 22, lineHeight: "28px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>{noSyllabus ? "Start with your syllabus" : "No exams ahead"}</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: "22px", color: colors.muted }}>
+            {noSyllabus ? "Trajectory finds your exams in it and plans study time before each one." : "Exams from a syllabus appear here by themselves. Add one for anything else, and study time is planned before it."}
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 20, flexWrap: "wrap" }}>
+            <PrimaryButton label={noSyllabus ? "Add a syllabus" : "Add an exam"} size="md" onPress={noSyllabus ? addSyllabus : () => openAdd({ kind: "exam" })} left={<Icon name={noSyllabus ? "upload" : "plus"} size={17} color="#fff" strokeWidth={2.2} />} style={{ minWidth: 190 }} />
+            {noSyllabus ? <button type="button" className="link" onClick={() => openAdd({ kind: "exam" })} aria-label="Add an exam by hand" style={{ minHeight: 44, fontSize: 15, fontWeight: 600, color: colors.peri }}>Add an exam by hand</button> : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const section = { display: "flex", flexDirection: "column", gap: 12 } as const;
+  const examGrid = (list: FreeExam[], muted = false) => (
+    <div className="card-grid" style={{ ["--card-min" as string]: "240px", gap: 16 }}>{list.map((exam) => examCard(exam, muted))}</div>
+  );
+
+  if (desktop) {
+    return (
+      <div className="screen full" style={{ gap: 24 }}>
+        <ScreenHeader eyebrow={studyEyebrow(view)} title="Study" />
+
+        {hero ? heroWide(hero) : emptyWide()}
+
+        {comingUp.length > 0 ? (
+          <section style={section}>
+            <SectionLabel title="Coming up" right={count(comingUp.length)} />
+            {examGrid(shownComingUp)}
+            {comingUp.length > folded ? (
+              <button type="button" className="link" onClick={() => setShowAll((value) => !value)} aria-label={showAll ? "Show fewer exams" : `Show all ${comingUp.length} exams`} style={{ minHeight: 36, alignSelf: "center", fontSize: 14, fontWeight: 600, color: colors.peri }}>
+                {showAll ? "Show fewer" : `Show all ${comingUp.length}`}
+              </button>
+            ) : null}
+          </section>
+        ) : null}
+
+        {quizzes.length > 0 ? (
+          <section style={section}>
+            <SectionLabel title={`Quizzes · ${quizzes.length}`} right={<FoldLink open={showQuizzes} onPress={() => setShowQuizzes((value) => !value)} what="the quizzes" />} />
+            {showQuizzes ? examGrid(quizzes) : null}
+          </section>
+        ) : null}
+
+        <section style={section}>
+          <SectionLabel title="Study tools" right={showProTag ? proTag : undefined} />
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${toolsInOneRow ? 4 : 2}, minmax(0, 1fr))`, gap: 16 }}>
+            {STUDY_TOOLS.map((tool) => {
+              const have = showProTag ? "" : toolCount(tool.key);
+              return (
+                <button key={tool.key} type="button" className="card lift" onClick={() => openTool(tool.key)} aria-label={`${tool.title}. ${tool.sub}${showProTag ? ". Part of Trajectory Pro" : have ? `. ${have} saved` : ""}`} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 14, padding: 18, minHeight: 156, textAlign: "left" }}>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                    <span style={{ width: 44, height: 44, borderRadius: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.violet, 0.16) }}>
+                      <Icon name={tool.icon} size={21} color={colors.violet} />
+                    </span>
+                    {have ? (
+                      <span style={{ minWidth: 28, height: 24, padding: "0 8px", borderRadius: 8, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${colors.borderStrong}`, fontFamily: MONO_FONT, fontSize: 12.5, fontWeight: 600, color: colors.muted }}>{have}</span>
+                    ) : showProTag ? (
+                      <Icon name="lock" size={17} color={colors.violet} />
+                    ) : (
+                      <Icon name="arrow" size={18} color={colors.muted} />
+                    )}
+                  </span>
+                  <span>
+                    <span style={{ display: "block", fontSize: 16.5, lineHeight: "22px", fontWeight: 600, color: colors.foreground }}>{tool.title}</span>
+                    <span style={{ display: "block", marginTop: 4, fontSize: 13.5, lineHeight: "19px", color: colors.muted }}>{tool.sub}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {showProTag && hub.guides.length > 0 ? (
+            <p style={{ margin: 0, padding: "0 2px", fontSize: 13, lineHeight: "18px", color: colors.muted }}>
+              Your {hub.guides.length === 1 ? "study guide is still saved and opens" : `${hub.guides.length} study guides are still saved and open`} again with Pro.
+            </p>
+          ) : null}
+        </section>
+
+        {view.past.length > 0 ? (
+          <section style={section}>
+            <SectionLabel title={`Over · ${view.past.length}`} color={colors.muted} right={<FoldLink open={showPast} onPress={() => setShowPast((value) => !value)} what="the exams that are over" />} />
+            {showPast ? examGrid(view.past, true) : null}
+          </section>
+        ) : null}
+      </div>
     );
   }
 

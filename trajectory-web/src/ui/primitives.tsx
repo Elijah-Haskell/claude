@@ -537,7 +537,7 @@ export function DayToggles({ days, onToggle }: { days: readonly string[]; onTogg
       {all.map(({ day, letter, name }) => {
         const on = days.includes(day);
         return (
-          <button key={day} type="button" role="checkbox" aria-checked={on} aria-label={name} onClick={() => onToggle(day)} style={{ flex: 1, height: 46, borderRadius: radius.md, border: `1px solid ${on ? colors.accent : colors.borderStrong}`, background: on ? alpha(colors.primary, 0.2) : colors.panel, color: on ? colors.foreground : colors.muted, fontSize: 15, fontWeight: 600 }}>
+          <button key={day} type="button" role="checkbox" aria-checked={on} aria-label={name} onClick={() => onToggle(day)} style={{ flex: 1, height: 46, borderRadius: radius.md, border: `1px solid ${on ? colors.accent : colors.borderStrong}`, background: on ? alpha(colors.primary, 0.2) : colors.panel, color: on ? colors.foreground : colors.muted, fontSize: 15, fontWeight: 600, textAlign: "center" }}>
             {letter}
           </button>
         );

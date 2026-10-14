@@ -61,6 +61,7 @@ import { useProStatus } from "../state/subscription-context";
 import { Icon } from "../ui/icon";
 import { AppSwitch, CheckBox, DateInput, FieldGroup, FieldLabel, FieldRow, MONO_FONT, Note, PrimaryButton, SectionLabel, Segmented, TimeInput, DayToggles } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
+import { useDesktop, useWideLayout } from "../ui/layout";
 import { useColors } from "../ui/theme";
 import { ReadingStep } from "../components/syllabus/reading-step";
 import { FlowFooter, FlowTitle, formatShortDate, StepBar, TextLink, TYPE_ICON } from "../components/syllabus/shared";
@@ -108,6 +109,7 @@ function BasicsStep(p: {
   existingSemester: Semester | null;
 }) {
   const colors = useColors();
+  const desktop = useDesktop();
   const { basics } = p;
   const [choosingClass, setChoosingClass] = useState(false);
   const toggleDay = (day: DayOfWeek) => p.onBasics({ days: basics.days.includes(day) ? basics.days.filter((d) => d !== day) : ORDER.filter((d) => d === day || basics.days.includes(d)) });
@@ -132,6 +134,9 @@ function BasicsStep(p: {
           </Note>
         ) : null}
 
+        {/* A computer: the class on the left, the term on the right. */}
+        <div style={desktop ? { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 32, alignItems: "start" } : { display: "contents" }}>
+        <div style={desktop ? { display: "flex", flexDirection: "column", gap: 18, minWidth: 0 } : { display: "contents" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
@@ -170,7 +175,10 @@ function BasicsStep(p: {
         {basics.isAsynchronous ? null : (
           <div>
             <FieldLabel>Class days</FieldLabel>
-            <DayToggles days={basics.days} onToggle={toggleDay} />
+            {/* The letters centred in their buttons on a computer (the buttons take the text alignment around them). */}
+            <div style={desktop ? { textAlign: "center" } : { display: "contents" }}>
+              <DayToggles days={basics.days} onToggle={toggleDay} />
+            </div>
           </div>
         )}
 
@@ -197,6 +205,8 @@ function BasicsStep(p: {
           </FieldGroup>
         </div>
 
+        </div>
+        <div style={desktop ? { display: "flex", flexDirection: "column", gap: 18, minWidth: 0 } : { display: "contents" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {termMode === "new" ? (
             termSkipped ? (
@@ -296,6 +306,8 @@ function BasicsStep(p: {
             </FieldGroup>
           </div>
         ) : null}
+        </div>
+        </div>
       </div>
 
       <FlowFooter hint={blocker ?? p.error} hintTone={blocker ? "gold" : "red"}>
@@ -363,6 +375,8 @@ function PlainRow({ item, onToggle, onEdit }: { item: DraftItem; onToggle: () =>
 
 function ItemsStep(p: { drafts: DraftItem[]; today: string; isCommitting: boolean; truncated: boolean; termKnown: boolean; error?: string | null; onToggle: (id: string) => void; onEdit: (item: DraftItem) => void; onSetDate: (id: string, text: string) => string | null; onCommit: () => void }) {
   const colors = useColors();
+  const desktop = useDesktop();
+  const wide = useWideLayout();
   const [showPast, setShowPast] = useState(false);
   const [dateError, setDateError] = useState<string | null>(null);
   const { look, right, past } = reviewBuckets(p.drafts, p.today, { termKnown: p.termKnown });
@@ -377,6 +391,8 @@ function ItemsStep(p: { drafts: DraftItem[]; today: string; isCommitting: boolea
         <FlowTitle title="Check the dates" sub={reviewSummary(p.drafts, p.today)} />
         {p.truncated ? <Note tone="gold" icon="warning">This syllabus was long, so the list may be missing items at the end. Add anything missing with the add button afterwards.</Note> : null}
 
+        {/* A wide computer screen: what needs a look beside what looks right. */}
+        <div style={desktop && wide && look.length > 0 && right.length > 0 ? { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 24, alignItems: "start" } : { display: "contents" }}>
         {look.length > 0 ? (
           <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <SectionLabel title={`Take a look at ${look.length}`} right={<span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 7px", borderRadius: 6, border: `1px solid ${alpha(colors.gold, 0.5)}`, background: alpha(colors.gold, 0.14), fontFamily: MONO_FONT, fontSize: 12, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: colors.gold }}><Icon name="info" size={13} color={colors.gold} strokeWidth={2} />Unsure</span>} />
@@ -393,6 +409,7 @@ function ItemsStep(p: { drafts: DraftItem[]; today: string; isCommitting: boolea
             <FieldGroup>{right.map((item) => <PlainRow key={item.id} item={item} onToggle={() => p.onToggle(item.id)} onEdit={() => p.onEdit(item)} />)}</FieldGroup>
           </section>
         ) : null}
+        </div>
 
         {past.length > 0 ? (
           <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -595,6 +612,7 @@ function errorCode(error: unknown): string {
 
 export function SyllabusScreen() {
   const navigate = useNavigate();
+  const desktop = useDesktop();
   const route = useRoute();
   const { state, dispatch } = useApp();
   const today = todayString();
@@ -1167,7 +1185,7 @@ export function SyllabusScreen() {
                 : { icon: "close" as const, label: "Close", onPress: leave };
 
   return (
-    <div className="screen" style={{ gap: 14 }}>
+    <div className={desktop ? "screen medium" : "screen"} style={{ gap: desktop ? 18 : 14 }}>
       <StepBar step={flowStepNumber(step)} icon={bar.icon} label={bar.label} onPress={bar.onPress} disabled={bar.disabled} />
 
       {waiting ? (
