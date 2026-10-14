@@ -12,7 +12,7 @@
  * The web has no receipts to restore: "Restore purchases" reads the customer info again and has the server re-check.
  */
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ErrorCode, Purchases, type CustomerInfo, type PurchasesError } from "@revenuecat/purchases-js";
+import type { CustomerInfo, Purchases, PurchasesError } from "@revenuecat/purchases-js";
 
 import { mutate } from "../lib/api";
 import { REVENUECAT_WEB_KEY, TEST_PRO } from "../lib/config";
@@ -35,10 +35,22 @@ const RECONCILE_TIMEOUT_MS = 15_000;
 /** setTimeout's ceiling (about 24.8 days): a pass ending later is re-checked when this fires, then again. */
 const MAX_TIMER_MS = 2_147_483_647;
 
-function anonymousId(): string {
+/**
+ * RevenueCat's SDK, loaded on first use: only a build with a web key (REVENUECAT_WEB_KEY) ever asks for it, so a
+ * build that sells nothing on the web never downloads it.
+ */
+type RevenueCatModule = typeof import("@revenuecat/purchases-js");
+let revenueCat: RevenueCatModule | null = null;
+async function loadRevenueCat(): Promise<RevenueCatModule> {
+  revenueCat ??= await import("@revenuecat/purchases-js");
+  return revenueCat;
+}
+
+/** Only called once the SDK is loaded (RevenueCat is being configured or switched). */
+function anonymousId(rc: RevenueCatModule): string {
   const stored = readLocal(ANONYMOUS_ID_KEY);
   if (stored) return stored;
-  const fresh = Purchases.generateRevenueCatAnonymousAppUserId();
+  const fresh = rc.Purchases.generateRevenueCatAnonymousAppUserId();
   writeLocal(ANONYMOUS_ID_KEY, fresh);
   return fresh;
 }
@@ -130,7 +142,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const purchases = Purchases.isConfigured() ? Purchases.getSharedInstance() : Purchases.configure({ apiKey: REVENUECAT_WEB_KEY, appUserId: desiredRef.current ?? anonymousId() });
+        const rc = await loadRevenueCat();
+        if (cancelled) return;
+        const purchases = rc.Purchases.isConfigured() ? rc.Purchases.getSharedInstance() : rc.Purchases.configure({ apiKey: REVENUECAT_WEB_KEY, appUserId: desiredRef.current ?? anonymousId(rc) });
         if (cancelled) return;
         purchasesRef.current = purchases;
         applyInfo(await purchases.getCustomerInfo());
@@ -200,7 +214,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           setIsLoading(true);
         }
         try {
-          const info = await purchases.changeUser(desired ?? anonymousId());
+          const info = await purchases.changeUser(desired ?? anonymousId(await loadRevenueCat()));
           const pro = applyInfo(info).isPro;
           if (pro && desired && step === "logIn") void recheckProOnServer();
           return pro;
@@ -236,7 +250,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       if (pro) void recheckProOnServer();
       return pro;
     } catch (error) {
-      if ((error as PurchasesError | null)?.errorCode !== ErrorCode.UserCancelledError) console.warn("[RevenueCat] purchase error:", error instanceof Error ? error.message : error);
+      if ((error as PurchasesError | null)?.errorCode !== revenueCat?.ErrorCode.UserCancelledError) console.warn("[RevenueCat] purchase error:", error instanceof Error ? error.message : error);
       return false;
     }
   }, [offerings, syncIdentity, applyInfo, user?.email]);

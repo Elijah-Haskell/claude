@@ -53,7 +53,7 @@ npm run smoke            # browser tests against the mock API (Playwright + Chro
 | `VITE_API_BASE_URL` | The Trajectory API. Default `https://api.trajectoryapp.org`, the same server the iPhone app uses. |
 | `VITE_APPLE_CLIENT_ID` | Sign in with Apple JS needs a **Services ID** registered for this website's domain (Apple Developer → Identifiers → Services IDs → Sign in with Apple, with the domain and the Return URL). Without it the sign-in screen says sign-in is not set up. |
 | `VITE_APPLE_REDIRECT_URI` | The Return URL registered with that Services ID. Default: the page's own origin and path. |
-| `VITE_REVENUECAT_WEB_KEY` | RevenueCat Web Billing public key (`rcb_…`). Without it the paywall shows no prices and cannot sell; Pro bought on the iPhone still works. |
+| `VITE_REVENUECAT_WEB_KEY` | RevenueCat Web Billing public key (`rcb_…`). Without it (the live site today) the paywall says Pro isn't sold on the website yet, the payment library is never downloaded, and the app asks the server whether the account has Pro, so Pro from the iPhone app or a RevenueCat grant works here. |
 | `VITE_ACCOUNT_REQUIRED` | `false` builds the browser preview the mobile repo also has: no account, the plan stays in this browser (screenshots, demos). |
 | `VITE_TEST_SIGN_IN` | `1` adds a "Test sign-in" button for the mock API (`tests/mock-server.mjs`). Test builds only. |
 | `VITE_TEST_PRO` | `1` makes the browser hold Trajectory Pro without RevenueCat, for the mock's `MOCK_PRO=1` accounts. Test builds only; compiled out of every other build. |
@@ -102,6 +102,7 @@ The web app calls the production server unchanged, with three things to set up o
   plan is exported as a calendar file instead of mirrored into Apple Calendar.
 - A course site that does not let web pages read its calendar feed cannot be fetched from the browser; the error
   says so, and the iPhone app reads it instead.
+- The fonts ship with the app; the page makes no request to a font service.
 - Purchases go through RevenueCat's checkout instead of the App Store; a web subscription is managed from the
   Settings row, which opens RevenueCat's page.
 - A pasted or typed syllabus is read as a background job like a file (the iPhone reads text in one call), so a

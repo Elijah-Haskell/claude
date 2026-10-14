@@ -10,7 +10,7 @@
  */
 export const ACCOUNT_COPY = {
   /** Welcome screen: the one line under Continue with Apple (why there is an account at all). */
-  line: "Your plan is saved to your account, so it's still there if you change or lose your iPhone.",
+  line: "Your plan is saved to your account, so it's there on any device you sign in on.",
   /** Welcome screen, when the session ended by itself (expired, or the server no longer accepts it). */
   signedOutNotice: "You've been signed out. Sign in again and your plan picks up where you left off.",
   /** Welcome screen, signed in, while this iPhone's plan and the account's are brought together. */
@@ -28,7 +28,7 @@ export const ACCOUNT_COPY = {
   notSignedInDetail: "Sign in with Apple is available in the iOS Trajectory app.",
   browserPreview: "Browser preview. Sign in with Apple and the saved plan are in the iPhone app.",
   /** The "Sign out?" alert. */
-  signOut: "Your plan is saved to your account. Signing out removes it from this iPhone; sign in again to get it back.",
+  signOut: "Your plan is saved to your account. Signing out removes it from this browser; sign in again to get it back.",
   /** The root overlay while the plan is erased from the iPhone and the session dropped (app/_layout.tsx). */
   signingOut: "Signing out…",
   deletingAccount: "Deleting your account…",
@@ -61,5 +61,5 @@ export const SIGN_OUT_UNSAVED = {
  */
 export const NOT_SIGNED_IN_COPY = {
   title: "Couldn't confirm your account",
-  message: "Try again in a moment. If you've been signed out, sign in again; your plan is still on this iPhone.",
+  message: "Try again in a moment. If you've been signed out, sign in again; your plan is still in this browser.",
 } as const;

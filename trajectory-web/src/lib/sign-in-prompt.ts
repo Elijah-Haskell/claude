@@ -314,9 +314,9 @@ export function paywallPromptCopy(code: ProGateCode): { title: string; message: 
 /** Alert copy when this iPhone holds Pro but the server refused (never the "buy Pro" paywall). */
 export function proMismatchCopy(outcome: Exclude<ProRefusalOutcome, "needs-pro">): { title: string; message: string } {
   return outcome === "confirmed"
-    ? { title: "Trajectory Pro is active", message: "Your purchase is confirmed now. Tap Try again." }
+    ? { title: "Trajectory Pro is active", message: "Your purchase is confirmed now. Try again." }
     : {
         title: "We couldn't confirm your Pro purchase yet",
-        message: "This iPhone shows Trajectory Pro, but our server couldn't confirm it yet. Tap Restore Purchases, then try again.",
+        message: "This browser shows Trajectory Pro, but our server couldn't confirm it yet. Select Restore Purchases, then try again.",
       };
 }

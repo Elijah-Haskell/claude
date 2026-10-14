@@ -130,8 +130,15 @@ export function PaywallScreen() {
       </div>
 
       {!purchasesConfigured ? (
-        <Note tone="gold" icon="info">Purchases aren't set up on this website yet. Trajectory Pro bought in the iPhone app works here too once you sign in with the same Apple Account.</Note>
+        pro.isPro ? (
+          <Note tone="green" icon="check">Trajectory Pro is active on your account.</Note>
+        ) : (
+          <Note tone="blue" icon="info">Trajectory Pro isn&apos;t sold on the website yet. If your account already has Pro, it&apos;s active here as soon as you sign in.</Note>
+        )
       ) : null}
+
+      {purchasesConfigured ? (
+        <>
 
       <div role="radiogroup" aria-label="Plans" style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 6 }}>
         {planOptions.map((plan) => {
@@ -176,8 +183,13 @@ export function PaywallScreen() {
         </div>
       ) : null}
 
+        </>
+      ) : null}
+
       <button type="button" className="link" onClick={() => setComparing(true)} style={{ minHeight: 44, alignSelf: "center", padding: "0 12px", fontSize: 14, fontWeight: 600, color: colors.peri }}>Compare Free and Pro</button>
 
+      {purchasesConfigured ? (
+        <>
       {storeUnavailable && purchasesConfigured ? <p role="alert" style={{ margin: 0, textAlign: "center", fontSize: 14, fontWeight: 600, color: colors.gold }}>The store did not send this plan&apos;s price. Try again in a moment.</p> : null}
       <PrimaryButton size="lg" fullWidth label={ctaLabel()} onPress={() => void handlePurchase()} loading={purchasing} disabled={purchasing || isLoading || !selectedOffering?.package} />
       {legalText ? <p style={{ margin: 0, fontSize: 12, lineHeight: "17px", textAlign: "center", color: colors.muted }}>{legalText}</p> : null}
@@ -185,8 +197,12 @@ export function PaywallScreen() {
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexWrap: "wrap", gap: "0 6px" }}>
         <button type="button" className="link" onClick={() => void handleRestore()} disabled={restoring} style={{ minHeight: 44, padding: "0 8px", fontSize: 14, fontWeight: 500, color: colors.muted }}>{restoring ? "Checking…" : "Restore purchases"}</button>
       </div>
+        </>
+      ) : (
+        <PrimaryButton size="lg" fullWidth label="Back to Trajectory" onPress={close} />
+      )}
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexWrap: "wrap", gap: "0 6px", marginTop: -10 }}>
-        <a className="link" href={WEBSITE_TERMS_URL} target="_blank" rel="noreferrer" style={{ minHeight: 44, display: "inline-flex", alignItems: "center", padding: "0 8px", fontSize: 14, fontWeight: 500, color: colors.muted }}>Terms of Use (EULA)</a>
+        <a className="link" href={WEBSITE_TERMS_URL} target="_blank" rel="noreferrer" style={{ minHeight: 44, display: "inline-flex", alignItems: "center", padding: "0 8px", fontSize: 14, fontWeight: 500, color: colors.muted }}>Terms of Use</a>
         <button type="button" className="link" onClick={() => navigate("privacy-policy")} style={{ minHeight: 44, padding: "0 8px", fontSize: 14, fontWeight: 500, color: colors.muted }}>Privacy Policy</button>
       </div>
 

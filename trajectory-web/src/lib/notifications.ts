@@ -152,7 +152,7 @@ function arm(entry: PendingNotification): void {
 /** The app's icon beside the notification, when there is a page to take it from. */
 function notificationIcon(): string | undefined {
   try {
-    return typeof document !== "undefined" ? new URL("favicon.svg", document.baseURI).href : undefined;
+    return typeof document !== "undefined" ? new URL("icon-192.png", document.baseURI).href : undefined;
   } catch {
     return undefined;
   }

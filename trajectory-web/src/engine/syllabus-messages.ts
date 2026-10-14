@@ -64,8 +64,8 @@ function describeFailure(error: unknown, stage: IntakeStage): IntakeFailure {
     return {
       title: gate === PRO_GATE_CODES.freeSyllabusLimit ? "Your free syllabus is used" : "Trajectory Pro needed",
       message: gate === PRO_GATE_CODES.freeSyllabusLimit
-        ? "The free plan plans one syllabus. Upgrade to plan your other classes too; your file stays here, so tap Try again right after."
-        : "Reading this syllabus needs Trajectory Pro. Your file stays here, so tap Try again after upgrading.",
+        ? "The free plan plans one syllabus. Upgrade to plan your other classes too; your file stays here, so select Try again right after."
+        : "Reading this syllabus needs Trajectory Pro. Your file stays here, so select Try again after upgrading.",
       canRetry: true,
       offerPaste: false,
       openPaywall: true,
@@ -74,7 +74,7 @@ function describeFailure(error: unknown, stage: IntakeStage): IntakeFailure {
   if (lower.includes("already being read")) {
     return {
       title: "Still reading your last syllabus",
-      message: "Trajectory is still reading a syllabus you sent a moment ago. Wait a minute for it to finish, then tap Try again.",
+      message: "Trajectory is still reading a syllabus you sent a moment ago. Wait a minute for it to finish, then select Try again.",
       canRetry: true,
       offerPaste: false,
     };
@@ -90,7 +90,7 @@ function describeFailure(error: unknown, stage: IntakeStage): IntakeFailure {
   if (code === "TOO_MANY_REQUESTS") {
     return {
       title: "Too many requests",
-      message: "Trajectory is getting a lot of requests from you or your network. Wait a minute, then tap Try again.",
+      message: "Trajectory is getting a lot of requests from you or your network. Wait a minute, then select Try again.",
       canRetry: true,
       offerPaste: false,
     };
@@ -101,7 +101,7 @@ function describeFailure(error: unknown, stage: IntakeStage): IntakeFailure {
     return { title: NOT_SIGNED_IN_COPY.title, message: NOT_SIGNED_IN_COPY.message, canRetry: true, offerPaste: false };
   }
   if (lower.includes("consent") || lower.includes("not authorized by the user")) {
-    return { title: "AI permission needed", message: "Reading a syllabus needs your permission to use AI. Tap Try again and allow it when asked.", canRetry: true, offerPaste: false };
+    return { title: "AI permission needed", message: "Reading a syllabus needs your permission to use AI. Select Try again and allow it when asked.", canRetry: true, offerPaste: false };
   }
   if (lower.includes("couldn't read a usable schedule") || lower.includes("could not read a usable schedule")) {
     return {
@@ -114,7 +114,7 @@ function describeFailure(error: unknown, stage: IntakeStage): IntakeFailure {
   if (code === "NOT_FOUND" || lower.includes("has expired")) {
     return {
       title: "This reading expired",
-      message: "The server no longer has this reading (it may have restarted). Tap Try again to read the file again.",
+      message: "The server no longer has this reading (it may have restarted). Select Try again to read the file again.",
       canRetry: true,
       offerPaste: true,
     };
@@ -122,7 +122,7 @@ function describeFailure(error: unknown, stage: IntakeStage): IntakeFailure {
   if (name === "JobPollTimeout" || lower.includes("took too long")) {
     return {
       title: "Taking longer than usual",
-      message: `The server is taking unusually long with this syllabus. Tap Try again; if it happens again, paste the text instead. ${CONTACT_LINE}`,
+      message: `The server is taking unusually long with this syllabus. Select Try again; if it happens again, paste the text instead. ${CONTACT_LINE}`,
       canRetry: true,
       offerPaste: true,
     };
@@ -133,8 +133,8 @@ function describeFailure(error: unknown, stage: IntakeStage): IntakeFailure {
       title: offline ? "Connection problem" : "The AI is busy",
       message: offline
         ? stage === "extract"
-          ? "Could not reach Trajectory. Check your connection, then tap Try again: if the server finished reading in the meantime, the result is picked up without starting over."
-          : "Could not reach Trajectory. Check your connection and tap Try again: your file is kept."
+          ? "Could not reach Trajectory. Check your connection, then select Try again: if the server finished reading in the meantime, the result is picked up without starting over."
+          : "Could not reach Trajectory. Check your connection and select Try again: your file is kept."
         : "The AI service is busy right now. Try again in a minute, or paste the text instead.",
       canRetry: true,
       offerPaste: true,
@@ -144,7 +144,7 @@ function describeFailure(error: unknown, stage: IntakeStage): IntakeFailure {
     return { title: "Could not open the file", message: "Trajectory could not read that file. Try another one, or paste the syllabus text.", canRetry: true, offerPaste: true };
   }
   if (stage === "upload") {
-    return { title: "Upload failed", message: "The file could not be uploaded. Check your connection and tap Try again, or paste the syllabus text.", canRetry: true, offerPaste: true };
+    return { title: "Upload failed", message: "The file could not be uploaded. Check your connection and select Try again, or paste the syllabus text.", canRetry: true, offerPaste: true };
   }
-  return { title: "Could not read the syllabus", message: `Something went wrong while reading it. Tap Try again, or paste the syllabus text instead. ${CONTACT_LINE}`, canRetry: true, offerPaste: true };
+  return { title: "Could not read the syllabus", message: `Something went wrong while reading it. Select Try again, or paste the syllabus text instead. ${CONTACT_LINE}`, canRetry: true, offerPaste: true };
 }

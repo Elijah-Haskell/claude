@@ -187,7 +187,7 @@ for (const size of widths) {
       await page.waitForFunction((key) => localStorage.getItem(key) !== null, APP_STATE_KEY, { timeout: 15000 });
       await page.close();
       const plain = await context.newPage();
-      await plain.goto(`${base}/favicon.svg`, { waitUntil: "load" });
+      await plain.goto(`${base}/robots.txt`, { waitUntil: "load" });
       const patched = await plain.evaluate((key) => {
         const raw = localStorage.getItem(key);
         if (!raw) return "no state";

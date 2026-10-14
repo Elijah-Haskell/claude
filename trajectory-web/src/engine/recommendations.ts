@@ -83,7 +83,7 @@ function checkWorkloadBalance(tasks: Task[], now: Date): StudyRecommendation | n
       description: `${peak.hours.toFixed(1)} hours of work across ${peak.count} task${peak.count === 1 ? "" : "s"} ${peak.count === 1 ? "is" : "are"} ${by}. That's about ${peak.hoursPerDay.toFixed(1)} hours of study a day until then.`,
       actionItems: [
         "Start with what's due first",
-        "If a day is too full, tap Replan on Today",
+        "If a day is too full, use Replan on Today",
         "Break large tasks into smaller, manageable chunks",
         "Eliminate non-essential activities temporarily",
       ],
@@ -155,7 +155,7 @@ function checkCompletionStreak(blocks: ScheduleBlock[], now: Date): StudyRecomme
       title: "Study Sessions Slipping",
       description: `You finished ${done} of the ${ended.length} study sessions planned in the last two weeks. If the plan asks too much, make it lighter.`,
       actionItems: [
-        "Tap Catch up on Today to replan around what's left",
+        "Use Catch up on Today to replan around what's left",
         "Use shorter study sessions (25-30 min)",
         "Mark sessions done when you finish them, so this stays accurate",
       ],
@@ -214,7 +214,7 @@ function checkUpcomingDeadlines(tasks: Task[], now: Date): StudyRecommendation |
     description: `${urgent.length} task${urgent.length > 1 ? "s" : ""} due within 48 hours: ${urgent.map((t) => t.name).join(", ")}`,
     actionItems: [
       "Focus on these tasks first today",
-      "If today is too full, tap Replan on Today",
+      "If today is too full, use Replan on Today",
       "Break tasks into 25-minute focused sessions",
     ],
     urgency: "high",

@@ -509,10 +509,10 @@ export const PLAN_SYNC_COPY = {
   otherAccountMessage: "This iPhone still holds the plan of another Trajectory account. Continuing replaces it with yours.",
   otherAccountContinue: "Continue",
   otherAccountSignOut: "Sign out",
-  newerVersionTitle: "Update Trajectory",
-  newerVersionMessage: "Your account's plan was saved by a newer version of Trajectory. Update the app to keep your plan saved.",
+  newerVersionTitle: "Reload Trajectory",
+  newerVersionMessage: "Your account's plan was saved by a newer version of Trajectory. Reload this page to get the newest version and keep your plan saved.",
   unreadableTitle: "Your saved plan could not be read",
-  unreadableMessage: "Trajectory could not read the plan saved to your account, so changes on this iPhone are not being saved for now. Updating the app may fix this. If it does not, contact support.",
+  unreadableMessage: "Trajectory could not read the plan saved to your account, so changes on this iPhone are not being saved for now. Reloading this page may fix this. If it does not, contact support.",
   feedsTitle: "Your plan is back",
   feedsMessage: "One thing stays on each iPhone: your course feed link (your Canvas calendar link, for example). Add it again in Settings under Calendars, then Course feeds, so new deadlines keep coming in.",
   ok: "OK",
@@ -539,7 +539,7 @@ export function planSavedRowModel(status: PlanSyncStatus, blocked: PlanSyncPromp
     case "choose":
       return row("Waiting for you to choose which plan to keep", "attention");
     case "unreachable":
-      return row("Couldn't reach your account · tap to try again", "attention", true);
+      return row("Couldn't reach your account · select to try again", "attention", true);
     case "ready":
       break;
   }

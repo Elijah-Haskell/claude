@@ -368,7 +368,7 @@ describe("the words", () => {
     expect([PLAN_SYNC_COPY.useSavedPlan, PLAN_SYNC_COPY.keepThisPlan]).toEqual(["Use the saved plan", "Keep this iPhone's plan"]);
     expect(PLAN_SYNC_COPY.otherAccountMessage).toBe("This iPhone still holds the plan of another Trajectory account. Continuing replaces it with yours.");
     expect([PLAN_SYNC_COPY.otherAccountContinue, PLAN_SYNC_COPY.otherAccountSignOut]).toEqual(["Continue", "Sign out"]);
-    expect([PLAN_SYNC_COPY.newerVersionTitle, PLAN_SYNC_COPY.newerVersionMessage]).toEqual(["Update Trajectory", "Your account's plan was saved by a newer version of Trajectory. Update the app to keep your plan saved."]);
+    expect([PLAN_SYNC_COPY.newerVersionTitle, PLAN_SYNC_COPY.newerVersionMessage]).toEqual(["Reload Trajectory", "Your account's plan was saved by a newer version of Trajectory. Reload this page to get the newest version and keep your plan saved."]);
     expect(PLAN_SYNC_COPY.feedsTitle).toBe("Your plan is back");
     expect(PLAN_SYNC_COPY.feedsMessage).toContain("One thing stays on each iPhone");
     expect(PLAN_SYNC_COPY.feedsMessage).toContain("under Calendars, then Course feeds");

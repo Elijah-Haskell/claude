@@ -167,7 +167,7 @@ describe("what the screen has always promised, word for word (said for a browser
   it("the note when the browser says no, and the empty list", () => {
     expect(REMINDERS_COPY.deniedTitle).toBe("Notifications are off for Trajectory");
     expect(REMINDERS_COPY.deniedBody).toBe("Allow them for this site in your browser's settings, then come back here.");
-    expect(REMINDERS_COPY.noHeadsUp).toBe("No heads-up reminders. Tap Add to get one before each session.");
+    expect(REMINDERS_COPY.noHeadsUp).toBe("No heads-up reminders. Use Add to get one before each session.");
   });
 
   it("what the browser adds: reminders come from an open tab, and a browser without notifications says so", () => {

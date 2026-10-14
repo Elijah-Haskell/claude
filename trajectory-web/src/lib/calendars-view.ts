@@ -157,7 +157,7 @@ export const ICS_STEPS: readonly string[] = [
   "Click your calendar's name in the left sidebar",
   "Scroll down to Integrate calendar",
   "Copy the \"Secret address in iCal format\" link",
-  "Paste it below and tap Import events",
+  "Paste it below and select Import events",
 ];
 
 export const ICS_FACTS: readonly string[] = [

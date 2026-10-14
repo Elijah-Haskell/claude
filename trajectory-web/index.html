@@ -5,18 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#060816" />
+    <title>Trajectory: plan your whole semester</title>
     <meta
       name="description"
-      content="Trajectory for the web: an academic planner that turns syllabi and deadlines into an adaptive, conflict-safe semester plan. Everything stays in your browser."
+      content="Trajectory turns your syllabi into a study plan for the whole semester. It schedules study time around your classes, work and sleep, and replans when things change. Sign in with Apple to keep your plan on every device."
     />
-    <title>Trajectory</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
-    />
+    <link rel="canonical" href="https://app.trajectoryapp.org/" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Trajectory" />
+    <meta property="og:title" content="Trajectory: plan your whole semester" />
+    <meta property="og:description" content="Turn your syllabi into a study plan for the whole semester, around your classes, work and sleep." />
+    <meta property="og:url" content="https://app.trajectoryapp.org/" />
+    <meta property="og:image" content="https://app.trajectoryapp.org/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <script>
       // The remembered appearance, applied before the first paint so the page never flashes the other scheme.
       try {
@@ -26,6 +30,7 @@
     </script>
   </head>
   <body>
+    <noscript>Trajectory needs JavaScript to run. Turn it on for this site, then reload the page.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -26,6 +26,7 @@ const NEEDS = {
   "smoke-screens.mjs": { build: "free", mock: { MOCK_PRO: "1", MOCK_GCAL: "1" } },
   "smoke-ai.mjs": { build: "pro", mock: { MOCK_PRO: "1" } },
   "smoke-study.mjs": { build: "pro", mock: { MOCK_PRO: "1" } },
+  "smoke-wording.mjs": { build: "pro", mock: { MOCK_PRO: "1" } },
 };
 const needsOf = (suite) => NEEDS[suite] ?? { build: "free", mock: { MOCK_PRO: "1" } };
 

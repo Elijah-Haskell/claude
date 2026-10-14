@@ -47,7 +47,7 @@ export const REMINDERS_COPY = {
   /** The iPhone's notification carries Snooze and Skip; a browser's does not, so it says only what it can do. */
   sessionStartDetail: "Says what the session is for and when it's due. Click it to open Today.",
   headsUp: "A heads-up before a session",
-  noHeadsUp: "No heads-up reminders. Tap Add to get one before each session.",
+  noHeadsUp: "No heads-up reminders. Use Add to get one before each session.",
   footnote: `Notifications cover the next ${REMINDER_WINDOW_DAYS} days and are rewritten whenever your plan changes, so a moved session never pings you at its old time.`,
   /** What the browser adds: reminders are shown by this browser, so a Trajectory tab has to be open. */
   tabNote: "Reminders come from this browser while a Trajectory tab is open.",

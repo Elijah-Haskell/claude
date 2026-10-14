@@ -75,10 +75,10 @@ await check("signing in again brings the plan back from the account", async () =
   await page.goto(`${base}/#/classes`, { waitUntil: "networkidle" });
   await page.getByText("Principles of Finance").first().waitFor({ timeout: 15000 });
 });
-await check("the paywall opens and says the store is not set up", async () => {
+await check("the paywall opens and says Pro is not sold on the web (or that it is active)", async () => {
   await page.goto(`${base}/#/paywall`, { waitUntil: "networkidle" });
   await page.getByText(/not just one/).waitFor({ timeout: 10000 });
-  await page.getByText(/Purchases aren't set up/).waitFor({ timeout: 10000 });
+  await page.getByText(/sold on the website yet|active on your account/).first().waitFor({ timeout: 10000 });
 });
 await check("without a RevenueCat web key, Pro comes from the server (the mock's MOCK_PRO=1 account)", async () => {
   await page.goto(`${base}/#/settings`, { waitUntil: "networkidle" });

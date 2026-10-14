@@ -175,7 +175,7 @@ export function WelcomeScreen() {
   );
   const welcome = stage === "start" || stage === "sign-in";
   const showSignedOutNotice = stage === "sign-in" && (preview ? preview === "account-signed-out" : sessionEnded);
-  const accountLine = ACCOUNT_COPY.line.replace("if you change or lose your iPhone", "on your iPhone and here, and still there if you change devices");
+  const accountLine = ACCOUNT_COPY.line;
 
   return (
     <div className="app" style={{ display: "block" }}>

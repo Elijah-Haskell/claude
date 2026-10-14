@@ -54,7 +54,7 @@ export function planPassReminders(status: Pick<ProStatus, "isPro" | "source" | "
             identifier: passReminderIdentifier(daysBefore),
             fireAt,
             title: `Your ${label} Pro ends ${date}`,
-            body: "The pass doesn't renew by itself. Tap to see your options; your plan and data stay either way.",
+            body: "The pass doesn't renew by itself. Open it to see your options; your plan and data stay either way.",
           },
     );
   }
