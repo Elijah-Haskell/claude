@@ -14,7 +14,8 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { radius } from "../engine/design";
+import { DesktopPageHead, Panel, PanelBody } from "../components/desktop-panels";
+import { alpha, radius } from "../engine/design";
 import { localDateKey, generateId } from "../engine/utils";
 import {
   CALENDAR_FILE_DETAIL,
@@ -48,7 +49,8 @@ import { disconnectGCal, fetchGCalEvents, fetchGCalStatus, gcalEventsAction, NO_
 import { buildPlanIcs, downloadTextFile } from "../lib/ics-export";
 import { goBack } from "../router";
 import { useApp } from "../state/app-provider";
-import { Icon } from "../ui/icon";
+import { Icon, type IconName } from "../ui/icon";
+import { useDesktop } from "../ui/layout";
 import { FieldGroup, FieldLabel, FieldPickRow, FieldRow, HeaderIconButton, MONO_FONT, Note, PrimaryButton, ScreenHeader, SectionLabel } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
 import { useColors } from "../ui/theme";
@@ -67,12 +69,36 @@ export function CalendarsScreen() {
     appleSupported: false,
     googleShown: GOOGLE_CALENDAR_CONNECT_OFFERED || state.googleCalendarConnected,
   });
+  const desktop = useDesktop();
   const [linkOpen, setLinkOpen] = useState(false);
   const [fileSaved, setFileSaved] = useState(false);
 
   function exportCalendar() {
     downloadTextFile(`trajectory-${localDateKey(new Date())}.ics`, buildPlanIcs(state), "text/calendar");
     setFileSaved(true);
+  }
+
+  if (desktop) {
+    return (
+      <div className="screen" style={{ gap: 22 }}>
+        <DesktopPageHead back={{ onPress: () => goBack("settings"), ariaLabel: "Back" }} eyebrow="Your time" title="Calendars" />
+
+        {/* A browser cannot read the iPhone's calendars: say so, once, instead of a nearly empty page. */}
+        {sections.note ? <Note>{sections.note}</Note> : null}
+
+        {/* The plan out, as a file; a calendar in, from a secret link */}
+        <div className="card-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          <ActionCard icon="cal" label="Calendar file" detail={CALENDAR_FILE_DETAIL} onPress={exportCalendar} ariaLabel="Download the plan as a calendar file" action={<><Icon name="download" size={16} color={colors.peri} />Download</>} />
+          <ActionCard icon="link" label="Import from a calendar link" detail={CALENDAR_LINK_DETAIL} onPress={() => setLinkOpen(true)} ariaLabel={`Import from a calendar link. ${CALENDAR_LINK_DETAIL}`} chevron />
+        </div>
+        {fileSaved ? <Note tone="green" icon="check" role="status">{CALENDAR_FILE_SAVED}</Note> : null}
+
+        {/* Google Calendar through the server: only a connection made before (connecting is retired for now) */}
+        {sections.google ? <GoogleCalendarGroup desktop /> : null}
+
+        <CalendarLinkSheet open={linkOpen} onClose={() => setLinkOpen(false)} />
+      </div>
+    );
   }
 
   return (
@@ -102,12 +128,32 @@ export function CalendarsScreen() {
   );
 }
 
+/** One way in or out, as a card on a computer: its icon, what it is, the sentence under it, and what pressing it does. */
+function ActionCard({ icon, label, detail, onPress, ariaLabel, action, chevron }: { icon: IconName; label: string; detail: string; onPress: () => void; ariaLabel: string; action?: ReactNode; chevron?: boolean }) {
+  const colors = useColors();
+  return (
+    <button type="button" className="card lift" onClick={onPress} aria-label={ariaLabel} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 14, padding: 20, width: "100%", textAlign: "left", color: "inherit" }}>
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <span className="well" style={{ width: 42, height: 42, borderRadius: 12, background: alpha(colors.peri, 0.12) }}>
+          <Icon name={icon} size={20} color={colors.peri} />
+        </span>
+        {chevron ? <Icon name="chevronRight" size={18} color={colors.muted} /> : null}
+      </span>
+      <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 16.5, lineHeight: "22px", fontWeight: 600, letterSpacing: -0.2, color: colors.foreground }}>{label}</span>
+        <span style={{ fontSize: 13.5, lineHeight: "20px", color: colors.muted }}>{detail}</span>
+      </span>
+      {action ? <span style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: "auto", fontSize: 14.5, fontWeight: 600, color: colors.peri }}>{action}</span> : null}
+    </button>
+  );
+}
+
 /**
  * Google Calendar through the server, for a connection made before: its state and when it last synced, what its
  * events do in the plan, "Sync now" (the result is said here) and "Disconnect" (it asks first, here). The connect
  * path is kept for the day connecting is offered again (lib/config.ts); nobody reaches it today.
  */
-function GoogleCalendarGroup() {
+function GoogleCalendarGroup({ desktop = false }: { desktop?: boolean }) {
   const colors = useColors();
   const { state: appState, dispatch } = useApp();
   const googleConnected = appState.googleCalendarConnected;
@@ -193,6 +239,56 @@ function GoogleCalendarGroup() {
   const syncBlocked = googleSyncBlocked({ loading: loadingStatus, connected: gcalStatus.connected });
   const hasConnection = googleConnected || gcalStatus.connected;
 
+  // The two answers to "Disconnect Google Calendar?": the only way to disconnect goes through the question.
+  const disconnectAnswers = (
+    <>
+      <button type="button" className="link danger" onClick={() => void disconnect()} aria-label="Yes, disconnect Google Calendar" style={{ ...LINK_BTN, ...LINK_TEXT }}>Disconnect</button>
+      <button type="button" className="link" onClick={() => setConfirmingDisconnect(false)} aria-label="Keep Google Calendar connected" style={{ ...LINK_BTN, ...LINK_TEXT }}>Keep</button>
+    </>
+  );
+  const howItWorks =
+    GOOGLE_CALENDAR_CONNECT_OFFERED && !hasConnection ? (
+      <FieldGroup>
+        {GOOGLE_HOW_IT_WORKS.map((item, index) => (
+          <FieldRow key={item.title} first={index === 0} icon={item.icon} label={item.title} detail={item.detail} />
+        ))}
+      </FieldGroup>
+    ) : null;
+
+  if (desktop) {
+    return (
+      <Panel title="Google Calendar" icon="calSync">
+        <FieldRow first icon="calSync" label={connection.label} detail={connection.detail || undefined} />
+        <PanelBody gap={14}>
+          <p className="caption" style={{ margin: 0 }}>{googleNote({ connected: googleConnected, events: googleEventCount })}</p>
+          {syncResult ? <Note tone={syncResult.tone === "red" ? "red" : "green"} icon={syncResult.tone === "red" ? "warning" : "check"} role="alert">{syncResult.text}</Note> : null}
+          {problem ? <Note tone="red" icon="warning" role="alert">{problem}</Note> : null}
+          {hasConnection ? (
+            <>
+              {syncBlocked ? <p role="alert" style={{ margin: 0, fontSize: 14, lineHeight: "19px", fontWeight: 600, color: colors.gold }}>{syncBlocked}</p> : null}
+              {confirmingDisconnect ? (
+                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px 16px" }}>
+                  <p role="alert" style={{ flex: "1 1 320px", margin: 0, fontSize: 14, lineHeight: "20px", color: colors.foreground }}>{GOOGLE_DISCONNECT_QUESTION}</p>
+                  <div style={{ display: "flex", columnGap: 6 }}>
+                    {disconnectAnswers}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <PrimaryButton tone="ghost" label="Sync now" left={syncing ? undefined : <Icon name="refresh" size={16} color={colors.foreground} />} onPress={() => void handleManualSync()} disabled={syncing || !gcalStatus.connected} loading={syncing} style={{ minWidth: 148 }} />
+                  <button type="button" className="link danger" onClick={() => setConfirmingDisconnect(true)} aria-label="Disconnect Google Calendar" style={{ ...LINK_BTN, ...LINK_TEXT }}>Disconnect</button>
+                </div>
+              )}
+            </>
+          ) : (
+            <PrimaryButton size="lg" label="Connect Google Calendar" onPress={() => void handleConnect()} disabled={connecting} loading={connecting} left={connecting ? undefined : <Icon name="calSync" size={19} color="#FFFFFF" />} style={{ alignSelf: "flex-start" }} />
+          )}
+          {howItWorks}
+        </PanelBody>
+      </Panel>
+    );
+  }
+
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <SectionLabel title="Google Calendar" />
@@ -214,8 +310,7 @@ function GoogleCalendarGroup() {
             <div style={{ padding: "0 2px" }}>
               <p role="alert" style={{ margin: 0, fontSize: 14, lineHeight: "20px", color: colors.foreground }}>{GOOGLE_DISCONNECT_QUESTION}</p>
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", columnGap: 6 }}>
-                <button type="button" className="link danger" onClick={() => void disconnect()} aria-label="Yes, disconnect Google Calendar" style={{ ...LINK_BTN, ...LINK_TEXT }}>Disconnect</button>
-                <button type="button" className="link" onClick={() => setConfirmingDisconnect(false)} aria-label="Keep Google Calendar connected" style={{ ...LINK_BTN, ...LINK_TEXT }}>Keep</button>
+                {disconnectAnswers}
               </div>
             </div>
           ) : (
@@ -227,13 +322,7 @@ function GoogleCalendarGroup() {
       )}
 
       {/* How it works: only while connecting is offered and nothing is connected yet */}
-      {GOOGLE_CALENDAR_CONNECT_OFFERED && !hasConnection ? (
-        <FieldGroup>
-          {GOOGLE_HOW_IT_WORKS.map((item, index) => (
-            <FieldRow key={item.title} first={index === 0} icon={item.icon} label={item.title} detail={item.detail} />
-          ))}
-        </FieldGroup>
-      ) : null}
+      {howItWorks}
     </section>
   );
 }

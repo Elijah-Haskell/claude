@@ -9,10 +9,12 @@ import { mutate } from "../lib/api";
 import { accountDeletedMessage, DELETE_ACCOUNT_COPY, DELETED_WITH_ACCOUNT, deletionNotice } from "../lib/delete-account-view";
 import { beginLeaving, endLeaving, isSignedInNow } from "../lib/session";
 import { runAccountDeletion } from "../lib/sign-out-flow";
+import { DesktopPageHead, Panel } from "../components/desktop-panels";
 import { goBack } from "../router";
 import { useAuth } from "../state/auth";
 import { leavePreparation, tellAlert, useWipeLocalData } from "../state/use-sign-out";
 import { Icon } from "../ui/icon";
+import { useDesktop } from "../ui/layout";
 import { FieldGroup, HeaderIconButton, Note, PrimaryButton, ScreenHeader, SectionLabel } from "../ui/primitives";
 import { useColors } from "../ui/theme";
 
@@ -24,6 +26,7 @@ const SUBSCRIPTION_NOTE =
 
 export function DeleteAccountScreen() {
   const colors = useColors();
+  const desktop = useDesktop();
   const wipeLocalData = useWipeLocalData();
   const { loading: authLoading, logout } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -67,6 +70,49 @@ export function DeleteAccountScreen() {
     return (
       <div className="screen" style={{ alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
         <span className="spinner" aria-label="Loading" />
+      </div>
+    );
+  }
+
+  if (desktop) {
+    return (
+      <div className="screen" style={{ maxWidth: 720, gap: 22 }}>
+        <DesktopPageHead back={{ onPress: () => goBack("settings"), ariaLabel: "Back" }} eyebrow="Account" title="Delete account" subtitle={DELETE_ACCOUNT_COPY.sub} />
+
+        <Panel title="What is deleted" icon="trash" tint={colors.error}>
+          {DELETED_HERE.map((row) => (
+            <div key={row.text} className="row" style={{ minHeight: 56 }}>
+              <span className="well" style={{ background: `${colors.error}1f` }}>
+                <Icon name={row.icon} size={18} color={colors.error} />
+              </span>
+              <span style={{ flex: 1, fontSize: 15, lineHeight: "21px", color: colors.foreground }}>{row.text}</span>
+            </div>
+          ))}
+        </Panel>
+
+        <Note tone="plain" icon="info">{SUBSCRIPTION_NOTE}</Note>
+        {notice ? <Note tone="red" icon="warning" role="alert">{notice}</Note> : null}
+
+        {/* The button, which turns, in place, into the question with its two answers */}
+        <div className="card" style={{ padding: "20px 22px", borderColor: `${colors.error}59`, background: `linear-gradient(180deg, ${colors.error}0f, transparent), ${colors.surface}` }}>
+          {asking ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div role="alert" style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <Icon name="warning" size={20} color={colors.error} style={{ marginTop: 1, flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 15, lineHeight: "22px", fontWeight: 500, color: colors.foreground }}>{DELETE_ACCOUNT_COPY.question}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
+                <PrimaryButton size="lg" tone="ghost" label={DELETE_ACCOUNT_COPY.no} onPress={() => setAsking(false)} disabled={isDeleting} />
+                <PrimaryButton size="lg" tone="danger" label={DELETE_ACCOUNT_COPY.yes} onPress={() => void startDeletion()} disabled={isDeleting} loading={isDeleting} ariaLabel="Delete my account and data for good" style={{ minWidth: 140 }} />
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+              <p className="caption" style={{ flex: "1 1 220px", margin: 0, fontSize: 14, lineHeight: "20px" }}>{DELETE_ACCOUNT_COPY.asksFirst}</p>
+              <PrimaryButton size="lg" tone="danger" label={DELETE_ACCOUNT_COPY.button} left={<Icon name="trash" size={18} color={colors.error} />} onPress={() => { setNotice(null); setAsking(true); }} ariaLabel={`${DELETE_ACCOUNT_COPY.button}. ${DELETE_ACCOUNT_COPY.asksFirst}`} />
+            </div>
+          )}
+        </div>
       </div>
     );
   }

@@ -28,9 +28,11 @@ import {
   settingsAfterRemoving,
   type HeadsUpDraft,
 } from "../lib/reminders-view";
+import { DesktopPageHead, Panel, PanelBody } from "../components/desktop-panels";
 import { goBack } from "../router";
 import { useApp } from "../state/app-provider";
 import { Icon } from "../ui/icon";
+import { useDesktop } from "../ui/layout";
 import { AppSwitch, FieldGroup, FieldRow, HeaderIconButton, Note, PrimaryButton, ScreenHeader, SectionLabel } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
 import { useColors } from "../ui/theme";
@@ -39,6 +41,7 @@ export function RemindersScreen() {
   const colors = useColors();
   const { state, dispatch } = useApp();
   const { notificationSettings } = state;
+  const desktop = useDesktop();
   const reminders = currentReminders(notificationSettings);
 
   const [showAdd, setShowAdd] = useState(false);
@@ -116,22 +119,52 @@ export function RemindersScreen() {
 
   const select = { height: 52, borderRadius: 12, border: `1px solid ${colors.borderStrong}`, background: colors.background, color: colors.foreground, padding: "0 12px", fontSize: 16, width: "100%" } as const;
 
-  return (
-    <div className="screen" style={{ maxWidth: 560, gap: 14 }}>
-      <div style={{ display: "flex", paddingTop: 4 }}>
-        <HeaderIconButton onPress={() => goBack("settings")} ariaLabel="Back">
-          <Icon name="chevronLeft" size={20} color={colors.foreground} strokeWidth={2} />
-        </HeaderIconButton>
-      </div>
-      <ScreenHeader eyebrow="Account and app" title="Reminders" subtitle={REMINDERS_COPY.sub} />
+  const sheet = (
+    <>
+    {/* A new heads-up: how long before, and optionally at a set time of day */}
+    <Sheet open={showAdd} onClose={closeAdd} ariaLabel={REMINDERS_COPY.sheetTitle}>
+      <SheetBody>
+        <SheetHead title={REMINDERS_COPY.sheetTitle} onClose={closeAdd} />
+        <p className="sheet-sub" style={{ marginTop: -8 }}>{REMINDERS_COPY.sheetSub}</p>
 
-      {/* The one switch for all of them */}
-      <FieldGroup>
-        <FieldRow first icon="bell" label={REMINDERS_COPY.master} detail={REMINDERS_COPY.masterDetail}>
-          <AppSwitch value={notificationSettings.enabled} onValueChange={(value) => void handleToggle(value)} ariaLabel={`${REMINDERS_COPY.master}: ${REMINDERS_COPY.masterDetail.toLowerCase()}`} />
-        </FieldRow>
-      </FieldGroup>
+        <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} aria-label="How long before the session" style={select}>
+          {DURATION_OPTIONS.map((option) => (
+            <option key={option.minutes} value={option.minutes}>{option.label}</option>
+          ))}
+        </select>
 
+        <FieldGroup>
+          <FieldRow first icon="clock" label={REMINDERS_COPY.customTime}>
+            <AppSwitch value={useCustomTime} onValueChange={setUseCustomTime} ariaLabel={REMINDERS_COPY.customTime} />
+          </FieldRow>
+        </FieldGroup>
+
+        {useCustomTime ? (
+          <select value={customHour} onChange={(event) => setCustomHour(Number(event.target.value))} aria-label="Time of day" style={select}>
+            {HOUR_OPTIONS.map((hour) => (
+              <option key={hour.value} value={hour.value}>{hour.label}</option>
+            ))}
+          </select>
+        ) : null}
+
+        {/* What "Add" adds, or why it cannot */}
+        {addError ? (
+          <p role="alert" style={{ margin: 0, fontSize: 14, lineHeight: "19px", textAlign: "center", fontWeight: 600, color: colors.gold }}>{addError}</p>
+        ) : (
+          <p style={{ margin: 0, fontSize: 14, lineHeight: "19px", textAlign: "center", color: colors.muted }}>{draftLabel}</p>
+        )}
+        <PrimaryButton size="lg" fullWidth label="Add" disabled={addError !== null} onPress={addReminder} ariaLabel={addError ? `Add. ${addError}` : `Add the heads-up ${draftLabel}`} />
+      </SheetBody>
+    </Sheet>
+    </>
+  );
+  const masterRow = (
+    <FieldRow first icon="bell" label={REMINDERS_COPY.master} detail={REMINDERS_COPY.masterDetail}>
+      <AppSwitch value={notificationSettings.enabled} onValueChange={(value) => void handleToggle(value)} ariaLabel={`${REMINDERS_COPY.master}: ${REMINDERS_COPY.masterDetail.toLowerCase()}`} />
+    </FieldRow>
+  );
+  const notices = (
+    <>
       {/* This browser cannot show notifications at all */}
       {!supported ? <Note tone="gold" icon="warning">{REMINDERS_COPY.unsupported}</Note> : null}
 
@@ -142,89 +175,97 @@ export function RemindersScreen() {
           <div style={{ fontSize: 14, lineHeight: "20px", marginTop: 1, color: colors.foreground }}>{notice.body}</div>
         </Note>
       ) : null}
+    </>
+  );
+  const sessionStartRow = (
+    <FieldRow first icon="clock" label={REMINDERS_COPY.sessionStart} detail={REMINDERS_COPY.sessionStartDetail}>
+      <AppSwitch value={startsOn} onValueChange={(value) => updateSettings({ sessionStart: value })} ariaLabel="Notify when a study session starts" />
+    </FieldRow>
+  );
+  const addHeadsUpButton = (
+    <button type="button" className="link" onClick={openAdd} aria-label="Add a heads-up before a session" style={{ minHeight: 44, gap: 5 }}>
+      <Icon name="plus" size={16} color={colors.peri} strokeWidth={2.2} />
+      Add
+    </button>
+  );
+  const headsUpRows = reminders.map((reminder) => {
+    const label = reminderLabel(reminder);
+    return (
+      <div key={reminder.id} className="row" style={{ minHeight: 54, gap: 8, padding: desktop ? "0 10px 0 18px" : "0 5px 0 14px" }}>
+        <span style={{ flex: 1, fontSize: 16, lineHeight: "21px", fontWeight: 500, padding: "8px 0", color: colors.foreground }}>{label}</span>
+        <button type="button" className="pressable" onClick={() => removeReminder(reminder.id)} aria-label={`Remove the heads-up ${label}`} style={{ width: 44, height: 44, borderRadius: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="close" size={18} color={colors.muted} strokeWidth={2} />
+        </button>
+      </div>
+    );
+  });
+  const footnotes = (
+    <>
+      <p className="caption" style={{ margin: 0, padding: "0 2px" }}>{REMINDERS_COPY.footnote}</p>
+      <p className="caption" style={{ margin: 0, padding: "0 2px" }}>{REMINDERS_COPY.tabNote}</p>
+    </>
+  );
+
+  if (desktop) {
+    return (
+      <div className="screen" style={{ gap: 22 }}>
+        <DesktopPageHead back={{ onPress: () => goBack("settings"), ariaLabel: "Back" }} eyebrow="Account and app" title="Reminders" subtitle={REMINDERS_COPY.sub} />
+        {/* The one switch for all of them */}
+        <FieldGroup>{masterRow}</FieldGroup>
+        {notices}
+        {notificationSettings.enabled ? (
+          <>
+            <Panel title="When" icon="clock">{sessionStartRow}</Panel>
+            <Panel title={REMINDERS_COPY.headsUp} icon="bell" right={<span style={{ margin: "-12px -8px" }}>{addHeadsUpButton}</span>}>
+              {reminders.length === 0 ? (
+                <PanelBody>
+                  <p style={{ margin: 0, fontSize: 14, lineHeight: "20px", color: colors.muted }}>{REMINDERS_COPY.noHeadsUp}</p>
+                </PanelBody>
+              ) : (
+                headsUpRows
+              )}
+            </Panel>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{footnotes}</div>
+          </>
+        ) : null}
+        {sheet}
+      </div>
+    );
+  }
+
+  return (
+    <div className="screen" style={{ maxWidth: 560, gap: 14 }}>
+      <div style={{ display: "flex", paddingTop: 4 }}>
+        <HeaderIconButton onPress={() => goBack("settings")} ariaLabel="Back">
+          <Icon name="chevronLeft" size={20} color={colors.foreground} strokeWidth={2} />
+        </HeaderIconButton>
+      </div>
+      <ScreenHeader eyebrow="Account and app" title="Reminders" subtitle={REMINDERS_COPY.sub} />
+
+      {/* The one switch for all of them */}
+      <FieldGroup>{masterRow}</FieldGroup>
+
+      {notices}
 
       {notificationSettings.enabled ? (
         <>
           {/* As a session starts */}
           <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <SectionLabel title="When" />
-            <FieldGroup>
-              <FieldRow first icon="clock" label={REMINDERS_COPY.sessionStart} detail={REMINDERS_COPY.sessionStartDetail}>
-                <AppSwitch value={startsOn} onValueChange={(value) => updateSettings({ sessionStart: value })} ariaLabel="Notify when a study session starts" />
-              </FieldRow>
-            </FieldGroup>
+            <FieldGroup>{sessionStartRow}</FieldGroup>
           </section>
 
           {/* Heads-up reminders */}
           <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <SectionLabel
-              title={REMINDERS_COPY.headsUp}
-              right={
-                <button type="button" className="link" onClick={openAdd} aria-label="Add a heads-up before a session" style={{ minHeight: 44, gap: 5 }}>
-                  <Icon name="plus" size={16} color={colors.peri} strokeWidth={2.2} />
-                  Add
-                </button>
-              }
-            />
-            {reminders.length === 0 ? (
-              <Note tone="plain" icon="clock">{REMINDERS_COPY.noHeadsUp}</Note>
-            ) : (
-              <FieldGroup>
-                {reminders.map((reminder) => {
-                  const label = reminderLabel(reminder);
-                  return (
-                    <div key={reminder.id} className="row" style={{ minHeight: 54, gap: 8, padding: "0 5px 0 14px" }}>
-                      <span style={{ flex: 1, fontSize: 16, lineHeight: "21px", fontWeight: 500, padding: "8px 0", color: colors.foreground }}>{label}</span>
-                      <button type="button" className="pressable" onClick={() => removeReminder(reminder.id)} aria-label={`Remove the heads-up ${label}`} style={{ width: 44, height: 44, borderRadius: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                        <Icon name="close" size={18} color={colors.muted} strokeWidth={2} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </FieldGroup>
-            )}
+            <SectionLabel title={REMINDERS_COPY.headsUp} right={addHeadsUpButton} />
+            {reminders.length === 0 ? <Note tone="plain" icon="clock">{REMINDERS_COPY.noHeadsUp}</Note> : <FieldGroup>{headsUpRows}</FieldGroup>}
           </section>
 
-          <p className="caption" style={{ margin: 0, padding: "0 2px" }}>{REMINDERS_COPY.footnote}</p>
-          <p className="caption" style={{ margin: 0, padding: "0 2px" }}>{REMINDERS_COPY.tabNote}</p>
+          {footnotes}
         </>
       ) : null}
 
-      {/* A new heads-up: how long before, and optionally at a set time of day */}
-      <Sheet open={showAdd} onClose={closeAdd} ariaLabel={REMINDERS_COPY.sheetTitle}>
-        <SheetBody>
-          <SheetHead title={REMINDERS_COPY.sheetTitle} onClose={closeAdd} />
-          <p className="sheet-sub" style={{ marginTop: -8 }}>{REMINDERS_COPY.sheetSub}</p>
-
-          <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} aria-label="How long before the session" style={select}>
-            {DURATION_OPTIONS.map((option) => (
-              <option key={option.minutes} value={option.minutes}>{option.label}</option>
-            ))}
-          </select>
-
-          <FieldGroup>
-            <FieldRow first icon="clock" label={REMINDERS_COPY.customTime}>
-              <AppSwitch value={useCustomTime} onValueChange={setUseCustomTime} ariaLabel={REMINDERS_COPY.customTime} />
-            </FieldRow>
-          </FieldGroup>
-
-          {useCustomTime ? (
-            <select value={customHour} onChange={(event) => setCustomHour(Number(event.target.value))} aria-label="Time of day" style={select}>
-              {HOUR_OPTIONS.map((hour) => (
-                <option key={hour.value} value={hour.value}>{hour.label}</option>
-              ))}
-            </select>
-          ) : null}
-
-          {/* What "Add" adds, or why it cannot */}
-          {addError ? (
-            <p role="alert" style={{ margin: 0, fontSize: 14, lineHeight: "19px", textAlign: "center", fontWeight: 600, color: colors.gold }}>{addError}</p>
-          ) : (
-            <p style={{ margin: 0, fontSize: 14, lineHeight: "19px", textAlign: "center", color: colors.muted }}>{draftLabel}</p>
-          )}
-          <PrimaryButton size="lg" fullWidth label="Add" disabled={addError !== null} onPress={addReminder} ariaLabel={addError ? `Add. ${addError}` : `Add the heads-up ${draftLabel}`} />
-        </SheetBody>
-      </Sheet>
+      {sheet}
     </div>
   );
 }

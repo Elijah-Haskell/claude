@@ -14,9 +14,11 @@ import { applyFeedChanges } from "../components/headless/course-feed-refresher";
 import { alpha, radius } from "../engine/design";
 import { addLinkHint, COURSE_LINK_COPY, COURSE_SITES, feedStatus, linkAddedNote, linkCheckedNote, linkRefusedNote, type LinkNote } from "../lib/course-link-view";
 import { addCourseFeed, loadCourseFeeds, refreshCourseFeeds, removeCourseFeed, subscribeCourseFeeds, type CourseFeed } from "../lib/lms-feed-store";
+import { DesktopPageHead, Panel, PanelBody } from "../components/desktop-panels";
 import { goBack } from "../router";
 import { useApp } from "../state/app-provider";
 import { Icon } from "../ui/icon";
+import { useDesktop, useWideLayout } from "../ui/layout";
 import { FieldGroup, FieldLabel, HeaderIconButton, Note, PrimaryButton, ScreenHeader, SectionLabel } from "../ui/primitives";
 import { useColors } from "../ui/theme";
 
@@ -26,6 +28,8 @@ const ACTION = { minHeight: 44, minWidth: 44, display: "inline-flex", alignItems
 export function CourseFeedsScreen() {
   const colors = useColors();
   const { state, dispatch } = useApp();
+  const desktop = useDesktop();
+  const wide = useWideLayout();
   // The import awaits network calls: read the tasks as they are when it finishes, not when the button was pressed.
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -94,6 +98,175 @@ export function CourseFeedsScreen() {
 
   const now = new Date();
 
+  /** A linked feed: its name and state, "Check now" and "Remove" (which asks first, here), and what the last check found. */
+  function feedBody(feed: CourseFeed) {
+    const status = feedStatus(feed, now);
+    const busy = busyId === feed.id;
+    const tint = status.failed ? colors.gold : colors.peri;
+    return (
+      <>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span className="well" style={{ background: alpha(tint, status.failed ? 0.16 : 0.12) }}>
+            <Icon name="link" size={18} color={tint} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="clamp2" style={{ fontSize: 16, lineHeight: "21px", fontWeight: 600, color: colors.foreground }}>{feed.label}</div>
+            <div style={{ fontSize: 13, lineHeight: "18px", marginTop: 1, color: status.failed ? colors.gold : colors.muted }}>{status.line}</div>
+          </div>
+        </div>
+        {removingId === feed.id ? (
+          <div>
+            <p role="alert" style={{ margin: "10px 0 0", fontSize: 14, lineHeight: "20px", color: colors.foreground }}>{COURSE_LINK_COPY.removeQuestion}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
+              <button type="button" className="link danger" aria-label={`Remove the link ${feed.label}`} onClick={() => remove(feed)} style={{ ...ACTION, ...LINK_TEXT }}>Remove</button>
+              <button type="button" className="link" aria-label="Keep the link" onClick={() => setRemovingId(null)} style={{ ...ACTION, ...LINK_TEXT }}>Keep</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
+            <button
+              type="button"
+              className="link"
+              onClick={() => void handleCheck(feed)}
+              disabled={busyId !== null}
+              aria-label={busy ? `Checking ${feed.label}` : `Check ${feed.label} now`}
+              aria-busy={busy}
+              style={{ ...ACTION, ...LINK_TEXT, opacity: busyId !== null && !busy ? 0.5 : 1 }}
+            >
+              {busy ? <span className="spinner" style={{ width: 16, height: 16 }} /> : <Icon name="refresh" size={16} color={colors.peri} />}
+              {busy ? "Checking" : "Check now"}
+            </button>
+            <button type="button" className="link danger" aria-label={`Remove the link ${feed.label}. It asks first`} onClick={() => setRemovingId(feed.id)} style={{ ...ACTION, ...LINK_TEXT }}>Remove</button>
+          </div>
+        )}
+        {/* A failed check is already said by the link's own line (in gold): not twice. */}
+        {checked?.feedId === feed.id && checked.note.text !== status.line ? (
+          <Note tone={checked.note.tone} icon={checked.note.tone === "green" ? "check" : "warning"} role="alert" style={{ marginBottom: 10 }}>
+            {checked.note.text}
+          </Note>
+        ) : null}
+      </>
+    );
+  }
+
+  // The field for a new link, and "where to find it" on each course site: the same on a phone and a computer.
+  const linkField = (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, height: 52, borderRadius: radius.md, border: `1px solid ${colors.borderStrong}`, background: colors.panel, padding: "0 14px" }}>
+      <Icon name="link" size={20} color={colors.peri} />
+      <input
+        type="text"
+        inputMode="url"
+        value={url}
+        onChange={(event) => {
+          setUrl(event.target.value);
+          // What went wrong with the last link is about that link, not the one being typed.
+          if (addNote?.tone === "red") setAddNote(null);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void handleAdd();
+          }
+        }}
+        placeholder={COURSE_LINK_COPY.placeholder}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        aria-label={COURSE_LINK_COPY.field}
+        style={{ flex: 1, minWidth: 0, height: 50, fontSize: 16, border: 0, background: "transparent", color: colors.foreground, padding: 0 }}
+      />
+    </div>
+  );
+  const siteRows = (
+    <>
+      {COURSE_SITES.map((site) => {
+        const open = openSite === site.name;
+        return (
+          <div key={site.name}>
+            <button
+              type="button"
+              className="row pressable"
+              onClick={() => setOpenSite(open ? null : site.name)}
+              aria-expanded={open}
+              aria-label={`${site.name}: where to find the link`}
+              style={{ justifyContent: "space-between", minHeight: 52 }}
+            >
+              <span style={{ flex: 1, fontSize: 16, lineHeight: "21px", fontWeight: 500, color: colors.foreground }}>{site.name}</span>
+              <span style={{ display: "inline-flex", transform: open ? "rotate(180deg)" : undefined, transition: "transform 160ms" }}>
+                <Icon name="chevronDown" size={18} color={colors.muted} />
+              </span>
+            </button>
+            {open ? <p style={{ margin: "-4px 0 0", padding: "0 14px 14px", fontSize: 14, lineHeight: "20px", color: colors.muted }}>{site.steps}</p> : null}
+          </div>
+        );
+      })}
+    </>
+  );
+  const hintLine = hint ? <p style={{ margin: 0, fontSize: 14, lineHeight: "19px", fontWeight: 600, textAlign: desktop ? "left" : "center", color: colors.gold }}>{hint}</p> : null;
+  const addButton = (fullWidth: boolean) => <PrimaryButton size="lg" fullWidth={fullWidth} label="Add link" loading={adding} disabled={adding || hint !== null} onPress={() => void handleAdd()} ariaLabel={hint ? `Add link. ${hint}` : "Add link"} style={fullWidth ? undefined : { flexShrink: 0, minWidth: 132 }} />;
+  const addNoteView = addNote ? (
+    <Note tone={addNote.tone} icon={addNote.tone === "green" ? "check" : "warning"} role="alert">
+      {addNote.text}
+    </Note>
+  ) : null;
+  const privacyNote = <Note tone="plain" icon="lock">{COURSE_LINK_COPY.privacy}</Note>;
+  const scopeLine = <p className="caption" style={{ margin: 0, padding: "0 2px" }}>{COURSE_LINK_COPY.scope}</p>;
+
+  if (desktop) {
+    const linked =
+      feeds.length > 0 ? (
+        <Panel title="Linked" icon="link">
+          <div className="card-grid" style={{ ["--card-min" as string]: "260px", gap: 12, padding: 14 }}>
+            {feeds.map((feed) => (
+              <div key={feed.id} className="card" style={{ padding: "14px 16px 4px", background: alpha(colors.panel, 0.6) }}>
+                {feedBody(feed)}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : null;
+    const addPanel = (
+      <Panel title={COURSE_LINK_COPY.field} icon="calPlus">
+        <PanelBody>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>{linkField}</div>
+            {addButton(false)}
+          </div>
+          {hintLine}
+          {addNoteView}
+        </PanelBody>
+      </Panel>
+    );
+    const wherePanel = (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Panel title="Where to find it" icon="search">{siteRows}</Panel>
+        {scopeLine}
+      </div>
+    );
+    return (
+      <div className={`screen ${wide ? "medium" : ""}`} style={{ gap: 22 }}>
+        <DesktopPageHead back={{ onPress: () => goBack("settings"), ariaLabel: "Back" }} eyebrow="Keep dates current" title="Course site link" subtitle={COURSE_LINK_COPY.sub} />
+        {wide ? (
+          <div className="split">
+            <div className="split-main" style={{ gap: 20 }}>
+              {linked}
+              {addPanel}
+              {privacyNote}
+            </div>
+            <div className="split-rail">{wherePanel}</div>
+          </div>
+        ) : (
+          <>
+            {linked}
+            {addPanel}
+            {privacyNote}
+            {wherePanel}
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="screen" style={{ maxWidth: 560, gap: 14 }}>
       <div style={{ display: "flex", paddingTop: 4 }}>
@@ -107,126 +280,32 @@ export function CourseFeedsScreen() {
         <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <SectionLabel title="Linked" />
           <FieldGroup>
-            {feeds.map((feed) => {
-              const status = feedStatus(feed, now);
-              const busy = busyId === feed.id;
-              const tint = status.failed ? colors.gold : colors.peri;
-              return (
-                <div key={feed.id} style={{ padding: "12px 14px 4px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span className="well" style={{ background: alpha(tint, status.failed ? 0.16 : 0.12) }}>
-                      <Icon name="link" size={18} color={tint} />
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="clamp2" style={{ fontSize: 16, lineHeight: "21px", fontWeight: 600, color: colors.foreground }}>{feed.label}</div>
-                      <div style={{ fontSize: 13, lineHeight: "18px", marginTop: 1, color: status.failed ? colors.gold : colors.muted }}>{status.line}</div>
-                    </div>
-                  </div>
-                  {removingId === feed.id ? (
-                    <div>
-                      <p role="alert" style={{ margin: "10px 0 0", fontSize: 14, lineHeight: "20px", color: colors.foreground }}>{COURSE_LINK_COPY.removeQuestion}</p>
-                      <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
-                        <button type="button" className="link danger" aria-label={`Remove the link ${feed.label}`} onClick={() => remove(feed)} style={{ ...ACTION, ...LINK_TEXT }}>Remove</button>
-                        <button type="button" className="link" aria-label="Keep the link" onClick={() => setRemovingId(null)} style={{ ...ACTION, ...LINK_TEXT }}>Keep</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
-                      <button
-                        type="button"
-                        className="link"
-                        onClick={() => void handleCheck(feed)}
-                        disabled={busyId !== null}
-                        aria-label={busy ? `Checking ${feed.label}` : `Check ${feed.label} now`}
-                        aria-busy={busy}
-                        style={{ ...ACTION, ...LINK_TEXT, opacity: busyId !== null && !busy ? 0.5 : 1 }}
-                      >
-                        {busy ? <span className="spinner" style={{ width: 16, height: 16 }} /> : <Icon name="refresh" size={16} color={colors.peri} />}
-                        {busy ? "Checking" : "Check now"}
-                      </button>
-                      <button type="button" className="link danger" aria-label={`Remove the link ${feed.label}. It asks first`} onClick={() => setRemovingId(feed.id)} style={{ ...ACTION, ...LINK_TEXT }}>Remove</button>
-                    </div>
-                  )}
-                  {/* A failed check is already said by the link's own line (in gold): not twice. */}
-                  {checked?.feedId === feed.id && checked.note.text !== status.line ? (
-                    <Note tone={checked.note.tone} icon={checked.note.tone === "green" ? "check" : "warning"} role="alert" style={{ marginBottom: 10 }}>
-                      {checked.note.text}
-                    </Note>
-                  ) : null}
-                </div>
-              );
-            })}
+            {feeds.map((feed) => (
+              <div key={feed.id} style={{ padding: "12px 14px 4px" }}>
+                {feedBody(feed)}
+              </div>
+            ))}
           </FieldGroup>
         </section>
       ) : null}
 
       <div>
         <FieldLabel>{COURSE_LINK_COPY.field}</FieldLabel>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, height: 52, borderRadius: radius.md, border: `1px solid ${colors.borderStrong}`, background: colors.panel, padding: "0 14px" }}>
-          <Icon name="link" size={20} color={colors.peri} />
-          <input
-            type="text"
-            inputMode="url"
-            value={url}
-            onChange={(event) => {
-              setUrl(event.target.value);
-              // What went wrong with the last link is about that link, not the one being typed.
-              if (addNote?.tone === "red") setAddNote(null);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void handleAdd();
-              }
-            }}
-            placeholder={COURSE_LINK_COPY.placeholder}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            aria-label={COURSE_LINK_COPY.field}
-            style={{ flex: 1, minWidth: 0, height: 50, fontSize: 16, border: 0, background: "transparent", color: colors.foreground, padding: 0 }}
-          />
-        </div>
+        {linkField}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {hint ? <p style={{ margin: 0, fontSize: 14, lineHeight: "19px", fontWeight: 600, textAlign: "center", color: colors.gold }}>{hint}</p> : null}
-        <PrimaryButton size="lg" fullWidth label="Add link" loading={adding} disabled={adding || hint !== null} onPress={() => void handleAdd()} ariaLabel={hint ? `Add link. ${hint}` : "Add link"} />
-        {addNote ? (
-          <Note tone={addNote.tone} icon={addNote.tone === "green" ? "check" : "warning"} role="alert">
-            {addNote.text}
-          </Note>
-        ) : null}
+        {hintLine}
+        {addButton(true)}
+        {addNoteView}
       </div>
 
-      <Note tone="plain" icon="lock">{COURSE_LINK_COPY.privacy}</Note>
+      {privacyNote}
 
       <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <SectionLabel title="Where to find it" />
-        <FieldGroup>
-          {COURSE_SITES.map((site) => {
-            const open = openSite === site.name;
-            return (
-              <div key={site.name}>
-                <button
-                  type="button"
-                  className="row pressable"
-                  onClick={() => setOpenSite(open ? null : site.name)}
-                  aria-expanded={open}
-                  aria-label={`${site.name}: where to find the link`}
-                  style={{ justifyContent: "space-between", minHeight: 52 }}
-                >
-                  <span style={{ flex: 1, fontSize: 16, lineHeight: "21px", fontWeight: 500, color: colors.foreground }}>{site.name}</span>
-                  <span style={{ display: "inline-flex", transform: open ? "rotate(180deg)" : undefined, transition: "transform 160ms" }}>
-                    <Icon name="chevronDown" size={18} color={colors.muted} />
-                  </span>
-                </button>
-                {open ? <p style={{ margin: "-4px 0 0", padding: "0 14px 14px", fontSize: 14, lineHeight: "20px", color: colors.muted }}>{site.steps}</p> : null}
-              </div>
-            );
-          })}
-        </FieldGroup>
-        <p className="caption" style={{ margin: 0, padding: "0 2px" }}>{COURSE_LINK_COPY.scope}</p>
+        <FieldGroup>{siteRows}</FieldGroup>
+        {scopeLine}
       </section>
     </div>
   );

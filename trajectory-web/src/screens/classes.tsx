@@ -12,9 +12,11 @@ import { validateSemester } from "../engine/semester";
 import { COURSE_COLORS, type ClassBlock, type DayOfWeek, type Semester, type SemesterBreak } from "../engine/types";
 import { generateId, localDateKey } from "../engine/utils";
 import { classShortName, courseShortName, normalizeShortName, SHORT_NAME_MAX } from "../engine/week-layout";
+import { DesktopPageHead, MetaLine, useMinWidth, WeekDots } from "../components/desktop-panels";
 import { useNavigate, useRoute } from "../router";
 import { useApp } from "../state/app-provider";
 import { Icon } from "../ui/icon";
+import { useDesktop } from "../ui/layout";
 import { AppSwitch, Card, DateInput, DayToggles, FieldGroup, FieldLabel, FieldPickRow, FieldRow, HeaderIconButton, InlineConfirm, MONO_FONT, PrimaryButton, ScreenHeader, Swatches, TimeInput } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
 import { useColors } from "../ui/theme";
@@ -28,6 +30,35 @@ export function ClassTag({ cls, size = 48 }: { cls: Pick<ClassBlock, "name" | "s
     <span style={{ width: size, height: size, borderRadius: 12, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 2px", background: alpha(base, 0.14), border: `1px solid ${alpha(base, 0.4)}`, borderLeft: `3px solid ${base}` }}>
       <span className="clamp2" style={{ fontFamily: MONO_FONT, fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: "15px", color: legibleOn(base, colors.surface, 5.5) }}>{tag}</span>
     </span>
+  );
+}
+
+/** A class as a card (the computer's Classes): its colour, name, when and where it meets, and its deadlines. */
+function ClassCard({ cls, planLine, onOpen }: { cls: ClassBlock; planLine: string; onOpen: () => void }) {
+  const colors = useColors();
+  const base = parseHexColor(cls.color) ? cls.color : colors.peri;
+  const schedule = classScheduleLine(cls);
+  return (
+    <button
+      type="button"
+      className="card lift"
+      onClick={onOpen}
+      aria-label={`${cls.name}. ${schedule}. ${planLine}. Open the class`}
+      style={{ position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 16, padding: "20px 18px 18px", width: "100%", textAlign: "left", color: "inherit", background: `linear-gradient(180deg, ${alpha(base, 0.11)} 0%, ${alpha(base, 0)} 58%), ${colors.surface}` }}
+    >
+      <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, top: 0, height: 3, background: base }} />
+      <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <ClassTag cls={cls} size={46} />
+        <span className="clamp2" style={{ flex: 1, minWidth: 0, fontSize: 16.5, lineHeight: "22px", fontWeight: 600, letterSpacing: -0.2, color: colors.foreground }}>{cls.name}</span>
+        <Icon name="chevronRight" size={18} color={colors.muted} />
+      </span>
+      <WeekDots days={cls.isAsynchronous ? [] : cls.days} color={base} />
+      <span style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: "auto" }}>
+        <MetaLine icon="clock" color={colors.foreground}>{schedule}</MetaLine>
+        {cls.location ? <MetaLine icon="pin">{cls.location}</MetaLine> : null}
+        <MetaLine icon="list">{planLine}</MetaLine>
+      </span>
+    </button>
   );
 }
 
@@ -299,6 +330,9 @@ export function ClassesScreen() {
   const navigate = useNavigate();
   const route = useRoute();
   const { state } = useApp();
+  const desktop = useDesktop();
+  // Room for the term, the imports and the activities side by side, each on one or two lines.
+  const threeUp = useMinWidth(1320);
 
   // The class sheet: `id` null adds a new class. "?add=class" (Today's "Add a class by hand") opens it empty;
   // "?edit=<id>" (the import history) opens a class.
@@ -317,6 +351,101 @@ export function ClassesScreen() {
     navigate(cls ? `syllabus?classId=${encodeURIComponent(cls.id)}` : "syllabus");
   }
   const hasClasses = state.classes.length > 0;
+
+  // The sheets, the same on a phone and a computer.
+  const sheets = (
+    <>
+      <ClassSheet open={sheet !== null} classId={sheet?.id ?? null} onClose={() => setSheet(null)} onAddSyllabus={(cls) => addSyllabus(cls)} />
+      <TermSheet open={termOpen} onClose={() => setTermOpen(false)} />
+
+      {/* "Add a class": from its syllabus (the class, its times and its deadlines at once), or by hand */}
+      <Sheet open={choosingHow} onClose={() => setChoosingHow(false)} ariaLabel="Add a class">
+        <SheetBody>
+          <SheetHead title="Add a class" onClose={() => setChoosingHow(false)} />
+          <FieldGroup>
+            <FieldPickRow first icon="file" label="From its syllabus" detail="The class, when it meets and its deadlines, read from it" onPress={() => addSyllabus()} ariaLabel="From its syllabus: the class, when it meets and its deadlines are read from it" />
+            <FieldPickRow
+              icon="edit"
+              label="By hand"
+              detail="Its name, days and times"
+              onPress={() => {
+                setChoosingHow(false);
+                setSheet({ id: null });
+              }}
+            />
+          </FieldGroup>
+        </SheetBody>
+      </Sheet>
+    </>
+  );
+  const termRow = <FieldPickRow first icon="cal" label="Term dates and breaks" detail={termRowLine(state.semester)} onPress={() => setTermOpen(true)} />;
+  const importsRow = imports.length > 0 ? <FieldPickRow icon="file" label="Imported syllabi" detail={`${imports.length} imported. See what each added, or undo one`} onPress={() => navigate("imports")} /> : null;
+  const activitiesRow = <FieldPickRow icon="work" label="Work and activities" detail={state.recurringEvents.length > 0 ? `${state.recurringEvents.length} every week. Study time is planned around them` : "A shift, a club, practice: study time is planned around them"} onPress={() => navigate("activities")} />;
+
+  if (desktop) {
+    const classWide = [termRow, importsRow, activitiesRow].filter((row) => row !== null);
+    const settingsButton = (
+      <HeaderIconButton onPress={() => navigate("settings")} ariaLabel="Settings">
+        <Icon name="settings" size={20} color={colors.foreground} />
+      </HeaderIconButton>
+    );
+    return (
+      <div className="screen full" style={{ gap: 22 }}>
+        <DesktopPageHead
+          eyebrow={termEyebrow(state.semester)}
+          title="Classes"
+          right={
+            <>
+              {hasClasses ? <PrimaryButton label="Add a class" left={<Icon name="plus" size={18} color="#FFFFFF" strokeWidth={2.2} />} onPress={() => setChoosingHow(true)} ariaLabel="Add a class: from its syllabus or by hand" style={{ minHeight: 40 }} /> : null}
+              {settingsButton}
+            </>
+          }
+        />
+
+        {hasClasses ? (
+          <div className="card-grid" style={{ ["--card-min" as string]: "264px", gap: 16 }}>
+            {state.classes.map((cls) => (
+              <ClassCard key={cls.id} cls={cls} planLine={classPlanLine({ classId: cls.id, className: cls.name, tasks: state.tasks, imports })} onOpen={() => setSheet({ id: cls.id })} />
+            ))}
+          </div>
+        ) : (
+          <Card tone="surface" padded={false} radiusSize={18} style={{ padding: "28px 30px", display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
+            <span style={{ width: 60, height: 60, borderRadius: 18, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.primary, 0.18) }}>
+              <Icon name="file" size={30} color={colors.peri} />
+            </span>
+            <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 21, lineHeight: "27px", fontWeight: 600, letterSpacing: -0.3, color: colors.foreground }}>Start with your syllabus</h2>
+              <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: "21px", color: colors.muted }}>Trajectory reads the class, when it meets and its deadlines from it.</p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <button type="button" className="link" onClick={() => setSheet({ id: null })} aria-label="Add a class by hand" style={{ minHeight: 44, padding: "0 14px", fontSize: 15, fontWeight: 600, color: colors.peri }}>Add a class by hand</button>
+              <PrimaryButton label="Add a syllabus" size="lg" onPress={() => addSyllabus()} left={<Icon name="file" size={18} color="#FFFFFF" />} />
+            </div>
+          </Card>
+        )}
+
+        {/* What belongs to the classes as a whole: the term, the syllabi imported, what else fills the week. Side by
+            side when there is room for them, a list otherwise. */}
+        {threeUp ? (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${classWide.length}, minmax(0, 1fr))`, gap: 16, marginTop: 10 }}>
+            {classWide.map((row, index) => (
+              <div key={index} className="card lift" style={{ overflow: "hidden", display: "flex", alignItems: "stretch" }}>
+                {row}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <FieldGroup style={{ marginTop: 10 }}>
+            {termRow}
+            {importsRow}
+            {activitiesRow}
+          </FieldGroup>
+        )}
+
+        {sheets}
+      </div>
+    );
+  }
 
   return (
     <div className="screen">
@@ -359,32 +488,12 @@ export function ClassesScreen() {
       {hasClasses ? <PrimaryButton tone="ghost" size="lg" fullWidth label="Add a class" left={<Icon name="plus" size={20} color={colors.foreground} strokeWidth={2} />} onPress={() => setChoosingHow(true)} ariaLabel="Add a class: from its syllabus or by hand" /> : null}
 
       <FieldGroup>
-        <FieldPickRow first icon="cal" label="Term dates and breaks" detail={termRowLine(state.semester)} onPress={() => setTermOpen(true)} />
-        {imports.length > 0 ? <FieldPickRow icon="file" label="Imported syllabi" detail={`${imports.length} imported. See what each added, or undo one`} onPress={() => navigate("imports")} /> : null}
-        <FieldPickRow icon="work" label="Work and activities" detail={state.recurringEvents.length > 0 ? `${state.recurringEvents.length} every week. Study time is planned around them` : "A shift, a club, practice: study time is planned around them"} onPress={() => navigate("activities")} />
+        {termRow}
+        {importsRow}
+        {activitiesRow}
       </FieldGroup>
 
-      <ClassSheet open={sheet !== null} classId={sheet?.id ?? null} onClose={() => setSheet(null)} onAddSyllabus={(cls) => addSyllabus(cls)} />
-      <TermSheet open={termOpen} onClose={() => setTermOpen(false)} />
-
-      {/* "Add a class": from its syllabus (the class, its times and its deadlines at once), or by hand */}
-      <Sheet open={choosingHow} onClose={() => setChoosingHow(false)} ariaLabel="Add a class">
-        <SheetBody>
-          <SheetHead title="Add a class" onClose={() => setChoosingHow(false)} />
-          <FieldGroup>
-            <FieldPickRow first icon="file" label="From its syllabus" detail="The class, when it meets and its deadlines, read from it" onPress={() => addSyllabus()} ariaLabel="From its syllabus: the class, when it meets and its deadlines are read from it" />
-            <FieldPickRow
-              icon="edit"
-              label="By hand"
-              detail="Its name, days and times"
-              onPress={() => {
-                setChoosingHow(false);
-                setSheet({ id: null });
-              }}
-            />
-          </FieldGroup>
-        </SheetBody>
-      </Sheet>
+      {sheets}
     </div>
   );
 }

@@ -8,9 +8,12 @@ import { useState } from "react";
 import { activityFormError, activityPlanLine, classScheduleLine } from "../engine/classes-view";
 import type { DayOfWeek, RecurringEvent } from "../engine/types";
 import { generateId } from "../engine/utils";
+import { AddTile, DesktopPageHead, MetaLine, WeekDots } from "../components/desktop-panels";
+import { alpha } from "../engine/design";
 import { goBack } from "../router";
 import { useApp } from "../state/app-provider";
 import { Icon } from "../ui/icon";
+import { useDesktop } from "../ui/layout";
 import { AppSwitch, Card, DayToggles, FieldGroup, FieldLabel, FieldRow, HeaderIconButton, InlineConfirm, PrimaryButton, ScreenHeader, Swatches, TimeInput } from "../ui/primitives";
 import { Sheet, SheetBody, SheetHead } from "../ui/sheet";
 import { useColors } from "../ui/theme";
@@ -23,6 +26,7 @@ export function ActivitiesScreen() {
   const colors = useColors();
   const { state, dispatch } = useApp();
   const events = state.recurringEvents;
+  const desktop = useDesktop();
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -84,52 +88,9 @@ export function ActivitiesScreen() {
   }
 
   const close = () => setOpen(false);
+  const subtitle = events.length > 0 ? `${events.length} each week. Study time is planned around ${events.length === 1 ? "it" : "them"}.` : "A shift, a club, practice: study time is planned around them.";
 
-  return (
-    <div className="screen">
-      <div style={{ paddingTop: 4 }}>
-        <HeaderIconButton onPress={() => goBack("classes")} ariaLabel="Back">
-          <Icon name="chevronLeft" size={20} color={colors.foreground} />
-        </HeaderIconButton>
-      </div>
-      <ScreenHeader
-        eyebrow="Every week"
-        title="Work and activities"
-        subtitle={events.length > 0 ? `${events.length} each week. Study time is planned around ${events.length === 1 ? "it" : "them"}.` : "A shift, a club, practice: study time is planned around them."}
-      />
-
-      {events.length === 0 ? (
-        <Card tone="surface" radiusSize={18} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <h2 style={{ margin: 0, fontSize: 19, lineHeight: "24px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>Nothing that repeats yet</h2>
-          <p style={{ margin: "0 0 6px", fontSize: 14, lineHeight: "20px", color: colors.muted }}>Add a shift, a club or practice and Trajectory plans your study time around it.</p>
-          <PrimaryButton size="lg" fullWidth label="Add work or an activity" left={<Icon name="plus" size={18} color="#FFFFFF" />} onPress={() => openSheet(null)} />
-        </Card>
-      ) : (
-        <>
-          <FieldGroup>
-            {events.map((event) => {
-              const when = classScheduleLine(event);
-              const note = activityPlanLine(event);
-              return (
-                <button key={event.id} type="button" className="row pressable" onClick={() => openSheet(event)} aria-label={`${event.title}. ${when}${note ? `. ${note}` : ""}. Open it`} style={{ minHeight: 64, padding: "12px 14px" }}>
-                  <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: event.color, flexShrink: 0 }} />
-                  <span className="row-text">
-                    <span className="clamp2" style={{ display: "block", fontSize: 16, lineHeight: "21px", fontWeight: 600, color: colors.foreground }}>{event.title}</span>
-                    <span className="clamp2" style={{ display: "block", fontSize: 13, lineHeight: "18px", color: colors.muted }}>{when}</span>
-                    {note ? <span className="clamp2" style={{ display: "block", fontSize: 13, lineHeight: "18px", color: colors.muted }}>{note}</span> : null}
-                  </span>
-                  <Icon name="chevronRight" size={18} color={colors.muted} />
-                </button>
-              );
-            })}
-          </FieldGroup>
-          <button type="button" className="pressable" aria-label="Add work or an activity" onClick={() => openSheet(null)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 52, borderRadius: 16, border: `1px solid ${colors.borderStrong}`, background: colors.panel, color: colors.foreground, fontSize: 16, fontWeight: 600 }}>
-            <Icon name="plus" size={18} color={colors.foreground} strokeWidth={2} />
-            Add another
-          </button>
-        </>
-      )}
-
+  const sheet = (
       <Sheet open={open} onClose={close} ariaLabel={editing ? "Edit work or an activity" : "Work or an activity"}>
         <SheetBody gap={16}>
           <SheetHead title={editing ? "Edit it" : "Work or an activity"} onClose={close} />
@@ -176,6 +137,99 @@ export function ActivitiesScreen() {
           ) : null}
         </SheetBody>
       </Sheet>
+  );
+
+  if (desktop) {
+    return (
+      <div className="screen medium" style={{ gap: 22 }}>
+        <DesktopPageHead back={{ onPress: () => goBack("classes"), ariaLabel: "Back" }} eyebrow="Every week" title="Work and activities" subtitle={subtitle} />
+
+        {events.length === 0 ? (
+          <Card tone="surface" padded={false} radiusSize={18} style={{ padding: "26px 28px", display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
+            <span style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.peri, 0.14) }}>
+              <Icon name="work" size={26} color={colors.peri} />
+            </span>
+            <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 19, lineHeight: "24px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>Nothing that repeats yet</h2>
+              <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: "20px", color: colors.muted }}>Add a shift, a club or practice and Trajectory plans your study time around it.</p>
+            </div>
+            <PrimaryButton size="lg" label="Add work or an activity" left={<Icon name="plus" size={18} color="#FFFFFF" />} onPress={() => openSheet(null)} />
+          </Card>
+        ) : (
+          <div className="card-grid" style={{ ["--card-min" as string]: "280px", gap: 16 }}>
+            {events.map((event) => {
+              const when = classScheduleLine(event);
+              const note = activityPlanLine(event);
+              return (
+                <button key={event.id} type="button" className="card lift" onClick={() => openSheet(event)} aria-label={`${event.title}. ${when}${note ? `. ${note}` : ""}. Open it`} style={{ position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 16, padding: "20px 18px 18px", width: "100%", textAlign: "left", color: "inherit", background: `linear-gradient(180deg, ${alpha(event.color, 0.1)} 0%, ${alpha(event.color, 0)} 58%), ${colors.surface}` }}>
+                  <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, top: 0, height: 3, background: event.color }} />
+                  <span style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                    <span className="clamp2" style={{ flex: 1, minWidth: 0, fontSize: 16.5, lineHeight: "22px", fontWeight: 600, letterSpacing: -0.2, color: colors.foreground }}>{event.title}</span>
+                    <Icon name="chevronRight" size={18} color={colors.muted} style={{ marginTop: 2 }} />
+                  </span>
+                  <WeekDots days={event.days} color={event.color} />
+                  <span style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: "auto" }}>
+                    <MetaLine icon="clock" color={colors.foreground}>{when}</MetaLine>
+                    {note ? <MetaLine icon="shield">{note}</MetaLine> : null}
+                  </span>
+                </button>
+              );
+            })}
+            <AddTile label="Add another" ariaLabel="Add work or an activity" onPress={() => openSheet(null)} minHeight={150} />
+          </div>
+        )}
+
+        {sheet}
+      </div>
+    );
+  }
+
+  return (
+    <div className="screen">
+      <div style={{ paddingTop: 4 }}>
+        <HeaderIconButton onPress={() => goBack("classes")} ariaLabel="Back">
+          <Icon name="chevronLeft" size={20} color={colors.foreground} />
+        </HeaderIconButton>
+      </div>
+      <ScreenHeader
+        eyebrow="Every week"
+        title="Work and activities"
+        subtitle={subtitle}
+      />
+
+      {events.length === 0 ? (
+        <Card tone="surface" radiusSize={18} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <h2 style={{ margin: 0, fontSize: 19, lineHeight: "24px", fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>Nothing that repeats yet</h2>
+          <p style={{ margin: "0 0 6px", fontSize: 14, lineHeight: "20px", color: colors.muted }}>Add a shift, a club or practice and Trajectory plans your study time around it.</p>
+          <PrimaryButton size="lg" fullWidth label="Add work or an activity" left={<Icon name="plus" size={18} color="#FFFFFF" />} onPress={() => openSheet(null)} />
+        </Card>
+      ) : (
+        <>
+          <FieldGroup>
+            {events.map((event) => {
+              const when = classScheduleLine(event);
+              const note = activityPlanLine(event);
+              return (
+                <button key={event.id} type="button" className="row pressable" onClick={() => openSheet(event)} aria-label={`${event.title}. ${when}${note ? `. ${note}` : ""}. Open it`} style={{ minHeight: 64, padding: "12px 14px" }}>
+                  <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: event.color, flexShrink: 0 }} />
+                  <span className="row-text">
+                    <span className="clamp2" style={{ display: "block", fontSize: 16, lineHeight: "21px", fontWeight: 600, color: colors.foreground }}>{event.title}</span>
+                    <span className="clamp2" style={{ display: "block", fontSize: 13, lineHeight: "18px", color: colors.muted }}>{when}</span>
+                    {note ? <span className="clamp2" style={{ display: "block", fontSize: 13, lineHeight: "18px", color: colors.muted }}>{note}</span> : null}
+                  </span>
+                  <Icon name="chevronRight" size={18} color={colors.muted} />
+                </button>
+              );
+            })}
+          </FieldGroup>
+          <button type="button" className="pressable" aria-label="Add work or an activity" onClick={() => openSheet(null)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 52, borderRadius: 16, border: `1px solid ${colors.borderStrong}`, background: colors.panel, color: colors.foreground, fontSize: 16, fontWeight: 600 }}>
+            <Icon name="plus" size={18} color={colors.foreground} strokeWidth={2} />
+            Add another
+          </button>
+        </>
+      )}
+
+      {sheet}
     </div>
   );
 }

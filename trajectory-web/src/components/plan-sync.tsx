@@ -207,13 +207,15 @@ export function PlanSavedRow({ first }: { first?: boolean }): ReactElement | nul
         <Icon name={icon} size={18} color={tint} />
       </span>
       <span className="row-text">
-        <span className="row-label">{model.title}</span>
-        <span className="row-detail">{status}</span>
+        {/* Two lines, as in every row: the title, then what became of the plan under it. */}
+        <span className="row-label" style={{ display: "block" }}>{model.title}</span>
+        <span className="row-detail" style={{ display: "block" }}>{status}</span>
       </span>
       {model.canRetry ? <Icon name="refresh" size={17} color={colors.dim} /> : null}
     </>
   );
-  const style = { display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", minHeight: 58, width: "100%", textAlign: "left" as const, borderTop: first ? "none" : `1px solid ${colors.border}` };
+  // The rest of the row's shape (and its wider padding on a computer) comes from the .row class.
+  const style = { textAlign: "left" as const, borderTop: first ? "none" : `1px solid ${colors.border}` };
   if (!model.canRetry) {
     return (
       <div className="row" style={style} aria-label={`${model.title}. ${status}`}>
