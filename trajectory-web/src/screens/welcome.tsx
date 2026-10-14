@@ -18,6 +18,9 @@ import { WEBSITE_TERMS_URL } from "../shared/const";
 import { mutate } from "../lib/api";
 import { appleSignInAvailable, signInWithApple } from "../lib/apple-signin";
 import { TEST_SIGN_IN } from "../lib/config";
+
+/** The test build's button (VITE_TEST_SIGN_IN=1 only; the string is dropped from every other build with it). */
+const TEST_SIGN_IN_LABEL = TEST_SIGN_IN ? "Test sign-in" : "";
 import { completeSignIn } from "../lib/session";
 import { enterStep, opensSyllabusUpload, RESTORE_WAIT_MS, WAITING_SLOW_MS, waitingExtras, welcomePreviewOf, welcomeStage } from "../lib/start-route";
 import { navigate, useRoute } from "../router";
@@ -152,10 +155,11 @@ export function WelcomeScreen() {
 
   /** Build-time only (VITE_TEST_SIGN_IN=1): a sign-in the mock server accepts, for the smoke test. */
   async function handleTestSignIn() {
-    if (isSigningIn) return;
+    if (!TEST_SIGN_IN || isSigningIn) return;
     setIsSigningIn(true);
     try {
-      await finishSignIn({ identityToken: "test.identity.token-for-the-mock-server", appleUserId: "test-student", email: "student@example.com", givenName: "Test", familyName: "Student" });
+      const { testCredential } = await import("../lib/test-sign-in");
+      await finishSignIn(testCredential);
     } catch (error) {
       void showAlert({ title: "Sign in unavailable", message: error instanceof Error ? error.message : "We could not sign you in.", buttons: [{ text: "OK" }] });
     } finally {
@@ -208,7 +212,7 @@ export function WelcomeScreen() {
                   ) : (
                     <Note tone="gold" icon="info">Sign in with Apple is not set up for this website yet (no Services ID configured). The iPhone app signs in as usual.</Note>
                   )}
-                  {TEST_SIGN_IN ? <PrimaryButton size="lg" fullWidth tone="ghost" label="Test sign-in" onPress={() => void handleTestSignIn()} disabled={isSigningIn} /> : null}
+                  {TEST_SIGN_IN ? <PrimaryButton size="lg" fullWidth tone="ghost" label={TEST_SIGN_IN_LABEL} onPress={() => void handleTestSignIn()} disabled={isSigningIn} /> : null}
                   {isSigningIn ? <p className="caption" style={{ textAlign: "center", margin: 0 }}>Signing you in…</p> : null}
                   <p className="caption" style={{ textAlign: "center", margin: 0 }}>{accountLine}</p>
                   <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 22, minHeight: 22 }}>

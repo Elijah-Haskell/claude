@@ -31,13 +31,13 @@ export function accountRequired(): boolean {
 }
 
 /** Build-time only: a test sign-in on the welcome screen against the mock server. Tree-shaken out otherwise. */
-export const TEST_SIGN_IN: boolean = env.VITE_TEST_SIGN_IN === "1";
+export const TEST_SIGN_IN: boolean = import.meta.env.VITE_TEST_SIGN_IN === "1";
 
 /**
  * Build-time only: Trajectory AI treats this browser as holding Trajectory Pro (the mock server grants Pro with
  * MOCK_PRO=1, but the browser only learns Pro from RevenueCat, which a test build has no key for). Tree-shaken out otherwise.
  */
-export const TEST_PRO: boolean = env.VITE_TEST_PRO === "1";
+export const TEST_PRO: boolean = import.meta.env.VITE_TEST_PRO === "1";
 
 /**
  * Connecting Google Calendar through Trajectory's server is retired in the mobile app (Google's verification of the
