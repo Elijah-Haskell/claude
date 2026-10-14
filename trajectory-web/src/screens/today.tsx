@@ -41,6 +41,7 @@ import { useReplanFlow } from "../state/use-replan-flow";
 import { Icon, IconWell } from "../ui/icon";
 import { Card, CheckBox, Chip, CourseChip, MONO_FONT, PrimaryButton, ProgressRing, ScreenHeader, SectionLabel, Tile, TileRow } from "../ui/primitives";
 import { Sheet } from "../ui/sheet";
+import { useWideLayout } from "../ui/layout";
 import { useColors } from "../ui/theme";
 
 // ── Small pieces ─────────────────────────────────────────────────
@@ -216,6 +217,7 @@ type Deadline = {
 
 export function TodayScreen() {
   const colors = useColors();
+  const wideLayout = useWideLayout();
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
   const { openReplan, openAdd, openTask, openBlock } = useGlobalModal();
@@ -279,6 +281,18 @@ export function TodayScreen() {
             .sort((a, b) => (a.date === b.date ? timeToMinutes(a.startTime) - timeToMinutes(b.startTime) : a.date.localeCompare(b.date)))[0]
         : undefined,
     [allDone, state.scheduleBlocks, today],
+  );
+
+  // A computer has room for what comes after the day: the next few study sessions (wide layout only).
+  const comingUp = useMemo(
+    () =>
+      wideLayout
+        ? state.scheduleBlocks
+            .filter((b) => b.type === "study" && b.completionStatus === "pending" && b.date > viewDate)
+            .sort((a, b) => (a.date === b.date ? timeToMinutes(a.startTime) - timeToMinutes(b.startTime) : a.date.localeCompare(b.date)))
+            .slice(0, 6)
+        : [],
+    [wideLayout, state.scheduleBlocks, viewDate],
   );
 
   const viewDay = new Date(viewDate + "T12:00:00");
@@ -448,16 +462,22 @@ export function TodayScreen() {
 
   const replanLink = { display: "inline-flex", alignItems: "center", gap: 5, minHeight: 32, padding: "0 4px", fontSize: 14, fontWeight: 600, color: colors.peri } as const;
 
-  return (
-    <div className="screen">
+  const part_header = (
+    <>
       {/* 1 · The date and "Today" (or the weekday looked at), and Ask AI */}
       <ScreenHeader eyebrow={eyebrow} title={isToday ? "Today" : dayName} right={startCard ? undefined : <AskAiButton />} />
-
+    </>
+  );
+  const part_strip = (
+    <>
       {/* 2 · The week as a strip of dates: click a day to look at it, click today to come back */}
       <WeekStrip days={stripDays} selectedKey={viewDate} onSelect={(key) => setPickedDate(key === today ? null : key)} />
       {/* A School Year pass in its last days, or just ended: "Get another year" (components/pass-expiry-banner.tsx) */}
       <PassExpiryBanner />
-
+    </>
+  );
+  const part_recap = (
+    <>
       {/* The day a syllabus was planned: what was planned, what was left out, and the way to undo it */}
       {shownRecap ? (
         <div style={{ borderRadius: 16, border: `1px solid ${alpha(colors.success, 0.45)}`, background: alpha(colors.success, 0.1), padding: "14px 14px 10px" }}>
@@ -493,7 +513,10 @@ export function TodayScreen() {
           )}
         </div>
       ) : null}
-
+    </>
+  );
+  const part_setup = (
+    <>
       {/* Make it fit your life: what makes a plan fit a real week, until done or hidden */}
       {showSetup ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -522,7 +545,10 @@ export function TodayScreen() {
           </div>
         </div>
       ) : null}
-
+    </>
+  );
+  const part_deadline = (
+    <>
       {/* 3 · ONE deadline card: the countdown first, in gold */}
       {isToday && featuredDeadline ? (
         <Card tone="surface" padded={false} radiusSize={16} onClick={featuredDeadline.onPress} ariaLabel={`${daysBadge(featuredDeadline.days)}: ${featuredDeadline.title}. ${featuredDeadline.sub}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px" }}>
@@ -534,7 +560,10 @@ export function TodayScreen() {
           <Icon name="chevronRight" size={18} color={colors.muted} />
         </Card>
       ) : null}
-
+    </>
+  );
+  const part_allDone = (
+    <>
       {/* Every session of today ticked: say so, and say what comes next */}
       {allDone ? (
         <div aria-label={`Done for today.${nextSession ? ` Next: ${blockDisplayTitle(nextSession.title)}, ${relativeDayLabel(nextSession.date, today)} at ${formatTime(nextSession.startTime)}` : ""}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px", borderRadius: 16, border: `1px solid ${alpha(colors.success, 0.45)}`, background: alpha(colors.success, 0.1) }}>
@@ -549,10 +578,16 @@ export function TodayScreen() {
           </div>
         </div>
       ) : null}
-
+    </>
+  );
+  const part_tip = (
+    <>
       {/* Once: what the dashed (flexible) sessions below are, and how to keep one */}
       <FlexibleSessionsTip visible={showsFlexible} />
-
+    </>
+  );
+  const part_start = (
+    <>
       {/* Before any class or task: one clear next step instead of an empty day */}
       {startCard ? (
         <Card tone="surface" padded={false} radiusSize={18} style={{ padding: "26px 22px 22px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
@@ -565,7 +600,10 @@ export function TodayScreen() {
           <button type="button" className="link" aria-label="Add a class by hand" onClick={() => navigate("classes?add=class")} style={{ ...replanLink, marginTop: 10, minHeight: 44 }}>Add a class by hand</button>
         </Card>
       ) : null}
-
+    </>
+  );
+  const part_sessions = (
+    <>
       {/* 4 · The day in order, under one label. Replan is the one way to change the plan from here */}
       {startCard ? null : (
         <>
@@ -646,10 +684,16 @@ export function TodayScreen() {
           </div>
         </>
       )}
-
+    </>
+  );
+  const part_undo = (
+    <>
       {/* Undo for the last applied replan (until the next change) */}
       <UndoReplanBar variant="row" />
-
+    </>
+  );
+  const part_headsUp = (
+    <>
       {/* 5 · Heads up: every contextual notice as one compact tile (about today, so only shown with today) */}
       {isToday && hasHeadsUp ? (
         <Tile tag="Heads up" tagColor={colors.gold} padding={14}>
@@ -735,7 +779,10 @@ export function TodayScreen() {
           </div>
         </Tile>
       ) : null}
-
+    </>
+  );
+  const part_sheets = (
+    <>
       {/* The plan status, item by item with its fix (the same sheet Week's "N to review" pill opens) */}
       <PlanReviewSheet visible={reviewOpen} status={planStatus} onClose={closeReview} />
 
@@ -760,6 +807,70 @@ export function TodayScreen() {
           )}
         </Sheet>
       ) : null}
+    </>
+  );
+
+  // A computer with room: the day in the main column, everything about the days around it in the rail beside it.
+  if (wideLayout) {
+    return (
+      <div className="screen full">
+        {part_header}
+        <div className="split">
+          <div className="split-main">
+            {part_recap}
+            {part_allDone}
+            {part_tip}
+            {part_start}
+            {part_sessions}
+            {part_undo}
+            {comingUp.length > 0 ? (
+              <section style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }} aria-label="Coming up">
+                <SectionLabel title="Coming up" right={<a className="link" href="#/week" style={{ ...replanLink, textDecoration: "none" }}>Open Week</a>} />
+                <div className="group">
+                  {comingUp.map((block) => {
+                    const title = sessionDisplayTitle(block.title, block.taskId ? tasksById.get(block.taskId)?.courseName : undefined);
+                    const when = `${relativeDayLabel(block.date, today)} · ${formatTime(block.startTime)}`;
+                    return (
+                      <button key={block.id} type="button" className="row pressable" onClick={() => openBlock(block.id)} aria-label={`${title}, ${when}. Open details`}>
+                        <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: block.color || colors.accent, flexShrink: 0 }} />
+                        <span className="row-text">
+                          <span className="row-label truncate" style={{ display: "block", fontSize: 15 }}>{title}</span>
+                          <span className="row-detail" style={{ display: "block" }}>{sessionMeta(block)}</span>
+                        </span>
+                        <span style={{ fontFamily: MONO_FONT, fontSize: 12, color: colors.muted, whiteSpace: "nowrap" }}>{when}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+          </div>
+          <aside className="split-rail" aria-label="Your week">
+            <div className="card" style={{ padding: "10px 10px 12px" }}>{part_strip}</div>
+            {part_deadline}
+            {part_setup}
+            {part_headsUp}
+          </aside>
+        </div>
+        {part_sheets}
+      </div>
+    );
+  }
+
+  return (
+    <div className="screen">
+      {part_header}
+      {part_strip}
+      {part_recap}
+      {part_setup}
+      {part_deadline}
+      {part_allDone}
+      {part_tip}
+      {part_start}
+      {part_sessions}
+      {part_undo}
+      {part_headsUp}
+      {part_sheets}
     </div>
   );
 }

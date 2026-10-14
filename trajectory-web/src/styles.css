@@ -244,55 +244,70 @@ input[type="time"] {
   .tabbar {
     display: none;
   }
+  /* The computer layout: a quiet sidebar, the page on the right with room to breathe. */
   .sidebar {
     position: sticky;
     top: 0;
     align-self: flex-start;
     height: 100vh;
-    width: 232px;
+    width: 256px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 22px 14px;
+    gap: 2px;
+    padding: 24px 16px 18px;
     border-right: 1px solid var(--border);
-    background: color-mix(in srgb, var(--panel) 85%, transparent);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    backdrop-filter: blur(12px);
     z-index: 2;
+    overflow-y: auto;
   }
   .sidebar .brand {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 4px 10px 18px;
+    gap: 11px;
+    padding: 2px 10px 22px;
+    text-decoration: none;
   }
   .sidebar .brand-mark {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px;
-    background: #0a0e24;
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    background: linear-gradient(145deg, #121a46, #0a0e24);
     display: flex;
     align-items: center;
     justify-content: center;
     border: 1px solid var(--border-strong);
+    box-shadow: 0 6px 18px rgba(79, 110, 247, 0.18);
   }
   .sidebar .brand-name {
-    font-weight: 800;
-    letter-spacing: 0.18em;
-    font-size: 13px;
-    color: var(--peri);
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: -0.2px;
+    color: var(--foreground);
+  }
+  .side-section {
+    margin: 18px 10px 6px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dim);
   }
   .side-tab {
     display: flex;
     align-items: center;
     gap: 12px;
-    height: 44px;
+    height: 42px;
     padding: 0 12px;
-    border-radius: 12px;
+    border-radius: 11px;
     color: var(--muted);
-    font-size: 15px;
+    font-size: 14.5px;
     font-weight: 500;
     text-decoration: none;
-    border: 1px solid transparent;
+    position: relative;
+    transition: background 120ms ease, color 120ms ease;
   }
   .side-tab:hover {
     color: var(--foreground);
@@ -300,33 +315,171 @@ input[type="time"] {
   }
   .side-tab.on {
     color: var(--foreground);
-    background: color-mix(in srgb, var(--primary) 18%, transparent);
-    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+  }
+  .side-tab.on::before {
+    content: "";
+    position: absolute;
+    left: -16px;
+    top: 10px;
+    bottom: 10px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--accent);
+  }
+  .side-tab.ai.on {
+    background: color-mix(in srgb, var(--violet) 18%, transparent);
+  }
+  .side-tab.ai.on::before {
+    background: var(--violet);
   }
   .side-add {
-    margin-top: 14px;
-    height: 48px;
-    border-radius: 14px;
+    margin: 4px 0 6px;
+    height: 44px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     color: #fff;
     font-weight: 600;
+    font-size: 14.5px;
     background: linear-gradient(135deg, #4f6ef7, #6b87ff);
-    box-shadow: 0 6px 14px rgba(79, 110, 247, 0.4);
+    box-shadow: 0 8px 20px rgba(79, 110, 247, 0.35);
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+  .side-add:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(79, 110, 247, 0.45);
   }
   .side-foot {
     margin-top: auto;
-    padding: 0 10px;
-    font-size: 12px;
-    color: var(--dim);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 14px;
+  }
+  .side-account {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    text-decoration: none;
+    color: var(--foreground);
+  }
+  .side-account:hover {
+    border-color: var(--border-strong);
+  }
+  .side-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: #fff;
+    background: linear-gradient(135deg, #4f6ef7, #8b6cf6);
   }
   .app-main {
     width: auto;
     min-width: 0;
-    padding: 0 28px 48px;
+    max-width: none;
+    margin: 0;
+    padding: 34px 44px 72px;
   }
+  .app-main.wide {
+    max-width: none;
+  }
+  /* Pages keep a comfortable reading width unless they lay themselves out for the screen. */
+  .screen {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding-top: 0;
+    gap: 16px;
+  }
+  .screen.medium {
+    max-width: 1000px;
+  }
+  .screen.full {
+    max-width: 1240px;
+  }
+  .app-main.wide .screen {
+    max-width: 1240px;
+  }
+  .screen-title {
+    font-size: 34px;
+    line-height: 40px;
+    letter-spacing: -1px;
+  }
+  .screen-title.compact {
+    font-size: 26px;
+    line-height: 32px;
+  }
+  .screen-subtitle {
+    font-size: 14.5px;
+    line-height: 20px;
+    margin-top: 4px;
+  }
+  .row {
+    min-height: 60px;
+    padding: 10px 18px;
+  }
+  .group .pressable,
+  .card.pressable {
+    transition: background 120ms ease;
+  }
+  /* Only on a computer: things the phone never shows. */
+  .phone-only {
+    display: none !important;
+  }
+}
+
+@media (max-width: 899.98px) {
+  .desktop-only {
+    display: none !important;
+  }
+}
+
+/* A main column with a rail beside it (Today, Settings); one column below 1180px. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 28px;
+  align-items: start;
+}
+.split-main,
+.split-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.split-rail {
+  position: sticky;
+  top: 24px;
+}
+/* Cards side by side, as many as fit. */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 280px), 1fr));
+  gap: 14px;
+}
+.card.lift {
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+.card.lift:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
 }
 
 /* ── Screens ── */

@@ -86,32 +86,64 @@ function TabBar({ lit }: { lit: TabName | null }) {
   );
 }
 
-function Sidebar({ lit }: { lit: TabName | null }) {
+/** Which sidebar entry a route belongs to. The phone keeps Settings under Classes; the sidebar gives it its own place. */
+function sideEntryFor(name: string, lit: TabName | null): string | null {
+  if (name === "ai") return "ai";
+  if (["settings", "activities", "course-feeds", "calendars", "reminders", "delete-account", "privacy-policy", "paywall"].includes(name)) return "settings";
+  return lit;
+}
+
+function Sidebar({ lit, routeName }: { lit: TabName | null; routeName: string }) {
   const colors = useColors();
   const { openAdd } = useGlobalModal();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const on = sideEntryFor(routeName, lit);
+  const who = user?.name && user.name !== "Trajectory Student" ? user.name : user?.email || "Your account";
+  const initial = (who.trim()[0] ?? "T").toUpperCase();
   return (
     <aside className="sidebar" aria-label="Main">
       <a href={hrefFor("today")} className="brand" aria-label="Trajectory, Today">
         <span className="brand-mark">
           <Icon name="bolt" size={18} color={colors.gold} strokeWidth={2} />
         </span>
-        <span className="brand-name">TRAJECTORY</span>
+        <span className="brand-name">Trajectory</span>
       </a>
+      <button type="button" className="side-add" aria-label="Add a task, event or exam" onClick={() => openAdd()}>
+        <Icon name="plus" size={19} color="#fff" strokeWidth={2.2} />
+        New
+      </button>
+      <div className="side-section">Plan</div>
       {MAIN_TABS.map((tab) => {
-        const on = lit === tab.name;
+        const active = on === tab.name;
         return (
-          <a key={tab.name} href={hrefFor(tab.name)} className={`side-tab${on ? " on" : ""}`} aria-current={on ? "page" : undefined}>
-            <Icon name={tab.icon} size={21} color={on ? colors.peri : colors.muted} />
+          <a key={tab.name} href={hrefFor(tab.name)} className={`side-tab${active ? " on" : ""}`} aria-current={active ? "page" : undefined}>
+            <Icon name={tab.icon} size={20} color={active ? colors.peri : colors.muted} />
             <span>{tab.label}</span>
           </a>
         );
       })}
-      <button type="button" className="side-add" aria-label="Add a task, event or exam" onClick={() => openAdd()}>
-        <Icon name="plus" size={20} color="#fff" strokeWidth={2.2} />
-        Add
-      </button>
-      <div className="side-foot">{isAuthenticated ? "Saved to your account." : "Your plan stays in this browser."}</div>
+      <div className="side-section">Assistant</div>
+      <a href={hrefFor("ai")} className={`side-tab ai${on === "ai" ? " on" : ""}`} aria-current={on === "ai" ? "page" : undefined}>
+        <Icon name="spark" size={20} color={on === "ai" ? colors.violet : colors.muted} />
+        <span>Ask AI</span>
+      </a>
+      <div className="side-foot">
+        <a href={hrefFor("settings")} className={`side-tab${on === "settings" ? " on" : ""}`} aria-current={on === "settings" ? "page" : undefined}>
+          <Icon name="settings" size={20} color={on === "settings" ? colors.peri : colors.muted} />
+          <span>Settings</span>
+        </a>
+        {isAuthenticated ? (
+          <a href={hrefFor("settings")} className="side-account" aria-label={`Signed in as ${who}. Your plan is saved to your account. Open Settings`}>
+            <span className="side-avatar" aria-hidden="true">{initial}</span>
+            <span style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
+              <span className="truncate" style={{ fontSize: 13.5, fontWeight: 600 }}>{who}</span>
+              <span className="truncate" style={{ fontSize: 12, color: colors.muted }}>Saved to your account</span>
+            </span>
+          </a>
+        ) : (
+          <span style={{ padding: "8px 10px 0", fontSize: 12, color: colors.dim }}>Your plan stays in this browser.</span>
+        )}
+      </div>
     </aside>
   );
 }
@@ -197,10 +229,10 @@ function GlobalSheets({ undoBar }: { undoBar: boolean }) {
   );
 }
 
-function Frame({ lit, wide, children }: { lit: TabName | null; wide: boolean; children: ReactNode }) {
+function Frame({ lit, wide, routeName, children }: { lit: TabName | null; wide: boolean; routeName: string; children: ReactNode }) {
   return (
     <div className="app">
-      <Sidebar lit={lit} />
+      <Sidebar lit={lit} routeName={routeName} />
       <main className={`app-main${wide ? " wide" : ""}`}>{children}</main>
       <TabBar lit={lit} />
     </div>
@@ -315,7 +347,7 @@ export function App() {
   const lit = litTabFor(route.name);
   return (
     <>
-      <Frame lit={lit} wide={route.name === "week" || route.name === "semester-calendar"}>
+      <Frame lit={lit} routeName={route.name} wide={route.name === "week" || route.name === "semester-calendar"}>
         <Screen name={route.name} segments={route.segments} />
       </Frame>
       <GlobalSheets undoBar={route.name !== "ai"} />

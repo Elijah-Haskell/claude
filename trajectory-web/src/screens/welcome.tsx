@@ -33,6 +33,7 @@ import { usePlanSync } from "../state/plan-sync-client";
 import { useSignOut } from "../state/use-sign-out";
 import { Icon } from "../ui/icon";
 import { MONO_FONT, Note, PrimaryButton } from "../ui/primitives";
+import { useDesktop } from "../ui/layout";
 import { useColors } from "../ui/theme";
 
 function Picture() {
@@ -60,6 +61,51 @@ function Picture() {
     </div>
   );
 }
+
+/** The computer layout's picture: what a planned day looks like (example content, drawn in the app's own colours). */
+function ProductPreview() {
+  const colors = useColors();
+  const rows: { time: string; title: string; sub: string; color: string; dashed?: boolean; flag?: string }[] = [
+    { time: "9:00", title: "Calculus II", sub: "Class · Room 214", color: colors.accent },
+    { time: "11:30", title: "Problem Set 4", sub: "Study · 50 min · due Friday", color: colors.violet, dashed: true },
+    { time: "2:00", title: "Principles of Finance", sub: "Class · Hall B", color: colors.accent },
+    { time: "7:30", title: "Midterm review", sub: "Study · 60 min", color: colors.gold, flag: "Exam in 3 days" },
+  ];
+  return (
+    <div aria-hidden="true" style={{ position: "relative", borderRadius: 22, border: `1px solid ${colors.borderStrong}`, background: `linear-gradient(160deg, ${alpha(colors.surface, 0.95)}, ${alpha(colors.panel, 0.95)})`, boxShadow: "0 30px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(143,179,245,0.04) inset", padding: 22, maxWidth: 460 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontFamily: MONO_FONT, fontSize: 11, letterSpacing: 2, color: colors.peri }}>WEDNESDAY · OCT 14</div>
+          <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.6, color: colors.foreground, marginTop: 2 }}>Today</div>
+        </div>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: colors.peri }}>
+          <Icon name="bolt" size={14} color={colors.gold} />
+          Replan
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 16 }}>
+        {rows.map((row) => (
+          <div key={row.title} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ width: 40, fontFamily: MONO_FONT, fontSize: 11.5, color: colors.muted, textAlign: "right" }}>{row.time}</span>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, border: `1px ${row.dashed ? "dashed" : "solid"} ${alpha(row.color, 0.55)}`, borderLeft: `3px solid ${row.color}`, background: alpha(row.color, 0.1) }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: colors.foreground }}>{row.title}</div>
+                <div style={{ fontSize: 12, color: colors.muted }}>{row.sub}</div>
+              </div>
+              {row.flag ? <span style={{ fontFamily: MONO_FONT, fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: "4px 7px", borderRadius: 7, color: colors.gold, border: `1px solid ${alpha(colors.gold, 0.5)}`, background: alpha(colors.gold, 0.14) }}>{row.flag.toUpperCase()}</span> : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const FEATURES: { icon: "upload" | "bolt" | "cap"; title: string; sub: string }[] = [
+  { icon: "upload", title: "Upload a syllabus once", sub: "Every deadline in it lands in your plan." },
+  { icon: "bolt", title: "A plan that keeps up", sub: "Study time moves around classes, work and sleep when things change." },
+  { icon: "cap", title: "Ready for exams", sub: "Study guides, practice exams and flashcards with Trajectory Pro." },
+];
 
 function Brand() {
   const colors = useColors();
@@ -180,23 +226,9 @@ export function WelcomeScreen() {
   const welcome = stage === "start" || stage === "sign-in";
   const showSignedOutNotice = stage === "sign-in" && (preview ? preview === "account-signed-out" : sessionEnded);
   const accountLine = ACCOUNT_COPY.line;
+  const desktop = useDesktop();
 
-  return (
-    <div className="app" style={{ display: "block" }}>
-      <main className="app-main" style={{ maxWidth: 640, minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", padding: "40px 20px 32px", gap: 26 }}>
-        <Brand />
-        {welcome ? (
-          <>
-            <Picture />
-            <div>
-              <div className="eyebrow" style={{ marginBottom: 10, color: colors.peri }}>One upload · whole semester</div>
-              <h1 style={{ margin: 0, fontSize: 34, lineHeight: "38px", fontWeight: 800, letterSpacing: -0.9, color: colors.foreground }}>
-                Your semester, <span style={{ color: colors.peri }}>planned from your syllabus.</span>
-              </h1>
-              <p style={{ margin: "12px 0 0", fontSize: 15.5, lineHeight: "23px", color: colors.muted }}>
-                Upload it once. Trajectory finds your deadlines, plans study time around your classes, and replans when something changes.
-              </p>
-            </div>
+  const actions = (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {stage === "start" ? (
                 <>
@@ -222,6 +254,68 @@ export function WelcomeScreen() {
                 </>
               )}
             </div>
+  );
+
+  // A computer: the pitch and a picture of a planned day on the left, signing in on the right.
+  if (desktop && welcome) {
+    return (
+      <div className="app welcome-desktop" style={{ display: "block" }}>
+        <main style={{ position: "relative", zIndex: 1, minHeight: "100vh", display: "grid", gridTemplateColumns: "minmax(0, 1.25fr) minmax(380px, 0.85fr)", alignItems: "center", gap: 56, maxWidth: 1240, margin: "0 auto", padding: "48px 56px" }}>
+          <section style={{ display: "flex", flexDirection: "column", gap: 28, minWidth: 0 }}>
+            <Brand />
+            <div>
+              <div className="eyebrow" style={{ marginBottom: 14, color: colors.peri }}>One upload · whole semester</div>
+              <h1 style={{ margin: 0, fontSize: 54, lineHeight: "58px", fontWeight: 800, letterSpacing: -1.8, color: colors.foreground, maxWidth: 640 }}>
+                Your semester, <span style={{ color: colors.peri }}>planned from your syllabus.</span>
+              </h1>
+              <p style={{ margin: "18px 0 0", fontSize: 18, lineHeight: "28px", color: colors.muted, maxWidth: 560 }}>
+                Upload it once. Trajectory finds your deadlines, plans study time around your classes, and replans when something changes.
+              </p>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14, maxWidth: 680 }}>
+              {FEATURES.map((feature) => (
+                <div key={feature.title} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <span style={{ width: 36, height: 36, borderRadius: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", background: alpha(colors.primary, 0.18) }}>
+                    <Icon name={feature.icon} size={18} color={colors.peri} />
+                  </span>
+                  <span style={{ fontSize: 14.5, fontWeight: 600, color: colors.foreground }}>{feature.title}</span>
+                  <span style={{ fontSize: 13, lineHeight: "18px", color: colors.muted }}>{feature.sub}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section style={{ display: "flex", flexDirection: "column", gap: 22, minWidth: 0 }}>
+            <ProductPreview />
+            <div style={{ borderRadius: 22, border: `1px solid ${colors.border}`, background: alpha(colors.surface, 0.85), padding: "26px 26px 14px", display: "flex", flexDirection: "column", gap: 14, maxWidth: 460, boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 21, fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>{stage === "start" ? "Get started" : "Sign in to Trajectory"}</h2>
+                <p style={{ margin: "4px 0 0", fontSize: 13.5, lineHeight: "19px", color: colors.muted }}>Free to start. Your first syllabus is on us.</p>
+              </div>
+              {actions}
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app" style={{ display: "block" }}>
+      <main className="app-main" style={{ maxWidth: 640, margin: "0 auto", minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", padding: "40px 20px 32px", gap: 26 }}>
+        <Brand />
+        {welcome ? (
+          <>
+            <Picture />
+            <div>
+              <div className="eyebrow" style={{ marginBottom: 10, color: colors.peri }}>One upload · whole semester</div>
+              <h1 style={{ margin: 0, fontSize: 34, lineHeight: "38px", fontWeight: 800, letterSpacing: -0.9, color: colors.foreground }}>
+                Your semester, <span style={{ color: colors.peri }}>planned from your syllabus.</span>
+              </h1>
+              <p style={{ margin: "12px 0 0", fontSize: 15.5, lineHeight: "23px", color: colors.muted }}>
+                Upload it once. Trajectory finds your deadlines, plans study time around your classes, and replans when something changes.
+              </p>
+            </div>
+            {actions}
           </>
         ) : stage === "unreachable" ? (
           <>
@@ -254,7 +348,7 @@ export function LaunchMark({ line }: { line?: string }) {
   const colors = useColors();
   return (
     <div className="app" style={{ display: "block" }}>
-      <main className="app-main" style={{ maxWidth: 640, minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 18, padding: 20 }} aria-live="polite" aria-label={line ?? "Loading"}>
+      <main className="app-main" style={{ maxWidth: 640, margin: "0 auto", minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 18, padding: 20 }} aria-live="polite" aria-label={line ?? "Loading"}>
         <Brand />
         <span className="spinner" />
         {line ? <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: colors.muted }}>{line}</p> : null}
