@@ -97,12 +97,14 @@ part changes the live API, which restarts it.
 1. In https://cloud.digitalocean.com/apps open the existing API app, the one whose domain is `api.trajectoryapp.org`.
    Check that no deployment is in progress. If one is, wait for it to finish.
 2. Open **Settings**, then the **api** component, then **Environment Variables**, then **Edit**.
-3. Add two variables. Leave every existing variable exactly as it is.
+3. Add three variables. Leave every existing variable exactly as it is. None of them is secret, so plain is fine.
    - `ALLOWED_ORIGINS` = `https://app.trajectoryapp.org` (only this one address; no `www`, no other site)
    - `APPLE_WEB_SERVICES_ID` = the Services ID from part A (`org.trajectoryapp.web`)
+   - `APPLE_WEB_REDIRECT_URI` = `https://app.trajectoryapp.org/` (with the final slash, exactly as in part A)
 4. Save. This redeploys the API. Wait until the deploy succeeds.
 5. Open the API app's **Runtime Logs** and look at the lines from the new start. There must be no line containing
-   `[env] ERROR`, and no `[env] warning` that mentions `ALLOWED_ORIGINS` or `APPLE_WEB_SERVICES_ID`. Report any
+   `[env] ERROR`, and no `[env] warning` that mentions `ALLOWED_ORIGINS`, `APPLE_WEB_SERVICES_ID` or
+   `APPLE_WEB_REDIRECT_URI`. Report any
    `[env]` lines you see.
 6. Open https://api.trajectoryapp.org/api/health. It must answer with a success response.
 

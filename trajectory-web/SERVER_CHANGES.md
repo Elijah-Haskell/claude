@@ -35,7 +35,11 @@ Apps > trajectory-api > Settings > api > Environment Variables:
 ```
 ALLOWED_ORIGINS=https://app.trajectoryapp.org
 APPLE_WEB_SERVICES_ID=org.trajectoryapp.web
+APPLE_WEB_REDIRECT_URI=https://app.trajectoryapp.org/
 ```
+
+The third one was added in review on the branch (commit `75cee99`): Apple wants the web sign-in's redirect URI again
+when the server exchanges its code. It must match the web app's `VITE_APPLE_REDIRECT_URI` character for character.
 
 Only that one origin: not `www.trajectoryapp.org` (a Wix site running third-party scripts) and not a github.io
 address. Then check it: `node scripts/smoke/checks.mjs https://api.trajectoryapp.org --allowed-origin=https://app.trajectoryapp.org`.
