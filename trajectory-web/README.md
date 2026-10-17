@@ -54,6 +54,8 @@ npm run smoke            # browser tests against the mock API (Playwright + Chro
 | `VITE_APPLE_CLIENT_ID` | Sign in with Apple JS needs a **Services ID** registered for this website's domain (Apple Developer → Identifiers → Services IDs → Sign in with Apple, with the domain and the Return URL). Without it the sign-in screen says sign-in is not set up. |
 | `VITE_APPLE_REDIRECT_URI` | The Return URL registered with that Services ID. Default: the page's own origin and path. |
 | `VITE_REVENUECAT_WEB_KEY` | RevenueCat Web Billing public key (`rcb_…`). Without it (the live site today) the paywall says Pro isn't sold on the website yet, the payment library is never downloaded, and the app asks the server whether the account has Pro, so Pro from the iPhone app or a RevenueCat grant works here. |
+| `VITE_GOOGLE_CLIENT_ID` | Google Identity Services web client id (Google Cloud > APIs & Services > Credentials, authorised JavaScript origin `https://app.trajectoryapp.org`). Shows "Continue with Google". Needs the server's `auth.google` (not on the live server yet). |
+| `VITE_EMAIL_SIGN_IN` | `1` shows sign-in with a 6-digit code sent by email. Needs the server's `auth.emailStart` / `auth.emailVerify` and an email provider (not on the live server yet). |
 | `VITE_ACCOUNT_REQUIRED` | `false` builds the browser preview the mobile repo also has: no account, the plan stays in this browser (screenshots, demos). |
 | `VITE_TEST_SIGN_IN` | `1` adds a "Test sign-in" button for the mock API (`tests/mock-server.mjs`). Test builds only. |
 | `VITE_TEST_PRO` | `1` makes the browser hold Trajectory Pro without RevenueCat, for the mock's `MOCK_PRO=1` accounts. Test builds only; compiled out of every other build. |

@@ -15,9 +15,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ACCOUNT_COPY } from "../engine/account-copy";
 import { alpha } from "../engine/design";
 import { WEBSITE_TERMS_URL } from "../shared/const";
-import { mutate } from "../lib/api";
+import { mutate, type SignInResult } from "../lib/api";
 import { appleSignInAvailable, signInWithApple } from "../lib/apple-signin";
-import { TEST_SIGN_IN } from "../lib/config";
+import { EMAIL_SIGN_IN, TEST_SIGN_IN } from "../lib/config";
+import { googleSignInAvailable } from "../lib/google-signin";
+import { EmailSignIn, GoogleSignInButton, OrDivider } from "../components/sign-in-methods";
 
 /** The test build's button (VITE_TEST_SIGN_IN=1 only; the string is dropped from every other build with it). */
 const TEST_SIGN_IN_LABEL = TEST_SIGN_IN ? "Test sign-in" : "";
@@ -68,7 +70,6 @@ function ProductPreview() {
   const rows: { time: string; title: string; sub: string; color: string; dashed?: boolean; flag?: string }[] = [
     { time: "9:00", title: "Calculus II", sub: "Class · Room 214", color: colors.accent },
     { time: "11:30", title: "Problem Set 4", sub: "Study · 50 min · due Friday", color: colors.violet, dashed: true },
-    { time: "2:00", title: "Principles of Finance", sub: "Class · Hall B", color: colors.accent },
     { time: "7:30", title: "Midterm review", sub: "Study · 60 min", color: colors.gold, flag: "Exam in 3 days" },
   ];
   return (
@@ -181,9 +182,24 @@ export function WelcomeScreen() {
   const extras = waitingExtras({ stage, planPhase: gate.planPhase, waitedLong });
 
   async function finishSignIn(credential: { identityToken: string; appleUserId: string; email?: string; givenName?: string; familyName?: string; authorizationCode?: string; nonce?: string }) {
-    const result = await mutate("auth.apple", credential, { quiet: true, timeoutMs: 20_000 });
+    await finishWith(await mutate("auth.apple", credential, { quiet: true, timeoutMs: 20_000 }));
+  }
+
+  /** Any way in ends here: the server's session for the account (Apple, Google or an email code). */
+  async function finishWith(result: SignInResult) {
     const account = await completeSignIn(result);
     if (!account || !(await authRefresh())) throw new Error("We could not sign you in. Please try again.");
+  }
+
+  async function finishOther(result: SignInResult) {
+    setIsSigningIn(true);
+    try {
+      await finishWith(result);
+    } catch (error) {
+      void showAlert({ title: "Sign in unavailable", message: error instanceof Error ? error.message : "We could not sign you in. Please try again.", buttons: [{ text: "OK" }] });
+    } finally {
+      setIsSigningIn(false);
+    }
   }
 
   async function handleAppleSignIn() {
@@ -239,11 +255,22 @@ export function WelcomeScreen() {
               ) : (
                 <>
                   {showSignedOutNotice ? <Note tone="blue" icon="info" role="alert">{ACCOUNT_COPY.signedOutNotice}</Note> : null}
-                  {appleSignInAvailable() ? (
-                    <AppleButton onPress={() => void handleAppleSignIn()} busy={isSigningIn} />
-                  ) : (
-                    <Note tone="gold" icon="info">Sign in with Apple is not set up for this website yet (no Services ID configured). The iPhone app signs in as usual.</Note>
-                  )}
+                  {appleSignInAvailable() ? <AppleButton onPress={() => void handleAppleSignIn()} busy={isSigningIn} /> : null}
+                  {googleSignInAvailable() ? (
+                    <GoogleSignInButton disabled={isSigningIn} onSignedIn={finishOther} onError={(message) => void showAlert({ title: "Sign in unavailable", message, buttons: [{ text: "OK" }] })} />
+                  ) : null}
+                  {EMAIL_SIGN_IN ? (
+                    <>
+                      {appleSignInAvailable() || googleSignInAvailable() ? <OrDivider /> : null}
+                      <EmailSignIn disabled={isSigningIn} onSignedIn={finishOther} />
+                    </>
+                  ) : null}
+                  {!appleSignInAvailable() && !googleSignInAvailable() && !EMAIL_SIGN_IN ? (
+                    <Note tone="gold" icon="info">Sign-in is not set up for this website yet. The iPhone app signs in as usual.</Note>
+                  ) : null}
+                  {googleSignInAvailable() || EMAIL_SIGN_IN ? (
+                    <p className="caption" style={{ textAlign: "center", margin: 0 }}>Using the iPhone app too? It signs in with Apple, so use Apple here to share one plan.</p>
+                  ) : null}
                   {TEST_SIGN_IN ? <PrimaryButton size="lg" fullWidth tone="ghost" label={TEST_SIGN_IN_LABEL} onPress={() => void handleTestSignIn()} disabled={isSigningIn} /> : null}
                   {isSigningIn ? <p className="caption" style={{ textAlign: "center", margin: 0 }}>Signing you in…</p> : null}
                   <p className="caption" style={{ textAlign: "center", margin: 0 }}>{accountLine}</p>
@@ -260,12 +287,12 @@ export function WelcomeScreen() {
   if (desktop && welcome) {
     return (
       <div className="app welcome-desktop" style={{ display: "block" }}>
-        <main style={{ position: "relative", zIndex: 1, minHeight: "100vh", display: "grid", gridTemplateColumns: "minmax(0, 1.25fr) minmax(380px, 0.85fr)", alignItems: "center", gap: 56, maxWidth: 1240, margin: "0 auto", padding: "48px 56px" }}>
+        <main style={{ position: "relative", zIndex: 1, minHeight: "100vh", display: "grid", gridTemplateColumns: "minmax(0, 1.25fr) minmax(380px, 0.85fr)", alignItems: "center", gap: 56, maxWidth: 1240, margin: "0 auto", padding: "40px 56px" }}>
           <section style={{ display: "flex", flexDirection: "column", gap: 28, minWidth: 0 }}>
             <Brand />
             <div>
               <div className="eyebrow" style={{ marginBottom: 14, color: colors.peri }}>One upload · whole semester</div>
-              <h1 style={{ margin: 0, fontSize: 54, lineHeight: "58px", fontWeight: 800, letterSpacing: -1.8, color: colors.foreground, maxWidth: 640 }}>
+              <h1 style={{ margin: 0, fontSize: 48, lineHeight: "53px", fontWeight: 800, letterSpacing: -1.6, color: colors.foreground, maxWidth: 640 }}>
                 Your semester, <span style={{ color: colors.peri }}>planned from your syllabus.</span>
               </h1>
               <p style={{ margin: "18px 0 0", fontSize: 18, lineHeight: "28px", color: colors.muted, maxWidth: 560 }}>
@@ -283,9 +310,9 @@ export function WelcomeScreen() {
                 </div>
               ))}
             </div>
+            <ProductPreview />
           </section>
           <section style={{ display: "flex", flexDirection: "column", gap: 22, minWidth: 0 }}>
-            <ProductPreview />
             <div style={{ borderRadius: 22, border: `1px solid ${colors.border}`, background: alpha(colors.surface, 0.85), padding: "26px 26px 14px", display: "flex", flexDirection: "column", gap: 14, maxWidth: 460, boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: 21, fontWeight: 700, letterSpacing: -0.3, color: colors.foreground }}>{stage === "start" ? "Get started" : "Sign in to Trajectory"}</h2>

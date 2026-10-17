@@ -39,6 +39,12 @@ export const TEST_SIGN_IN: boolean = import.meta.env.VITE_TEST_SIGN_IN === "1";
  */
 export const TEST_PRO: boolean = import.meta.env.VITE_TEST_PRO === "1";
 
+/** Google Identity Services web client id; empty hides "Continue with Google". */
+export const GOOGLE_CLIENT_ID: string = (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "").trim();
+
+/** Sign-in with a code sent by email (off unless the build says so: the server has to be able to send it). */
+export const EMAIL_SIGN_IN: boolean = import.meta.env.VITE_EMAIL_SIGN_IN === "1";
+
 /**
  * Connecting Google Calendar through Trajectory's server is retired in the mobile app (Google's verification of the
  * calendar permission would block the App Store launch). Students who connected before keep a section on the

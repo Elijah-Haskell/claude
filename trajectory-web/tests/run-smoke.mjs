@@ -4,7 +4,7 @@
 //   node tests/run-smoke.mjs account general # by name (account-smoke.mjs, smoke.mjs = "general", smoke-<name>.mjs)
 //   SKIP_BUILD=1 node tests/run-smoke.mjs    # reuse the last builds in the scratch directory
 //
-// Two builds: "free" (VITE_TEST_SIGN_IN=1) and "pro" (also VITE_TEST_PRO=1, the browser's side of the mock's
+// Three builds: "signin" (Google and email sign-in, for smoke-signin.mjs), "free" (VITE_TEST_SIGN_IN=1) and "pro" (also VITE_TEST_PRO=1, the browser's side of the mock's
 // MOCK_PRO=1, since a test build has no RevenueCat key to learn Pro from). Each suite gets a freshly started mock
 // (its in-memory ledger counts the test student's one free syllabus) with the environment the suite's header asks for.
 import { spawn, spawnSync } from "node:child_process";
@@ -27,6 +27,7 @@ const NEEDS = {
   "smoke-ai.mjs": { build: "pro", mock: { MOCK_PRO: "1" } },
   "smoke-study.mjs": { build: "pro", mock: { MOCK_PRO: "1" } },
   "smoke-wording.mjs": { build: "pro", mock: { MOCK_PRO: "1" } },
+  "smoke-signin.mjs": { build: "signin", mock: { MOCK_PRO: "1" } },
 };
 const needsOf = (suite) => NEEDS[suite] ?? { build: "free", mock: { MOCK_PRO: "1" } };
 
@@ -54,6 +55,8 @@ for (const build of builds) {
         VITE_API_BASE_URL: `http://127.0.0.1:${MOCK_PORT}`,
         VITE_TEST_SIGN_IN: "1",
         ...(build === "pro" ? { VITE_TEST_PRO: "1" } : {}),
+        // Google and email sign-in, for smoke-signin.mjs only (Google's real script would load in the other builds).
+        ...(build === "signin" ? { VITE_GOOGLE_CLIENT_ID: "mock-google-client", VITE_EMAIL_SIGN_IN: "1" } : {}),
       },
     });
     if (run.status !== 0) process.exit(run.status ?? 1);
@@ -132,7 +135,7 @@ try {
     await waitFor(`http://127.0.0.1:${MOCK_PORT}/api/health`);
 
     console.log(`\n=== ${suite} (${needs.build} build; mock ${Object.entries(needs.mock).map(([k, v]) => `${k}=${v}`).join(" ")})`);
-    const run = spawnSync("node", [join(here, suite)], { cwd: root, stdio: "inherit", env: { ...process.env, SMOKE_URL: `http://127.0.0.1:${PREVIEW_PORT}` } });
+    const run = spawnSync("node", [join(here, suite)], { cwd: root, stdio: "inherit", env: { ...process.env, SMOKE_URL: `http://127.0.0.1:${PREVIEW_PORT}`, SMOKE_MOCK_URL: `http://127.0.0.1:${MOCK_PORT}` } });
     if (run.status !== 0) failed += 1;
   }
 } finally {

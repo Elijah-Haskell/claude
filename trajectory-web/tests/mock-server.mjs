@@ -7,7 +7,7 @@
 //   MOCK_PORT=4174 MOCK_PRO=1 node tests/mock-server.mjs
 //   MOCK_GCAL=1: every account has a Google Calendar connection made before (server/google-calendar.ts REST routes).
 import http from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { initTRPC, TRPCError } from "@trpc/server";
 import { createHTTPHandler } from "@trpc/server/adapters/standalone";
 import superjson from "superjson";
@@ -218,6 +218,29 @@ function mockTestReview(input) {
   };
 }
 
+/** Google sign-in in the mock: the client id test builds are made with (VITE_GOOGLE_CLIENT_ID). */
+const MOCK_GOOGLE_CLIENT_ID = "mock-google-client";
+/** Email sign-in in the mock: the last code "sent" to each address (read by the browser test through /__test/email-code). */
+const emailCodes = new Map();
+const sha256Hex = (value) => createHash("sha256").update(value, "utf8").digest("hex");
+const sha256B64 = (value) => createHash("sha256").update(value, "utf8").digest("base64url");
+/** The payload of a JWT, unchecked: the mock trusts the token's shape, the real server checks Google's signature. */
+function jwtPayload(token) {
+  try {
+    return JSON.parse(Buffer.from(String(token).split(".")[1] ?? "", "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+function signInAs(openId, fields) {
+  let user = users.get(openId);
+  if (!user) {
+    user = { id: nextUserId++, openId, name: fields.name || "Trajectory Student", email: fields.email ?? null, loginMethod: fields.loginMethod, lastSignedIn: new Date() };
+    users.set(openId, user);
+  }
+  return { sessionToken: newToken(openId), user };
+}
+
 const appRouter = t.router({
   auth: t.router({
     me: publicProcedure.query(({ ctx }) => ctx.user),
@@ -234,6 +257,32 @@ const appRouter = t.router({
         if (GCAL) gcal.delete(user.id);
         return { sessionToken: newToken(openId), user };
       }),
+    // The real server's design (see the web app's sign-in screen): Google's ID token with the browser's raw nonce.
+    google: publicProcedure.input(z.object({ idToken: z.string().min(10), nonce: z.string().min(16).max(256) })).mutation(({ input }) => {
+      const payload = jwtPayload(input.idToken);
+      if (!payload || payload.aud !== MOCK_GOOGLE_CLIENT_ID || typeof payload.sub !== "string" || payload.nonce !== sha256Hex(input.nonce)) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Google could not verify this sign-in. Please try again." });
+      }
+      return signInAs(`google:${payload.sub}`, { name: payload.name, email: payload.email, loginMethod: "google" });
+    }),
+    emailStart: publicProcedure.input(z.object({ email: z.string().email().max(320) })).mutation(({ input }) => {
+      const email = input.email.trim().toLowerCase();
+      emailCodes.set(email, { code: String(randomInt(0, 1_000_000)).padStart(6, "0"), tries: 0, until: Date.now() + 10 * 60_000 });
+      return { sent: true };
+    }),
+    emailVerify: publicProcedure.input(z.object({ email: z.string().email().max(320), code: z.string().regex(/^\d{6}$/) })).mutation(({ input }) => {
+      const email = input.email.trim().toLowerCase();
+      const pending = emailCodes.get(email);
+      if (!pending || pending.until < Date.now() || pending.tries >= 5) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "That code has expired. Send a new one." });
+      }
+      if (pending.code !== input.code) {
+        pending.tries += 1;
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "That code isn't right. Check the email and try again." });
+      }
+      emailCodes.delete(email);
+      return signInAs(`email:${sha256B64(email)}`, { email, loginMethod: "email" });
+    }),
     refresh: protectedProcedure.mutation(({ ctx }) => ({ sessionToken: newToken(ctx.user.openId) })),
     logout: publicProcedure.mutation(() => ({ success: true })),
   }),
@@ -336,6 +385,13 @@ const server = http.createServer((req, res) => {
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
     res.end();
+    return;
+  }
+  // Test only: the code last "emailed" to an address (the browser test reads it like a student reads the email).
+  if (url.pathname === "/__test/email-code") {
+    const pending = emailCodes.get((url.searchParams.get("email") ?? "").toLowerCase());
+    res.writeHead(pending ? 200 : 404, { "content-type": "application/json", "access-control-allow-origin": "*" });
+    res.end(JSON.stringify(pending ? { code: pending.code } : { error: "no code" }));
     return;
   }
   if (url.pathname === "/api/health") {

@@ -63,3 +63,14 @@ Change "Include in your email: Your iPhone model and iOS version, and the Trajec
 > shown at the bottom of Settings.
 
 Change the Restore Purchases answer to start with "In the iPhone app," so it is not read as web instructions.
+
+## When Google and email sign-in are switched on
+
+Add to the privacy policy's sign-in section:
+
+> You can also sign in with Google or with a code sent to your email address. With Google, Google tells us your
+> Google account's ID, name and email address. With an email code, we keep your email address and send the code
+> through our email provider, Resend; the code expires after 10 minutes and is stored only as a one-way hash until
+> then.
+
+(Name the provider actually chosen if it is not Resend.)

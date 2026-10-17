@@ -188,6 +188,12 @@ export interface Procedures {
     input: { identityToken: string; appleUserId: string; email?: string; givenName?: string; familyName?: string; authorizationCode?: string; nonce?: string };
     output: SignInResult;
   };
+  /** Sign in with Google: Google's ID token and the raw nonce whose SHA-256 Google put in it. */
+  "auth.google": { kind: "mutation"; input: { idToken: string; nonce: string }; output: SignInResult };
+  /** Email sign-in, step 1: send a 6-digit code (always answers sent, whether or not an account exists). */
+  "auth.emailStart": { kind: "mutation"; input: { email: string }; output: { sent: true } };
+  /** Email sign-in, step 2: the code from the email opens (or creates) the account. */
+  "auth.emailVerify": { kind: "mutation"; input: { email: string; code: string }; output: SignInResult };
   "auth.refresh": { kind: "mutation"; input: void; output: { sessionToken: string } };
   "auth.logout": { kind: "mutation"; input: void; output: { success: true } };
   "account.delete": { kind: "mutation"; input: void; output: { success: true; appleRevoked: boolean } };

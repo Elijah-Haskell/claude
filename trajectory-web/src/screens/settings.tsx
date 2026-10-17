@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { ACCOUNT_COPY } from "../engine/account-copy";
+import { signedInWithLabel } from "../lib/email-signin";
 import { sleepHoursLabel } from "../engine/classes-view";
 import { clampSleepTarget, formatSleepDuration, sleepWindowWarning } from "../engine/sleep-window";
 import type { UserPreferences } from "../engine/types";
@@ -52,6 +53,7 @@ export function SettingsScreen() {
   const { scheme, setScheme } = useTheme();
   const isDark = scheme === "dark";
   const { user: authUser, isAuthenticated, loading: authLoading } = useAuth();
+  const signedInLabel = signedInWithLabel(authUser?.loginMethod);
   // "Sign out?", then the plan is saved to the account one last time and removed from this browser (src/state/use-sign-out.ts).
   const signOut = useSignOut();
   // The saved plan's row is only there once the saved plan has started (<PlanSavedRow /> shows nothing while "off").
@@ -151,7 +153,7 @@ export function SettingsScreen() {
     <>
       {showSavedPlan ? <PlanSavedRow first={!desktop} /> : null}
       {authLoading ? null : isAuthenticated ? (
-        <FieldPickRow first={!showSavedPlan} icon="user" label={ACCOUNT_COPY.signedIn} detail={authUser?.email || ACCOUNT_COPY.signedInDetail} onPress={() => setOpen("account")} ariaLabel={`${ACCOUNT_COPY.signedIn}. ${ACCOUNT_COPY.signedInDetail} Sign out or delete the account`} />
+        <FieldPickRow first={!showSavedPlan} icon="user" label={signedInLabel} detail={authUser?.email || ACCOUNT_COPY.signedInDetail} onPress={() => setOpen("account")} ariaLabel={`${signedInLabel}. ${ACCOUNT_COPY.signedInDetail} Sign out or delete the account`} />
       ) : (
         <FieldRow first icon="user" label={ACCOUNT_COPY.notSignedIn} detail="Browser preview: the plan stays in this browser." />
       )}
@@ -242,9 +244,9 @@ export function SettingsScreen() {
       </Sheet>
 
       {/* The account: that the plan is saved to it, Sign out, Delete */}
-      <Sheet open={open === "account"} onClose={() => setOpen(null)} ariaLabel={ACCOUNT_COPY.signedIn}>
+      <Sheet open={open === "account"} onClose={() => setOpen(null)} ariaLabel={signedInLabel}>
         <SheetBody>
-          <SheetHead title={ACCOUNT_COPY.signedIn} onClose={() => setOpen(null)} />
+          <SheetHead title={signedInLabel} onClose={() => setOpen(null)} />
           {authUser?.email ? <p className="sheet-sub" style={{ marginTop: -8 }}>{authUser.email}</p> : null}
           <p className="sheet-sub" style={{ marginTop: -4 }}>{ACCOUNT_COPY.signedInDetail} Signing out removes it from this browser; sign in again to get it back.</p>
           <FieldGroup>

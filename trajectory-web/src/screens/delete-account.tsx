@@ -21,6 +21,12 @@ import { useColors } from "../ui/theme";
 /** The list, said for the web ("this iPhone" is this browser; the Apple Calendar row does not apply). */
 const DELETED_HERE = DELETED_WITH_ACCOUNT.filter((row) => row.icon !== "cal").map((row) => ({ ...row, text: row.text.replace("on this iPhone", "in this browser") }));
 
+/** The list for this account: an account made with Google or an email code has no Sign in with Apple link. */
+function deletedFor(loginMethod: string | null | undefined) {
+  if (loginMethod !== "google" && loginMethod !== "email") return DELETED_HERE;
+  return DELETED_HERE.map((row) => (row.icon === "user" ? { ...row, text: "Your Trajectory account" } : row));
+}
+
 const SUBSCRIPTION_NOTE =
   "Deleting your account does not cancel an active subscription. Cancel a web subscription from Settings → Trajectory Pro before deleting; a subscription bought on your iPhone is cancelled in iOS Settings → Apple Account → Subscriptions.";
 
@@ -28,7 +34,11 @@ export function DeleteAccountScreen() {
   const colors = useColors();
   const desktop = useDesktop();
   const wipeLocalData = useWipeLocalData();
-  const { loading: authLoading, logout } = useAuth();
+  const { loading: authLoading, logout, user } = useAuth();
+  const deletedRows = deletedFor(user?.loginMethod);
+  // The method is read before deleting: the account (and with it the signed-in user) is gone by the time it is told.
+  const signedInMethod = useRef(user?.loginMethod ?? null);
+  if (user) signedInMethod.current = user.loginMethod ?? null;
   const [isDeleting, setIsDeleting] = useState(false);
   const [asking, setAsking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -55,7 +65,11 @@ export function DeleteAccountScreen() {
         },
       });
       if (result.outcome === "deleted") {
-        tellAlert(DELETE_ACCOUNT_COPY.deletedTitle, accountDeletedMessage(result.appleRevoked).replace("on-device Trajectory data", "Trajectory data in this browser").replace("open iOS Settings → Apple Account → Sign-In & Security → Sign in with Apple", "open Apple Account settings (appleid.apple.com → Sign-In and Security → Sign in with Apple)"), DELETE_ACCOUNT_COPY.deletedButton);
+        const appleAccount = signedInMethod.current !== "google" && signedInMethod.current !== "email";
+        const deletedMessage = appleAccount
+          ? accountDeletedMessage(result.appleRevoked).replace("on-device Trajectory data", "Trajectory data in this browser").replace("open iOS Settings → Apple Account → Sign-In & Security → Sign in with Apple", "open Apple Account settings (appleid.apple.com → Sign-In and Security → Sign in with Apple)")
+          : "Your Trajectory account, the plan saved to it, uploaded files, and Trajectory data in this browser have been permanently deleted.";
+        tellAlert(DELETE_ACCOUNT_COPY.deletedTitle, deletedMessage, DELETE_ACCOUNT_COPY.deletedButton);
         return;
       }
       if (result.outcome === "failed") tellAlert(DELETE_ACCOUNT_COPY.failedTitle, DELETE_ACCOUNT_COPY.failed);
@@ -80,7 +94,7 @@ export function DeleteAccountScreen() {
         <DesktopPageHead back={{ onPress: () => goBack("settings"), ariaLabel: "Back" }} eyebrow="Account" title="Delete account" subtitle={DELETE_ACCOUNT_COPY.sub} />
 
         <Panel title="What is deleted" icon="trash" tint={colors.error}>
-          {DELETED_HERE.map((row) => (
+          {deletedRows.map((row) => (
             <div key={row.text} className="row" style={{ minHeight: 56 }}>
               <span className="well" style={{ background: `${colors.error}1f` }}>
                 <Icon name={row.icon} size={18} color={colors.error} />
@@ -129,7 +143,7 @@ export function DeleteAccountScreen() {
       <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <SectionLabel title="What is deleted" />
         <FieldGroup>
-          {DELETED_HERE.map((row, index) => (
+          {deletedRows.map((row, index) => (
             <div key={row.text} style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 50, padding: "8px 14px", borderTop: index > 0 ? `1px solid ${colors.border}` : "none" }}>
               <span style={{ width: 34, height: 34, borderRadius: 10, background: `${colors.error}1f`, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <Icon name={row.icon} size={18} color={colors.error} />
