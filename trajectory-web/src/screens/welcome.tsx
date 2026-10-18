@@ -17,9 +17,9 @@ import { alpha } from "../engine/design";
 import { WEBSITE_TERMS_URL } from "../shared/const";
 import { mutate, type SignInResult } from "../lib/api";
 import { appleSignInAvailable, signInWithApple } from "../lib/apple-signin";
-import { EMAIL_SIGN_IN, TEST_SIGN_IN } from "../lib/config";
+import { TEST_SIGN_IN } from "../lib/config";
 import { googleSignInAvailable } from "../lib/google-signin";
-import { EmailSignIn, GoogleSignInButton, OrDivider } from "../components/sign-in-methods";
+import { GoogleSignInButton } from "../components/sign-in-methods";
 
 /** The test build's button (VITE_TEST_SIGN_IN=1 only; the string is dropped from every other build with it). */
 const TEST_SIGN_IN_LABEL = TEST_SIGN_IN ? "Test sign-in" : "";
@@ -185,7 +185,7 @@ export function WelcomeScreen() {
     await finishWith(await mutate("auth.apple", credential, { quiet: true, timeoutMs: 20_000 }));
   }
 
-  /** Any way in ends here: the server's session for the account (Apple, Google or an email code). */
+  /** Any way in ends here: the server's session for the account (Apple or Google). */
   async function finishWith(result: SignInResult) {
     const account = await completeSignIn(result);
     if (!account || !(await authRefresh())) throw new Error("We could not sign you in. Please try again.");
@@ -259,16 +259,10 @@ export function WelcomeScreen() {
                   {googleSignInAvailable() ? (
                     <GoogleSignInButton disabled={isSigningIn} onSignedIn={finishOther} onError={(message) => void showAlert({ title: "Sign in unavailable", message, buttons: [{ text: "OK" }] })} />
                   ) : null}
-                  {EMAIL_SIGN_IN ? (
-                    <>
-                      {appleSignInAvailable() || googleSignInAvailable() ? <OrDivider /> : null}
-                      <EmailSignIn disabled={isSigningIn} onSignedIn={finishOther} />
-                    </>
-                  ) : null}
-                  {!appleSignInAvailable() && !googleSignInAvailable() && !EMAIL_SIGN_IN ? (
+                  {!appleSignInAvailable() && !googleSignInAvailable() ? (
                     <Note tone="gold" icon="info">Sign-in is not set up for this website yet. The iPhone app signs in as usual.</Note>
                   ) : null}
-                  {googleSignInAvailable() || EMAIL_SIGN_IN ? (
+                  {googleSignInAvailable() ? (
                     <p className="caption" style={{ textAlign: "center", margin: 0 }}>Using the iPhone app too? It signs in with Apple, so use Apple here to share one plan.</p>
                   ) : null}
                   {TEST_SIGN_IN ? <PrimaryButton size="lg" fullWidth tone="ghost" label={TEST_SIGN_IN_LABEL} onPress={() => void handleTestSignIn()} disabled={isSigningIn} /> : null}

@@ -21,9 +21,9 @@ import { useColors } from "../ui/theme";
 /** The list, said for the web ("this iPhone" is this browser; the Apple Calendar row does not apply). */
 const DELETED_HERE = DELETED_WITH_ACCOUNT.filter((row) => row.icon !== "cal").map((row) => ({ ...row, text: row.text.replace("on this iPhone", "in this browser") }));
 
-/** The list for this account: an account made with Google or an email code has no Sign in with Apple link. */
+/** The list for this account: an account made with Google has no Sign in with Apple link. */
 function deletedFor(loginMethod: string | null | undefined) {
-  if (loginMethod !== "google" && loginMethod !== "email") return DELETED_HERE;
+  if (loginMethod !== "google") return DELETED_HERE;
   return DELETED_HERE.map((row) => (row.icon === "user" ? { ...row, text: "Your Trajectory account" } : row));
 }
 
@@ -65,7 +65,7 @@ export function DeleteAccountScreen() {
         },
       });
       if (result.outcome === "deleted") {
-        const appleAccount = signedInMethod.current !== "google" && signedInMethod.current !== "email";
+        const appleAccount = signedInMethod.current !== "google";
         const deletedMessage = appleAccount
           ? accountDeletedMessage(result.appleRevoked).replace("on-device Trajectory data", "Trajectory data in this browser").replace("open iOS Settings → Apple Account → Sign-In & Security → Sign in with Apple", "open Apple Account settings (appleid.apple.com → Sign-In and Security → Sign in with Apple)")
           : "Your Trajectory account, the plan saved to it, uploaded files, and Trajectory data in this browser have been permanently deleted.";

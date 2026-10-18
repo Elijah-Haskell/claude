@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { ACCOUNT_COPY } from "../engine/account-copy";
-import { signedInWithLabel } from "../lib/email-signin";
+import { signedInWithLabel } from "../lib/sign-in-label";
 import { sleepHoursLabel } from "../engine/classes-view";
 import { clampSleepTarget, formatSleepDuration, sleepWindowWarning } from "../engine/sleep-window";
 import type { UserPreferences } from "../engine/types";

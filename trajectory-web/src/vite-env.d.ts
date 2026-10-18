@@ -17,6 +17,4 @@ interface ImportMetaEnv {
   readonly VITE_TEST_PRO?: string;
   /** Google Identity Services web client id: shows "Continue with Google" (the server must accept it). */
   readonly VITE_GOOGLE_CLIENT_ID?: string;
-  /** "1" shows sign-in with an emailed code (the server must be able to send it). */
-  readonly VITE_EMAIL_SIGN_IN?: string;
 }
