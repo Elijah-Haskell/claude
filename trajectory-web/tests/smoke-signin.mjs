@@ -71,7 +71,7 @@ for (const size of [{ width: 390, height: 844, name: "phone" }, { width: 1440, h
   await page.goto(`${base}/`, { waitUntil: "networkidle" });
   await check("the sign-in screen offers Google, and says the iPhone app signs in with Apple", async () => {
     await page.getByRole("button", { name: "Mock Google" }).waitFor({ timeout: 15000 });
-    await page.getByText(/Using the iPhone app too\?/).first().waitFor({ timeout: 5000 });
+    await page.getByText(/Using the iPhone app too\?.*A Google sign-in is a separate account\./).first().waitFor({ timeout: 5000 });
   });
   await check("Continue with Google signs in, with the nonce the app gave Google", async () => {
     await page.getByRole("button", { name: "Mock Google" }).click();

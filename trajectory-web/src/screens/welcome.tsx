@@ -263,7 +263,7 @@ export function WelcomeScreen() {
                     <Note tone="gold" icon="info">Sign-in is not set up for this website yet. The iPhone app signs in as usual.</Note>
                   ) : null}
                   {googleSignInAvailable() ? (
-                    <p className="caption" style={{ textAlign: "center", margin: 0 }}>Using the iPhone app too? It signs in with Apple, so use Apple here to share one plan.</p>
+                    <p className="caption" style={{ textAlign: "center", margin: 0 }}>Using the iPhone app too? It signs in with Apple, so use Apple here to see the same plan and Pro. A Google sign-in is a separate account.</p>
                   ) : null}
                   {TEST_SIGN_IN ? <PrimaryButton size="lg" fullWidth tone="ghost" label={TEST_SIGN_IN_LABEL} onPress={() => void handleTestSignIn()} disabled={isSigningIn} /> : null}
                   {isSigningIn ? <p className="caption" style={{ textAlign: "center", margin: 0 }}>Signing you in…</p> : null}
