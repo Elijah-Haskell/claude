@@ -5,6 +5,8 @@
 import { h, select, toast } from "../dom.js";
 import { post, patch } from "../api.js";
 import { hitList, decisionChoices, decisionProblem, countsText } from "./conflicts.js";
+import { button, iconButton, useStyles } from "../ui/components.js";
+import { icon } from "../ui/icons.js";
 
 const PARTY_ROLES = [
   { value: "adverse_party", label: "Adverse party" },
@@ -22,6 +24,7 @@ let seq = 0;
  * onDeclined: called after a "declined" decision is recorded (the dialog closes).
  */
 export function intakeConflicts({ client, submit, onDeclined, contacts }) {
+  useStyles("contacts");
   const listId = `intake-contacts-${++seq}`;
   const rows = h("ol.intake-parties");
   let check = null; // the saved check, once run
@@ -32,7 +35,7 @@ export function intakeConflicts({ client, submit, onDeclined, contacts }) {
   const results = h("div.intake-results");
   const status = h("p.intake-status");
   const err = h("p.error-text", { role: "alert" });
-  const panel = h("section.intake-panel", { hidden: true, "aria-live": "polite" }, h("h3", "Conflict check"), status, results, decide.el, err);
+  const panel = h("section.intake-panel", { hidden: true, "aria-live": "polite" }, h("h3.intake-panel-title", icon("conflicts", { size: 16 }), "Conflict check"), status, results, decide.el, err);
 
   function partyRow(p = {}) {
     const name = h("input", { list: listId, placeholder: "Name", maxlength: 200, autocomplete: "off", "aria-label": "Party name", value: p.name || "" });
@@ -45,7 +48,7 @@ export function intakeConflicts({ client, submit, onDeclined, contacts }) {
       { "aria-label": "Person or company" },
     );
     const role = select(PARTY_ROLES, p.role || "adverse_party", { "aria-label": "Role" });
-    const row = h("li.intake-party", name, kind, role, h("button.icon-btn.danger", { type: "button", "aria-label": "Remove this party", title: "Remove", onclick: () => (row.remove(), sync()) }, "×"));
+    const row = h("li.intake-party", name, kind, role, iconButton("x", "Remove this party", { size: "sm", variant: "danger", onclick: () => (row.remove(), sync()) }));
     const known = () => contacts.find((c) => c.name.toLowerCase() === name.value.trim().toLowerCase());
     name.addEventListener("input", () => {
       const c = known();
@@ -61,10 +64,10 @@ export function intakeConflicts({ client, submit, onDeclined, contacts }) {
   const partiesField = h(
     "fieldset.intake-fieldset",
     h("legend", "Other parties"),
-    h("p.muted.small", "The other side, their lawyers and anyone else involved. They are checked for conflicts with the client before the matter opens."),
+    h("p.intake-hint", "The other side, their lawyers and anyone else involved. They are checked for conflicts with the client before the matter opens."),
     rows,
     h("datalist", { id: listId }, contacts.map((c) => h("option", { value: c.name }))),
-    h("button.btn.small", { type: "button", onclick: () => (rows.append(partyRow()), rows.lastElementChild.querySelector("input").focus(), sync()) }, "Add a party"),
+    h("div", button("Add a party", { size: "sm", variant: "ghost", icon: "plus", onclick: () => (rows.append(partyRow()), rows.lastElementChild.querySelector("input").focus(), sync()) })),
   );
   rows.append(partyRow());
 
@@ -118,8 +121,8 @@ export function intakeConflicts({ client, submit, onDeclined, contacts }) {
         ...(own.length
           ? [h(
               "div.intake-own",
-              h("p.small", h("strong", "Already on file, nothing flagged: ")),
-              h("ul.plain.small", own.map((x) => h("li", h("a", { href: `#/contacts/${x.contactId}`, target: "_blank" }, x.name), x.involvements?.length ? h("span.muted", ` · ${x.involvements.map((i) => `${i.text}`).join("; ")}`) : null))),
+              h("p.intake-own-title", icon("circle-check", { size: 14 }), "Already on file, nothing flagged"),
+              h("ul.plain.intake-own-list", own.map((x) => h("li", h("a", { href: `#/contacts/${x.contactId}`, target: "_blank" }, x.name), x.involvements?.length ? h("span.muted", ` · ${x.involvements.map((i) => `${i.text}`).join("; ")}`) : null))),
             )]
           : []),
         ...(rest.length || !own.length ? [hitList(rest, { compact: true })] : []),

@@ -7,6 +7,7 @@ import { h, select, toast } from "../dom.js";
 import { get, post, put, patch, del } from "../api.js";
 import { state, users } from "../state.js";
 import { intakeOptions } from "./leads.js";
+import { pageHeader, card, button, iconButton, pill, avatar, emptyState, field, useStyles } from "../ui/components.js";
 
 const fail = (err) => toast(err.message || String(err), { error: true });
 const absolute = (path) => location.origin + path;
@@ -15,34 +16,29 @@ const TYPE_LABELS = { short: "Short text", long: "Paragraph", email: "Email", ph
 const MAP_LABELS = { none: "Nothing (keep as an answer)", name: "Name", email: "Email", phone: "Phone", source: "How they heard about us", summary: "What they need", opposing_party: "Other parties (conflict check)" };
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-function backToSettings() {
-  return h("a.back", { href: "#/settings" }, "← Settings");
-}
+const SETTINGS_CRUMB = { label: "Settings", href: "#/settings" };
 
 function linkBox(label, url, id) {
   return h(
     "div.share-link",
-    h("label.small.muted", { for: id }, label),
+    h("label.field-label", { for: id }, label),
     h(
       "div.share-row",
-      h("input", { id, readonly: true, value: url, onfocus: (e) => e.target.select() }),
-      h(
-        "button.btn.small",
-        {
-          type: "button",
-          onclick: async () => {
-            try {
-              await navigator.clipboard.writeText(url);
-              toast("Link copied");
-            } catch {
-              document.getElementById(id)?.select();
-              toast("Select the link and copy it");
-            }
-          },
+      h("input.share-input", { id, readonly: true, value: url, onfocus: (e) => e.target.select() }),
+      button("Copy", {
+        size: "sm",
+        icon: "copy",
+        onclick: async () => {
+          try {
+            await navigator.clipboard.writeText(url);
+            toast("Link copied");
+          } catch {
+            document.getElementById(id)?.select();
+            toast("Select the link and copy it");
+          }
         },
-        "Copy",
-      ),
-      h("a.btn.small", { href: url, target: "_blank", rel: "noopener" }, "Open"),
+      }),
+      button("Open", { size: "sm", icon: "external-link", href: url, target: "_blank", rel: "noopener" }),
     ),
   );
 }
@@ -50,6 +46,7 @@ function linkBox(label, url, id) {
 // ------------------------------------------------------------- form list
 
 export async function intakeFormsView() {
+  useStyles("intake");
   const opts = await intakeOptions(true);
   const forms = await get("/intake/forms");
   const s = opts.settings;
@@ -58,8 +55,8 @@ export async function intakeFormsView() {
   const owner = select([{ value: "", label: "No one" }, ...users().map((u) => ({ value: u.id, label: u.name }))], s.defaultOwnerId ?? "");
   const firstCall = h("input", { type: "number", min: 0, max: 30, value: s.newLeadTaskDays, class: "num-input" });
   const follow = h("input", { type: "number", min: 1, max: 60, value: s.engagementFollowupDays, class: "num-input" });
-  const settingsCard = h(
-    "form.card.form-grid",
+  const settingsForm = h(
+    "form.form-grid",
     {
       onsubmit: async (e) => {
         e.preventDefault();
@@ -77,34 +74,42 @@ export async function intakeFormsView() {
         }
       },
     },
-    h("h2", "Intake settings"),
-    h("label", "Firm name on public pages", firm),
-    h("div.form-row", h("label", "New leads go to", owner), h("label", "First call reminder, business days after a lead arrives", firstCall), h("label", "Follow up on engagement letters after (business days)", follow)),
-    h("div.form-actions", h("button.btn.primary", { type: "submit" }, "Save settings")),
+    field("Firm name on public pages", firm, { hint: "Shown at the top of the intake form and the booking page." }),
+    h(
+      "div.form-row",
+      field("New leads go to", owner),
+      field("First call reminder", firstCall, { hint: "Business days after a lead arrives" }),
+      field("Follow up on engagement letters", follow, { hint: "Business days after the letter is sent" }),
+    ),
+    h("div.form-actions", button("Save settings", { variant: "primary", type: "submit" })),
   );
+  const settingsCard = card({ title: "Intake settings", icon: "settings", className: "intake-settings-card", body: settingsForm });
 
   const list = forms.length
     ? h(
         "ul.plain.form-list",
         forms.map((f) =>
-          h(
-            "li.card",
-            h(
-              "div.form-list-head",
-              h("h3", h("a", { href: `#/settings/intake-forms/${f.id}` }, f.name)),
-              h("span.tag" + (f.active ? ".good" : ""), f.active ? "Accepting answers" : "Turned off"),
-            ),
-            h("p.small.muted", `${f.practiceArea || "Any practice area"} · ${f.submissions} ${f.submissions === 1 ? "lead" : "leads"} so far`),
-            linkBox("Public link (put it on the firm's website or send it):", absolute(f.publicPath), `form-link-${f.id}`),
-          ),
+          card({
+            tag: "li",
+            headingLevel: 3,
+            icon: "clipboard-list",
+            title: h("a", { href: `#/settings/intake-forms/${f.id}` }, f.name),
+            subtitle: `${f.practiceArea || "Any practice area"} · ${f.submissions} ${f.submissions === 1 ? "lead" : "leads"} so far`,
+            actions: [pill(f.active ? "Accepting answers" : "Turned off", f.active ? "success" : "neutral"), button("Edit", { size: "sm", icon: "pencil", href: `#/settings/intake-forms/${f.id}` })],
+            body: linkBox("Public link: put it on the firm's website or send it", absolute(f.publicPath), `form-link-${f.id}`),
+          }),
         ),
       )
-    : h("div.empty-big.card", h("p", "No intake forms yet."), h("p", "Make one per practice area, then put its link on the firm's website."));
+    : card({ body: emptyState({ icon: "clipboard-list", title: "No intake forms yet", body: "Make one per practice area, then put its link on the firm's website.", action: button("New form", { variant: "primary", icon: "plus", href: "#/settings/intake-forms/new" }) }) });
 
   return h(
     "div.page.intake.settings",
-    backToSettings(),
-    h("div.page-head", h("div", h("h1", "Intake forms"), h("p.sub", "Each form has a public link. Every form sent in becomes a lead, with a conflict check.")), h("a.btn.primary", { href: "#/settings/intake-forms/new" }, "New form")),
+    pageHeader({
+      title: "Intake forms",
+      breadcrumbs: [SETTINGS_CRUMB, { label: "Intake forms" }],
+      subtitle: "Each form has a public link. Every form sent in becomes a lead, with a conflict check.",
+      actions: [button("New form", { variant: "primary", icon: "plus", href: "#/settings/intake-forms/new" })],
+    }),
     list,
     settingsCard,
   );
@@ -113,6 +118,7 @@ export async function intakeFormsView() {
 // ---------------------------------------------------------- form builder
 
 export async function intakeFormEditView([id]) {
+  useStyles("intake");
   const opts = await intakeOptions();
   const isNew = id === "new";
   const form = isNew
@@ -133,24 +139,23 @@ export async function intakeFormEditView([id]) {
     qBox.replaceChildren(
       ...fields.map((f, i) => {
         const opt = h("textarea", { rows: 3, value: (f.options || []).join("\n"), "aria-label": "Choices, one per line", oninput: (e) => (f.options = e.target.value.split("\n")) });
-        const optWrap = h("label.q-options", { hidden: f.type !== "choice" }, "Choices, one per line", opt);
+        const optWrap = h("label.field.q-options", { hidden: f.type !== "choice" }, h("span.field-label", "Choices, one per line"), opt);
         return h(
-          "li.q.card",
+          "li.q.card.card-v2",
           h(
             "div.q-head",
             h("span.q-n", String(i + 1)),
             h("input.q-label", { value: f.label, maxlength: 300, "aria-label": `Question ${i + 1}`, placeholder: "The question", oninput: (e) => (f.label = e.target.value) }),
             h(
               "span.q-tools",
-              h("button.icon-btn", { type: "button", "aria-label": "Move up", title: "Move up", disabled: i === 0, onclick: () => (([fields[i - 1], fields[i]] = [fields[i], fields[i - 1]]), drawQuestions()) }, "↑"),
-              h("button.icon-btn", { type: "button", "aria-label": "Move down", title: "Move down", disabled: i === fields.length - 1, onclick: () => (([fields[i + 1], fields[i]] = [fields[i], fields[i + 1]]), drawQuestions()) }, "↓"),
-              h("button.icon-btn.danger", { type: "button", "aria-label": "Remove question", title: "Remove", onclick: () => (fields.splice(i, 1), drawQuestions()) }, "×"),
+              iconButton("arrow-up", "Move up", { size: "sm", disabled: i === 0, onclick: () => (([fields[i - 1], fields[i]] = [fields[i], fields[i - 1]]), drawQuestions()) }),
+              iconButton("arrow-down", "Move down", { size: "sm", disabled: i === fields.length - 1, onclick: () => (([fields[i + 1], fields[i]] = [fields[i], fields[i + 1]]), drawQuestions()) }),
+              iconButton("trash-2", "Remove question", { size: "sm", variant: "danger", onclick: () => (fields.splice(i, 1), drawQuestions()) }),
             ),
           ),
           h(
             "div.form-row",
-            h(
-              "label",
+            field(
               "Answer type",
               select(
                 opts.fieldTypes.map((t) => ({ value: t, label: TYPE_LABELS[t] })),
@@ -158,10 +163,10 @@ export async function intakeFormEditView([id]) {
                 { onchange: (e) => ((f.type = e.target.value), (optWrap.hidden = f.type !== "choice")) },
               ),
             ),
-            h("label", "Fills in on the lead", select(opts.fieldMaps.map((m) => ({ value: m, label: MAP_LABELS[m] })), f.mapsTo || "none", { onchange: (e) => (f.mapsTo = e.target.value) })),
+            field("Fills in on the lead", select(opts.fieldMaps.map((m) => ({ value: m, label: MAP_LABELS[m] })), f.mapsTo || "none", { onchange: (e) => (f.mapsTo = e.target.value) })),
             h("label.check-line.q-req", h("input", { type: "checkbox", checked: !!f.required, onchange: (e) => (f.required = e.target.checked) }), "Required"),
           ),
-          h("label.q-help", "Help text (optional)", h("input", { value: f.help || "", maxlength: 1000, oninput: (e) => (f.help = e.target.value) })),
+          field("Help text", h("input", { value: f.help || "", maxlength: 1000, oninput: (e) => (f.help = e.target.value) }), { optional: true, className: "q-help" }),
           optWrap,
         );
       }),
@@ -198,18 +203,15 @@ export async function intakeFormEditView([id]) {
   const page = h(
     "form.page.intake.settings.form-builder",
     { onsubmit: save },
-    h("a.back", { href: "#/settings/intake-forms" }, "← Intake forms"),
-    h(
-      "div.page-head",
-      h("div", h("h1", isNew ? "New intake form" : form.name), h("p.sub", "Questions people answer before the firm calls them.")),
-      isNew
+    pageHeader({
+      title: isNew ? "New intake form" : form.name,
+      breadcrumbs: [SETTINGS_CRUMB, { label: "Intake forms", href: "#/settings/intake-forms" }, { label: isNew ? "New form" : form.name }],
+      subtitle: "Questions people answer before the firm calls them.",
+      actions: isNew
         ? null
-        : h(
-            "div.head-actions",
-            h(
-              "button.btn",
-              {
-                type: "button",
+        : [
+            button("New link", {
+                icon: "rotate-ccw",
                 onclick: async () => {
                   if (!confirm("Make a new public link? The current link will stop working.")) return;
                   try {
@@ -219,13 +221,10 @@ export async function intakeFormEditView([id]) {
                     fail(ex);
                   }
                 },
-              },
-              "New link",
-            ),
-            h(
-              "button.btn.danger-text",
-              {
-                type: "button",
+            }),
+            button("Delete form", {
+                variant: "danger",
+                icon: "trash-2",
                 onclick: async () => {
                   if (!confirm(`Delete “${form.name}”? Its link stops working. Leads it brought in are kept.`)) return;
                   try {
@@ -235,28 +234,28 @@ export async function intakeFormEditView([id]) {
                     fail(ex);
                   }
                 },
-              },
-              "Delete form",
-            ),
-          ),
-    ),
-    isNew ? null : linkBox("Public link:", absolute(form.publicPath), "form-link"),
-    h(
-      "section.card.form-grid",
-      h("h2", "About this form"),
-      h("label", "Form name (shown as the page title)", name),
-      h("div.form-row", h("label", "Practice area for new leads", area), h("label", "New leads go to", owner), h("label.check-line.q-req", active, "Accepting answers")),
-      h("label", "Introduction", intro),
-      h("label", "Thank-you message", thanks),
-    ),
-    h("h2.report-h", "Questions"),
-    h("p.small.muted", "One question must fill in the Name, and one the Email or Phone. Answers that fill in “Other parties” are checked for conflicts automatically."),
+            }),
+          ],
+    }),
+    card({
+      title: "About this form",
+      icon: "clipboard-list",
+      body: h(
+        "div.form-grid",
+        isNew ? null : linkBox("Public link", absolute(form.publicPath), "form-link"),
+        field("Form name", name, { hint: "Shown as the page title" }),
+        h("div.form-row", field("Practice area for new leads", area), field("New leads go to", owner), h("label.check-line.q-req", active, "Accepting answers")),
+        field("Introduction", intro),
+        field("Thank-you message", thanks),
+      ),
+    }),
+    h("div.section-title.intake-q-title", h("h2", "Questions"), h("p.intake-hint", "One question must fill in the Name, and one the Email or Phone. Answers that fill in “Other parties” are checked for conflicts automatically.")),
     qBox,
     h(
       "div.q-add",
-      h("button.btn", { type: "button", onclick: () => (fields.push({ label: "", type: "short", required: false, help: "", options: [], mapsTo: "none" }), drawQuestions(), qBox.lastElementChild?.querySelector(".q-label")?.focus()) }, "Add a question"),
+      button("Add a question", { icon: "plus", onclick: () => (fields.push({ label: "", type: "short", required: false, help: "", options: [], mapsTo: "none" }), drawQuestions(), qBox.lastElementChild?.querySelector(".q-label")?.focus()) }),
     ),
-    h("div.save-bar", err, h("div.save-actions", h("a.btn", { href: "#/settings/intake-forms" }, "Back"), h("button.btn.primary", { type: "submit" }, "Save form"))),
+    h("div.save-bar", err, h("div.save-actions", button("Back", { href: "#/settings/intake-forms" }), button("Save form", { variant: "primary", type: "submit" }))),
   );
   return page;
 }
@@ -264,6 +263,7 @@ export async function intakeFormEditView([id]) {
 // ----------------------------------------------------------- availability
 
 export async function bookingSettingsView() {
+  useStyles("intake");
   const [opts, people] = await Promise.all([intakeOptions(true), get("/intake/availability")]);
   const s = opts.settings;
   const notice = h("input", { type: "number", min: 0, max: 336, value: s.minNoticeHours, class: "num-input" });
@@ -272,7 +272,7 @@ export async function bookingSettingsView() {
   const bookingUrl = absolute(`/intake/book.html?b=${encodeURIComponent(s.bookingToken)}`);
 
   const general = h(
-    "form.card.form-grid",
+    "form.form-grid",
     {
       onsubmit: async (e) => {
         e.preventDefault();
@@ -285,16 +285,14 @@ export async function bookingSettingsView() {
         }
       },
     },
-    h("h2", "Booking page"),
-    linkBox("Public booking link:", bookingUrl, "booking-link"),
-    h("div.form-row.two", h("label", "Least notice, in hours", notice), h("label", "Show this many days ahead", ahead)),
-    h("label", "Note on the booking page", intro),
+    linkBox("Public booking link", bookingUrl, "booking-link"),
+    h("div.form-row.two", field("Least notice, in hours", notice), field("Show this many days ahead", ahead)),
+    field("Note on the booking page", intro),
     h(
       "div.form-actions",
-      h(
-        "button.btn",
-        {
-          type: "button",
+      button("New link", {
+          variant: "ghost",
+          icon: "rotate-ccw",
           onclick: async () => {
             if (!confirm("Make a new booking link? The current link, and links already sent to leads, will stop working.")) return;
             try {
@@ -304,10 +302,8 @@ export async function bookingSettingsView() {
               fail(err);
             }
           },
-        },
-        "New link",
-      ),
-      h("button.btn.primary", { type: "submit" }, "Save"),
+      }),
+      button("Save", { variant: "primary", type: "submit" }),
     ),
   );
 
@@ -324,17 +320,17 @@ export async function bookingSettingsView() {
             "li.window-row",
             select(WEEKDAYS.map((d, n) => ({ value: n, label: d })), w.weekday, { "aria-label": "Day", onchange: (e) => (w.weekday = Number(e.target.value)) }),
             h("input", { type: "time", value: w.start, "aria-label": "From", step: 300, onchange: (e) => (w.start = e.target.value) }),
-            h("span.muted", "to"),
+            h("span.window-to", "to"),
             h("input", { type: "time", value: w.end, "aria-label": "Until", step: 300, onchange: (e) => (w.end = e.target.value) }),
-            h("button.icon-btn.danger", { type: "button", "aria-label": "Remove", title: "Remove", onclick: () => (windows.splice(i, 1), drawRows()) }, "×"),
+            iconButton("x", "Remove these hours", { size: "sm", variant: "danger", onclick: () => (windows.splice(i, 1), drawRows()) }),
           ),
         ),
       );
-      if (!windows.length) rows.append(h("li.empty.small", "No hours set."));
+      if (!windows.length) rows.append(h("li.window-empty", "No hours set. Add the times this person can meet new clients."));
     }
     drawRows();
     return h(
-      "form.card.form-grid.person-hours",
+      "form.card.card-v2.form-grid.person-hours" + (p.takesConsultations ? ".is-on" : ""),
       {
         dataset: { user: String(p.userId) },
         onsubmit: async (e) => {
@@ -349,33 +345,38 @@ export async function bookingSettingsView() {
           }
         },
       },
-      h("div.form-list-head", h("h2", p.name), h("label.check-line", takes, "Takes consultations")),
-      h("div.form-row.two", h("label", "Consultation length (minutes)", len), h("label", "Where", loc)),
-      h("div.small.muted", "Weekly hours, Central time:"),
+      h("div.form-list-head", h("div.person-hours-who", avatar(p.name, { size: "sm" }), h("h2", p.name)), h("label.check-line", takes, "Takes consultations")),
+      h("div.form-row.two", field("Length (minutes)", len), field("Where", loc)),
+      h("div.field-label", "Weekly hours, Central time"),
       rows,
       h(
         "div.form-actions",
-        h("button.btn.small", { type: "button", onclick: () => (windows.push({ weekday: 1, start: "09:00", end: "12:00" }), drawRows()) }, "Add hours"),
-        h(
-          "button.btn.small",
-          { type: "button", title: "Copy the first window to Monday through Friday", onclick: () => {
+        button("Add hours", { size: "sm", variant: "ghost", icon: "plus", onclick: () => (windows.push({ weekday: 1, start: "09:00", end: "12:00" }), drawRows()) }),
+        button("Same hours Mon–Fri", {
+          size: "sm",
+          variant: "ghost",
+          title: "Copy the first window to Monday through Friday",
+          onclick: () => {
             const w = windows[0] ?? { start: "09:00", end: "12:00" };
             windows = [1, 2, 3, 4, 5].map((d) => ({ weekday: d, start: w.start, end: w.end }));
             drawRows();
-          } },
-          "Same hours Mon–Fri",
-        ),
-        h("button.btn.primary.small", { type: "submit" }, "Save"),
+          },
+        }),
+        button("Save", { size: "sm", variant: "primary", type: "submit" }),
       ),
     );
   }
 
   return h(
     "div.page.intake.settings",
-    backToSettings(),
-    h("div.page-head", h("div", h("h1", "Booking availability"), h("p.sub", "When people can book a consultation online. Times already on someone's calendar are never offered."))),
-    general,
-    h("h2.report-h", "Who takes consultations"),
+    pageHeader({
+      title: "Booking availability",
+      breadcrumbs: [SETTINGS_CRUMB, { label: "Booking availability" }],
+      subtitle: "When people can book a consultation online. Times already on someone's calendar are never offered.",
+      actions: [button("Open booking page", { icon: "external-link", href: bookingUrl, target: "_blank", rel: "noopener" })],
+    }),
+    card({ title: "Booking page", icon: "calendar", body: general }),
+    h("div.section-title.intake-q-title", h("h2", "Who takes consultations"), h("p.intake-hint", "Only people who take consultations, with hours set, are offered on the booking page.")),
     h("div.hours-grid", people.map(personCard)),
   );
 }

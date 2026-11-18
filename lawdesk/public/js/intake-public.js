@@ -3,6 +3,7 @@
 // third-party scripts. All text from the firm or the visitor goes in as text, never as HTML.
 
 import { h } from "./dom.js";
+import { icon } from "./ui/icons.js";
 
 const main = document.getElementById("main");
 const params = new URLSearchParams(location.search);
@@ -23,12 +24,36 @@ async function call(method, path, body) {
   return data;
 }
 
+/** The firm's initials for the header seal: "Reyes & Chen, Attorneys at Law" -> "RC". */
+export function monogram(name) {
+  const words = String(name || "")
+    .split(",")[0]
+    .split(/\s+/)
+    .filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of|the|llc|llp|pa|pc|law|firm|office|offices)$/i.test(w));
+  return words
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+}
+
 function setFirm(name) {
   document.getElementById("firm").textContent = name;
+  const m = document.getElementById("monogram");
+  if (m) {
+    m.textContent = monogram(name);
+    m.hidden = !m.textContent;
+  }
 }
 
 function problem(message) {
-  main.replaceChildren(h("section.public-card", h("h1", "This page isn't available"), h("p", message)));
+  main.replaceChildren(
+    h("section.public-card.public-problem", h("span.public-icon.warn", icon("circle-alert", { size: 22 })), h("h1", "This page isn't available"), h("p.lead-in", message), h("p.public-note", "If you were trying to reach the firm, please call or email the office directly.")),
+  );
+}
+
+/** A short line on what happens to the answers. */
+function reassurance(text) {
+  return h("div.public-assure", icon("lock", { size: 15 }), h("span", text));
 }
 
 /** Hidden from people (and screen readers); bots that fill every field give themselves away. */
@@ -91,14 +116,14 @@ async function formPage() {
     def.fields.map((f) =>
       h(
         "div.public-field",
-        h("label", { for: f.type === "yesno" ? null : `q-${f.id}`, id: `q-${f.id}-label` }, f.label, f.required ? h("span.req", { "aria-hidden": "true" }, " *") : null, f.required ? null : h("span.opt", " (optional)")),
+        h("label.public-label", { for: f.type === "yesno" ? null : `q-${f.id}`, id: `q-${f.id}-label` }, f.label, f.required ? h("span.req", { "aria-hidden": "true" }, " *") : null, f.required ? null : h("span.opt", " (optional)")),
         f.help ? h("p.help", { id: `q-${f.id}-help` }, f.help) : null,
         inputFor(f),
       ),
     ),
     honeypot(),
     err,
-    h("div.public-actions", send),
+    h("div.public-actions", reassurance("Your answers go only to the firm, and are checked for conflicts of interest before anyone discusses your matter."), send),
   );
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -113,7 +138,7 @@ async function formPage() {
     send.textContent = "Sending…";
     try {
       const r = await call("POST", `/intake/public/forms/${encodeURIComponent(token)}`, { stamp: def.stamp, website: form.elements.website.value, answers });
-      main.replaceChildren(h("section.public-card.public-done", { tabindex: "-1" }, h("h1", "Thank you"), para(r.thanks)));
+      main.replaceChildren(h("section.public-card.public-done", { tabindex: "-1" }, h("span.public-icon.ok", icon("circle-check", { size: 24 })), h("h1", "Thank you"), para(r.thanks, "p.lead-in"), h("p.public-note", "You can close this page.")));
       main.firstChild.focus();
     } catch (ex) {
       err.textContent = ex.message;
@@ -123,7 +148,13 @@ async function formPage() {
       if (ex.status === 400 && /expired/.test(ex.message)) def = await call("GET", `/intake/public/forms/${encodeURIComponent(token)}`).catch(() => def);
     }
   });
-  main.replaceChildren(h("section.public-card", h("h1", def.title), para(def.intro, "p.lead-in"), h("p.small.muted", "Fields marked * are required."), form));
+  main.replaceChildren(
+    h(
+      "section.public-card",
+      h("div.public-card-head", h("h1", def.title), para(def.intro, "p.lead-in"), h("p.public-note", "Fields marked ", h("span.req", "*"), " are required.")),
+      form,
+    ),
+  );
 }
 
 // --------------------------------------------------------------- booking
@@ -158,7 +189,7 @@ async function bookPage() {
     chosen = null;
     detailsBox.replaceChildren();
     if (!data.days.length) {
-      slotsBox.replaceChildren(h("p.empty", "There are no open times in the next few weeks. Please call the firm to arrange a time."));
+      slotsBox.replaceChildren(h("p.public-note", "There are no open times in the next few weeks. Please call the firm to arrange a time."));
       return;
     }
     const many = !person && data.people.length > 1;
@@ -166,7 +197,7 @@ async function bookPage() {
       ...data.days.map((d) =>
         h(
           "div.slot-day",
-          h("h2", d.label),
+          h("h2", icon("calendar", { size: 15 }), d.label),
           h(
             "div.slot-grid",
             d.slots.map((s) =>
@@ -195,15 +226,15 @@ async function bookPage() {
 
   function drawDetails() {
     const fields = data.personal
-      ? [h("div.public-field", h("label", { for: "b-notes" }, "Anything we should know before we talk?", h("span.opt", " (optional)")), h("textarea#b-notes", { name: "summary", rows: 3, maxlength: 4000 }))]
+      ? [h("div.public-field", h("label.public-label", { for: "b-notes" }, "Anything we should know before we talk?", h("span.opt", " (optional)")), h("textarea#b-notes", { name: "summary", rows: 3, maxlength: 4000 }))]
       : [
-          h("div.public-field", h("label", { for: "b-name" }, "Your name", h("span.req", " *")), h("input#b-name", { name: "name", required: true, autocomplete: "name", maxlength: 200 })),
-          h("div.public-field", h("label", { for: "b-email" }, "Email"), h("input#b-email", { name: "email", type: "email", autocomplete: "email", maxlength: 200 })),
-          h("div.public-field", h("label", { for: "b-phone" }, "Phone"), h("p.help", "Give an email address or a phone number, or both."), h("input#b-phone", { name: "phone", type: "tel", autocomplete: "tel", maxlength: 40 })),
-          h("div.public-field", h("label", { for: "b-summary" }, "Briefly, what is it about?", h("span.opt", " (optional)")), h("textarea#b-summary", { name: "summary", rows: 3, maxlength: 4000 })),
+          h("div.public-field", h("label.public-label", { for: "b-name" }, "Your name", h("span.req", " *")), h("input#b-name", { name: "name", required: true, autocomplete: "name", maxlength: 200 })),
+          h("div.public-field", h("label.public-label", { for: "b-email" }, "Email"), h("input#b-email", { name: "email", type: "email", autocomplete: "email", maxlength: 200 })),
+          h("div.public-field", h("label.public-label", { for: "b-phone" }, "Phone"), h("p.help", "Give an email address or a phone number, or both."), h("input#b-phone", { name: "phone", type: "tel", autocomplete: "tel", maxlength: 40 })),
+          h("div.public-field", h("label.public-label", { for: "b-summary" }, "Briefly, what is it about?", h("span.opt", " (optional)")), h("textarea#b-summary", { name: "summary", rows: 3, maxlength: 4000 })),
           h(
             "div.public-field",
-            h("label", { for: "b-opposing" }, "Other people or businesses involved", h("span.opt", " (optional)")),
+            h("label.public-label", { for: "b-opposing" }, "Other people or businesses involved", h("span.opt", " (optional)")),
             h("p.help", "We check these names for conflicts of interest before we meet."),
             h("textarea#b-opposing", { name: "opposing", rows: 2, maxlength: 4000 }),
           ),
@@ -212,11 +243,11 @@ async function bookPage() {
     const form = h(
       "form.public-form.public-confirm",
       h("h2", "Your consultation"),
-      h("p.chosen", `${chosen.dayLabel} at ${chosen.time}, with ${chosen.userName}`),
+      h("div.chosen", icon("calendar-clock", { size: 18 }), h("span", `${chosen.dayLabel} at ${chosen.time}, with ${chosen.userName}`)),
       fields,
       honeypot(),
       err,
-      h("div.public-actions", send),
+      h("div.public-actions", reassurance("The firm checks for conflicts of interest before the meeting."), send),
     );
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -241,6 +272,7 @@ async function bookPage() {
           h(
             "section.public-card.public-done",
             { tabindex: "-1" },
+            h("span.public-icon.ok", icon("circle-check", { size: 24 })),
             h("h1", "You're booked"),
             r.when
               ? h(
@@ -254,7 +286,7 @@ async function bookPage() {
                   r.location ? [h("dt", "Where"), h("dd", r.location)] : null,
                 )
               : null,
-            h("p", `Thank you. ${r.firmName} will confirm by email or phone. If you need to change the time, please call the firm.`),
+            h("p.lead-in", `Thank you. ${r.firmName} will confirm by email or phone. If you need to change the time, please call the firm.`),
           ),
         );
         main.firstChild.focus();
@@ -279,7 +311,7 @@ async function bookPage() {
     data.people.length > 1
       ? h(
           "div.public-field.who-pick",
-          h("label", { for: "b-person" }, "Meet with"),
+          h("label.public-label", { for: "b-person" }, "Meet with"),
           h(
             "select#b-person",
             {
@@ -303,9 +335,7 @@ async function bookPage() {
   main.replaceChildren(
     h(
       "section.public-card",
-      h("h1", "Book a consultation"),
-      para(data.intro, "p.lead-in"),
-      h("p.small.muted", `Choose a time below. ${data.timeZoneNote}`),
+      h("div.public-card-head", h("h1", "Book a consultation"), para(data.intro, "p.lead-in"), h("p.public-note", `Choose a time below. ${data.timeZoneNote}`)),
       who,
       slotsBox,
       detailsBox,
