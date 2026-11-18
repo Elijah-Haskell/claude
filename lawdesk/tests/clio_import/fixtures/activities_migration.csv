@@ -1,0 +1,10 @@
+matter,date,activity_description,note,price,quantity,type,activity_user,non_billable,utbms_activity_code,utbms_task_code,utbms_expense_code,expense_type,vendor_name,reference
+2026-0001,03/03/2026,Review,Reviewed lease draft,250.00,1.5,TimeEntry,Jordan Reyes,0,A104,L110,,,,
+2026-0001,03/04/2026,Call,Call with client,250.00,0.25,TimeEntry,Jordan Reyes,1,,,,,,
+2026-0001,03/04/2026,Call,Call with client,250.00,0.25,TimeEntry,Jordan Reyes,1,,,,,,
+2026-0001,03/05/2026,Filing fee,County recording fee,"1,195.50",,ExpenseEntry,,0,,,E112,HardCostEntry,Shawnee County,R-1001
+2025-0042,05/01/2025,Drafting,Drafted will,300,2,TimeEntry,Riley Chen,0,,,,,,
+2026-0001,03/06/2026,Research,Research by new hire,180,1.0,TimeEntry,Taylor Contractor,0,,,,,,
+2099-9999,03/06/2026,Research,Wrong matter,180,1.0,TimeEntry,Jordan Reyes,0,,,,,,
+2026-0001,03/07/2026,Copies,Refund,-5.00,,ExpenseEntry,,0,,,,,,
+2026-0001,03/08/2026,Review,Too long,250,30,TimeEntry,Jordan Reyes,0,,,,,,

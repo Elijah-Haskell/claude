@@ -30,6 +30,9 @@ file accepted is `LAWDESK_MAX_UPLOAD_BYTES` (default 25 MiB). Files travel as by
 `POST /api/matters/:id/documents/upload?name=<file name>` (raw body, or multipart/form-data), download
 with `GET /api/documents/:id/file` (attachment; `?inline=1` shows PDFs and images; `?version=n`).
 A route marked `raw: true` in `src/http.ts` gets the unread request stream as `ctx.req`.
+Importing from Clio (Settings > Import from Clio): CSV files work with no set-up; reading straight from the
+Clio API needs `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `CLIO_TOKEN_KEY` and optionally `CLIO_REGION`.
+See `docs/clio-import.md`.
 
 In the app, press `?` for keyboard shortcuts. Quick-add understands dates (`fri`, `tomorrow`, `11/20`,
 `in 3 days`, `+5bd`), `@person`, `#matter-number` and `!high`.

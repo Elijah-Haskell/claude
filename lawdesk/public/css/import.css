@@ -1,0 +1,65 @@
+/* Settings > Import from Clio. Uses the shared tokens and components (.card, .btn,
+   .settings-table, .tag); only layout specific to this page lives here. */
+
+.settings-import { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 16px; }
+
+.clio-import .card { margin-bottom: 18px; }
+.clio-import .page-head { display: block; }
+.clio-import .page-head .ci-crumb { margin: 0 0 4px; font-size: 0.85rem; }
+.clio-import h3 { margin: 18px 0 8px; color: var(--accent); }
+
+.ci-choose { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 10px 0 6px; }
+.ci-choose label { display: grid; gap: 4px; font-size: 0.88rem; color: var(--muted); min-width: 0; }
+.ci-choose select, .ci-choose input { width: 100%; min-width: 0; }
+.ci-about { margin: 6px 0 0; padding: 8px 12px; background: var(--surface-2); border-left: 3px solid var(--gold); border-radius: var(--radius); }
+
+.ci-step { border-top: 1px solid var(--border); margin-top: 16px; }
+.ci-needed { color: var(--late); font-size: 0.82rem; }
+.ci-map td { vertical-align: top; }
+.ci-map select { width: 100%; max-width: 320px; }
+.ci-sample { color: var(--muted); font-size: 0.88rem; overflow-wrap: anywhere; max-width: 260px; }
+.ci-problem { color: var(--late); }
+.ci-warn { margin: 6px 0; padding-left: 18px; color: var(--today); font-size: 0.88rem; }
+.ci-summary { margin: 6px 0 10px; }
+
+.ci-scroll { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.ci-scroll .settings-table { margin: 0; }
+.ci-rows td, .ci-skipped td { vertical-align: top; border-top: 1px solid var(--border); font-size: 0.9rem; overflow-wrap: anywhere; }
+.ci-rows th, .ci-skipped th { position: sticky; top: 0; background: var(--surface); }
+.tag.ci-new { background: var(--good-soft); color: var(--good); border-color: transparent; text-transform: none; }
+.tag.ci-update { background: var(--accent-soft); color: var(--accent); border-color: transparent; text-transform: none; }
+.tag.ci-problem { background: var(--late-soft); color: var(--late); border-color: transparent; text-transform: none; }
+
+.ci-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 4px; }
+
+.ci-tally td, .ci-money td, .ci-runlist td { border-top: 1px solid var(--border); }
+.ci-tally td:not(:first-child), .ci-tally th:not(:first-child),
+.ci-money td:not(:first-child), .ci-money th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+
+.ci-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 10px 0 14px; }
+.ci-figure { display: grid; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); }
+.ci-figure-n { font-family: var(--serif); font-size: 1.5rem; font-weight: 600; color: var(--accent); }
+.ci-figure-l { color: var(--muted); font-size: 0.85rem; }
+
+.ci-trust { padding: 10px 12px; background: var(--today-soft); border-left: 3px solid var(--gold); border-radius: var(--radius); }
+.ci-trustbox, .ci-added { margin-top: 8px; }
+.ci-warnings { margin-top: 10px; }
+.ci-warnings summary { cursor: pointer; color: var(--accent); }
+.ci-warnings ul { margin: 6px 0; padding-left: 18px; font-size: 0.9rem; max-height: 300px; overflow: auto; }
+
+.ci-progress { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px; }
+.ci-progress li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+.ci-progress li.done { background: var(--good-soft); border-color: transparent; }
+.ci-progress li.done::before { content: "✓"; color: var(--good); margin-right: 6px; }
+.ci-progress li.now { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.ci-progress li > span:first-child { flex: 1; }
+
+@media (max-width: 640px) {
+  .ci-choose { grid-template-columns: minmax(0, 1fr); }
+  .ci-map select { max-width: none; }
+  .ci-sample { max-width: none; }
+  .ci-scroll { max-height: none; overflow: visible; border: 0; }
+  .ci-rows th, .ci-skipped th { position: static; }
+  .clio-import .settings-table td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); font-size: 0.8rem; }
+  .ci-tally td:not(:first-child), .ci-money td:not(:first-child) { text-align: left; }
+}

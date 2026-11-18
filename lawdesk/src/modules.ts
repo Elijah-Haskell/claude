@@ -22,6 +22,8 @@ import { routes as contactsRoutes } from "./contacts/routes.ts";
 import { SCHEMA as CONTACTS_SCHEMA } from "./contacts/schema.ts";
 import { routes as intakeRoutes } from "./intake/routes.ts";
 import { SCHEMA as INTAKE_SCHEMA } from "./intake/schema.ts";
+import { routes as clioImportRoutes } from "./clio_import/routes.ts";
+import { SCHEMA as CLIO_IMPORT_SCHEMA } from "./clio_import/schema.ts";
 
 export interface Module {
   name: string;
@@ -43,4 +45,5 @@ export const modules: Module[] = [
   { name: "trust", routes: trustRoutes, schema: TRUST_SCHEMA },
   { name: "contacts", routes: contactsRoutes, schema: CONTACTS_SCHEMA },
   { name: "intake", routes: intakeRoutes, schema: INTAKE_SCHEMA },
+  { name: "clio_import", routes: clioImportRoutes, schema: CLIO_IMPORT_SCHEMA },
 ];

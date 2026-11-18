@@ -1,0 +1,6 @@
+status,location,client_reference,description,open_date,close_date,pending_date,custom_number,note,client_first_name,client_last_name,client_company_name,responsible_attorney,practice_area
+Open,Shawnee County,PB-1,Bakery lease review,03/02/2026,,,2026-0001,Lease renewal,,,Prairie Example Bakery LLC,Jordan Reyes,Real Estate
+Closed,,,Testperson estate plan,01/15/2025,06/30/2025,,2025-0042,,Blake,Testperson,,Riley Chen,Estate Planning
+Pending,,,Madeup contract dispute,09/01/2026,,09/15/2026,2026-0007,,Casey,Unknownclient,,Morgan Newhire,Litigation
+Open,,,No date matter,13/45/2026,,,2026-0008,,,,Prairie Example Bakery LLC,,
+Frozen,,,Bad status,03/02/2026,,,2026-0009,,,,Prairie Example Bakery LLC,,

@@ -1169,6 +1169,37 @@ for (const [label, viewport] of [
     await shot("intake-public-booked");
   });
 
+  await check(`${label}: import from Clio: upload, match columns, trial run, import, report`, async () => {
+    await page.goto(base + "/#/settings");
+    await page.locator("#settings-import-clio").click();
+    await page.waitForSelector("#ci-file");
+    // A made-up contacts file in Clio's migration-template layout; each width uses different names.
+    const tag = label === "desktop" ? "Desk" : "Phone";
+    const csv =
+      "first_name,last_name,Company,email_address,primary_phone,Mystery\r\n" +
+      `Avery,${tag}fictional,,avery@example.com,785-555-0101,x\r\n` +
+      `,,${tag} Example Bakery LLC,,785-555-0100,y\r\n` +
+      ",,,,,\r\n,,,nobody@example.com,,z\r\n";
+    await page.setInputFiles("#ci-input", { name: "contacts.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+    await page.waitForSelector("#ci-rows");
+    assert.match(await page.locator(".ci-summary").first().innerText(), /3 rows: 2 new, 0 already imported.*1 with problems/);
+    // Manual mapping: point "Notes" at the unrecognised column.
+    await page.locator("select[aria-label='Column for Notes']").selectOption({ label: "Mystery" });
+    await page.waitForFunction(() => document.querySelector("select[aria-label='Column for Notes']") && (document.querySelector("select[aria-label='Column for Notes']") as HTMLSelectElement).selectedOptions[0].textContent === "Mystery");
+    await page.locator("#ci-dry").click();
+    await page.waitForSelector("#ci-report:not([hidden]) h2:has-text('Trial run')");
+    page.once("dialog", (d: any) => d.accept());
+    await page.locator("#ci-run").click();
+    await page.waitForSelector("#ci-report h2:has-text('Import report')");
+    assert.match(await page.locator("#ci-report .ci-tally").innerText(), /Contacts\s+2\s+0\s+0\s+1/);
+    await page.waitForSelector("#ci-runs tbody tr");
+    assert.ok((await page.locator("#ci-totals .ci-figure").count()) >= 5);
+    assert.match(await page.locator("#ci-api").innerText(), /Import directly from Clio/);
+    await noHorizontalScroll();
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.screenshot({ path: shots + `clio-import-${label}.png`, fullPage: true });
+  });
+
   await check(`${label}: no script errors`, async () => {
     assert.deepEqual(errors, [], errors.slice(0, 3).join(" | "));
   });

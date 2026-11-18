@@ -22,6 +22,7 @@ import { documentsSearchView, matterDocumentsView } from "./views/documents.js";
 import { templatesSettingsView } from "./views/templates.js";
 import { intakeBoardView, intakeListView, intakeReportsView, leadView } from "./views/leads.js";
 import { intakeFormsView, intakeFormEditView, bookingSettingsView } from "./views/intake-settings.js";
+import { clioImportView } from "./views/clio_import.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
@@ -85,6 +86,7 @@ const ROUTES = [
   [/^#\/settings\/intake-forms$/, () => intakeFormsView],
   [/^#\/settings\/intake-forms\/(new|\d+)$/, () => intakeFormEditView],
   [/^#\/settings\/booking$/, () => bookingSettingsView],
+  [/^#\/settings\/import-clio(?:\?.*)?$/, () => clioImportView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });
