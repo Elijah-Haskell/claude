@@ -39,7 +39,7 @@ async function check(name: string, fn: () => Promise<void>) {
     results.push(`ok     ${name}`);
   } catch (err: any) {
     failures++;
-    results.push(`FAILED ${name}\n       ${String(err?.message || err).split("\n").slice(0, 4).join("\n       ")}`);
+    results.push(`FAILED ${name}\n       ${String(err?.message || err).split("\n").slice(0, 12).join("\n       ")}`);
   }
   console.log(results[results.length - 1]);
 }
@@ -178,6 +178,175 @@ for (const [label, viewport] of [
     await page.waitForSelector("#s-auto");
     for (const id of ["s-people", "s-clients", "s-areas", "s-dates", "s-closed", "s-auto"]) assert.equal(await page.locator("#" + id).count(), 1, id);
     await noHorizontalScroll();
+  });
+
+  const clearToasts = () => page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+
+  await check(`${label}: contacts list searches names, other names and phones`, async () => {
+    await page.goto(base + "/#/contacts");
+    await page.waitForSelector(".ct-row");
+    assert.ok((await page.locator(".ct-row").count()) >= 16, "every demo contact is listed");
+    await page.fill("input[data-search]", "peggy");
+    await page.waitForFunction(() => document.querySelectorAll(".ct-row").length === 1);
+    assert.match(await page.locator(".ct-row").innerText(), /Margaret Ellison/);
+    await page.fill("input[data-search]", "555-0198");
+    await page.waitForFunction(() => document.querySelectorAll(".ct-row").length === 1 && document.querySelector(".ct-row")!.textContent!.includes("Dana Whitfield"));
+    await page.fill("input[data-search]", "");
+    await page.locator(".segmented button", { hasText: "Companies" }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll(".ct-row")].every((r) => r.textContent!.includes("Company")));
+    await page.locator(".segmented button", { hasText: "Everyone" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".ct-row").length >= 16);
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `contacts-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: contact page shows details, other names, relationships and matters; edits save`, async () => {
+    await page.goto(base + `/#/contacts/${demo.contacts.peggy}`);
+    await page.waitForSelector(".ct-details");
+    const text = await page.locator(".ct-grid").innerText();
+    for (const s of ["Peggy Ellison (demo)", "Maiden name", "an owner of", "Sunflower Coffee Roasters formation", "316-555-0144", "22 Sample Lane"]) assert.ok(text.includes(s), s);
+    await page.locator("button", { hasText: "Add phone, email or address" }).click();
+    await page.locator(".ct-add-detail select").first().selectOption("address");
+    await page.fill(".ct-add-detail input[aria-label='Label']", "Work");
+    await page.fill(".ct-add-detail input[aria-label='Street']", label === "desktop" ? "1 Desk Street" : "2 Phone Street");
+    await page.fill(".ct-add-detail input[aria-label='City']", "Wichita");
+    await page.locator(".ct-add-detail button[type=submit]").click();
+    await page.waitForSelector(`.ct-dl:has-text('${label === "desktop" ? "1 Desk Street" : "2 Phone Street"}')`);
+    await page.fill(".ct-inline-form input", label === "desktop" ? "Maggie Ellison (demo)" : "Meg Ellison (demo)");
+    await page.locator(".ct-inline-form button").click();
+    await page.waitForSelector(`.ct-list:has-text('${label === "desktop" ? "Maggie" : "Meg"} Ellison')`);
+    // A relationship in the other direction, to a new contact.
+    await page.locator(".ct-rel-form button", { hasText: "Swap sides" }).click();
+    await page.fill(".ct-rel-form .picker input", label === "desktop" ? "Ellison Family Trust (demo)" : "Ellison Holdings (demo)");
+    await page.locator(".ct-rel-form select[aria-label='New contact is a']").selectOption("company");
+    await page.locator(".ct-rel-form select[aria-label='Relationship']").selectOption("affiliate");
+    await page.locator(".ct-rel-form button[type=submit]").click();
+    await page.waitForSelector(`.ct-rels:has-text('is an affiliate of')`);
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `contact-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: new contact warns about similar names`, async () => {
+    await page.goto(base + "/#/contacts");
+    await page.locator("button", { hasText: "New contact" }).click();
+    await page.fill("dialog input >> nth=0", "Sunflower Coffee Roasters");
+    await page.waitForSelector("dialog .similar-box:has-text('Sunflower Coffee Roasters LLC')");
+    await page.fill("dialog input >> nth=0", label === "desktop" ? "Prairie Rose Bakery (demo)" : "Prairie Rose Catering (demo)");
+    await page.locator("dialog select").first().selectOption("company");
+    await page.locator("dialog button[type=submit]").click();
+    await page.waitForSelector(`h1:has-text('Prairie Rose')`);
+  });
+
+  let checkId = 0;
+  await check(`${label}: conflict check finds a current client named as adverse party; waiver needs a note`, async () => {
+    await page.goto(base + "/#/conflicts");
+    await page.waitForSelector(".cc-term");
+    await page.fill(".cc-term >> nth=0 >> input", "Bob Klein");
+    await page.locator(".cc-term >> nth=0 >> select >> nth=0").selectOption("person");
+    await page.fill(".cc-term >> nth=1 >> input", "Prairie Wind Solar");
+    await page.locator(".cc-term >> nth=1 >> select >> nth=0").selectOption("company");
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `conflict-new-${label}.png`, fullPage: true });
+    await page.locator("button", { hasText: "Run conflict check" }).click();
+    await page.waitForSelector(".cc-hit");
+    checkId = Number(/#\/conflicts\/(\d+)/.exec(page.url())![1]);
+    const text = await page.locator(".cc-main").innerText();
+    assert.match(text, /Proposed adverse party is a current client/);
+    assert.match(text, /a common nickname/);
+    assert.ok(!/\b0\.\d\d\b/.test(text), "no raw scores on screen");
+    await page.locator(".cc-choice", { hasText: "Waived" }).click();
+    await page.locator(".cc-decision button[type=submit]").click();
+    await page.waitForSelector(".cc-decision .error-text:has-text('written consent')");
+    await page.fill(".cc-decision textarea", "Written consent from both clients in the file, signed Nov 2026.");
+    await page.locator(".cc-decision button[type=submit]").click();
+    await page.waitForSelector(".cc-decision .status-pill.waived");
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `conflict-check-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: printable conflict report`, async () => {
+    const r = await page.request.get(base + `/api/conflict-checks/${checkId}/report`);
+    assert.equal(r.status(), 200);
+    assert.match(r.headers()["content-security-policy"], /default-src 'none'/);
+    const html = await r.text();
+    for (const s of ["Conflict of Interest Check", "Prairie Wind Solar", "Waived", "Written consent"]) assert.ok(html.includes(s), s);
+    const rp = await ctx.newPage();
+    await rp.goto(base + `/api/conflict-checks/${checkId}/report`);
+    await rp.screenshot({ path: shots + `conflict-report-${label}.png`, fullPage: true });
+    await rp.close();
+    const dl = await page.request.get(base + `/api/conflict-checks/${checkId}/report?download=1`);
+    assert.match(dl.headers()["content-disposition"], /attachment/);
+  });
+
+  await check(`${label}: saved checks filter by decision and name`, async () => {
+    await page.goto(base + "/#/conflicts/history");
+    await page.waitForSelector(".cc-row");
+    await page.locator(".segmented button", { hasText: "Awaiting decision" }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll(".cc-row")].length > 0 && [...document.querySelectorAll(".cc-row")].every((r) => r.textContent!.includes("Awaiting decision")));
+    await page.locator(".segmented button", { hasText: "All" }).click();
+    await page.fill("input[data-search]", "cottonwood");
+    await page.waitForFunction(() => document.querySelectorAll(".cc-row").length === 1 && document.querySelector(".cc-row")!.textContent!.includes("Cleared"));
+    await page.fill("input[data-search]", "");
+    await page.locator("select[aria-label='Result']").selectOption("strong");
+    await page.waitForFunction(() => document.querySelectorAll(".cc-row").length >= 1 && [...document.querySelectorAll(".cc-row")].every((r) => / strong/.test(r.textContent!)));
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `conflict-history-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: matter page shows parties and conflict status; add a party`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m3}`);
+    await page.waitForSelector(".parties-card .party-list");
+    assert.match(await page.locator(".parties-card").innerText(), /Cottonwood Office Park/);
+    await page.waitForSelector(".cc-status-card .status-pill.cleared");
+    await page.locator(".parties-card button", { hasText: "Add a party" }).click();
+    await page.fill(".parties-card .picker input", label === "desktop" ? "Alex Moreno (demo)" : "Jamie Moreno (demo)");
+    await page.locator(".parties-card select[aria-label='Role']").selectOption("opposing_counsel");
+    await page.locator(".parties-card button[type=submit]").click();
+    await page.waitForSelector(`.party-list:has-text('Moreno')`);
+    await page.waitForSelector(".cc-status-card .cc-warn:has-text('added after this check')");
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `matter-parties-${label}.png`, fullPage: true });
+  });
+
+  // Desktop declines (so the phone run still sees five open matters); the phone opens one.
+  await check(`${label}: new matter runs a conflict check and needs a decision`, async () => {
+    await page.goto(base + "/#/matters");
+    await page.locator("button", { hasText: "New matter" }).click();
+    await page.fill("dialog input[name=name]", label === "desktop" ? "Panel warranty claim" : "Panel warranty dispute");
+    await page.fill("dialog input[name=number]", label === "desktop" ? "D-2001" : "D-2002");
+    await page.locator("dialog select[name=client]").selectOption({ label: "Prairie Wind Solar Inc. (demo)" });
+    await page.fill("dialog .intake-party input", "Kestrel Panel Manufacturing Co. (demo)");
+    const submit = page.locator("dialog .form-actions button[type=submit]");
+    assert.equal(await submit.innerText(), "Check for conflicts");
+    await submit.click();
+    await page.waitForSelector("dialog .intake-panel .intake-status:has-text('Saved as check no.')");
+    assert.match(await page.locator("dialog .intake-own").innerText(), /Kestrel Panel Manufacturing/, "contacts picked from the list are noted, not flagged");
+    await submit.click();
+    await page.waitForSelector("dialog .intake-panel .error-text:has-text('Choose cleared')");
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `new-matter-conflicts-${label}.png`, fullPage: false });
+    if (label === "desktop") {
+      await page.locator("dialog .cc-choice", { hasText: "Declined" }).click();
+      assert.match(await submit.innerText(), /matter not opened/);
+      await submit.click();
+      await page.waitForSelector(".toast:has-text('declined')");
+      assert.equal(await page.locator("dialog[open]").count(), 0);
+      assert.equal(await page.locator(".matter-row", { hasText: "Panel warranty" }).count(), 0);
+    } else {
+      // Changing a name makes the check out of date.
+      await page.fill("dialog .intake-party input", "Kestrel Panel Manufacturing");
+      await page.waitForFunction(() => document.querySelector("dialog .form-actions button[type=submit]")!.textContent === "Check for conflicts");
+      await submit.click();
+      await page.waitForSelector("dialog .intake-panel:not([hidden]) .cc-hit");
+      await page.locator("dialog .cc-choice", { hasText: "Cleared" }).click();
+      await submit.click();
+      await page.waitForSelector(".matter-page .parties-card .party-list:has-text('Kestrel Panel Manufacturing')");
+      await page.waitForSelector(".cc-status-card .status-pill.cleared");
+    }
   });
 
   await check(`${label}: no script errors`, async () => {

@@ -9,12 +9,16 @@ import { mattersView } from "./views/matters.js";
 import { matterView } from "./views/matter.js";
 import { checklistsView, checklistEditView } from "./views/checklists.js";
 import { settingsView } from "./views/settings.js";
+import { contactsView, contactView } from "./views/contacts.js";
+import { conflictsView, checkView, checkHistoryView } from "./views/conflicts.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
   { href: "#/firm", label: "Firm tasks", key: "f" },
   { href: "#/matters", label: "Matters", key: "a" },
   { href: "#/checklists", label: "Checklists", key: "c" },
+  { href: "#/contacts", label: "Contacts", key: "o", section: "Practice", icon: "contacts" },
+  { href: "#/conflicts", label: "Conflict check", key: "k", section: "Practice", icon: "intake" },
   { href: "#/settings", label: "Settings", key: "s" },
 ];
 
@@ -26,6 +30,11 @@ const ROUTES = [
   [/^#\/checklists$/, () => checklistsView],
   [/^#\/checklists\/(new|\d+)$/, () => checklistEditView],
   [/^#\/settings$/, () => settingsView],
+  [/^#\/contacts$/, () => contactsView],
+  [/^#\/contacts\/(\d+)$/, () => contactView],
+  [/^#\/conflicts(?:\?.*)?$/, () => conflictsView],
+  [/^#\/conflicts\/history$/, () => checkHistoryView],
+  [/^#\/conflicts\/(\d+)$/, () => checkView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });
@@ -33,7 +42,7 @@ const nav = h("nav.nav", { "aria-label": "Main" });
 const whoBox = h("div.who-box");
 
 function drawNav() {
-  const cur = location.hash.split("/").slice(0, 2).join("/");
+  const cur = location.hash.split("?")[0].split("/").slice(0, 2).join("/");
   replace(
     nav,
     NAV.map((n) => h("a.nav-link", { href: n.href, "aria-current": cur === n.href ? "page" : null, title: null }, n.label)),
