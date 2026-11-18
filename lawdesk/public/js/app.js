@@ -9,12 +9,15 @@ import { mattersView } from "./views/matters.js";
 import { matterView } from "./views/matter.js";
 import { checklistsView, checklistEditView } from "./views/checklists.js";
 import { settingsView } from "./views/settings.js";
+import { trustView, trustAccountView, trustLedgerView, trustReconcileView, trustReportsView } from "./views/trust.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
   { href: "#/firm", label: "Firm tasks", key: "f" },
   { href: "#/matters", label: "Matters", key: "a" },
   { href: "#/checklists", label: "Checklists", key: "c" },
+  // Trust: limit to admins and attorneys once sign-in lands.
+  { href: "#/trust", label: "Trust", key: "t", section: "Finance", icon: "trust" },
   { href: "#/settings", label: "Settings", key: "s" },
 ];
 
@@ -26,6 +29,11 @@ const ROUTES = [
   [/^#\/checklists$/, () => checklistsView],
   [/^#\/checklists\/(new|\d+)$/, () => checklistEditView],
   [/^#\/settings$/, () => settingsView],
+  [/^#\/trust$/, () => trustView],
+  [/^#\/trust\/accounts\/(\d+)$/, () => trustAccountView],
+  [/^#\/trust\/accounts\/(\d+)\/reconcile(?:\/(\d{4}-\d{2}))?$/, () => trustReconcileView],
+  [/^#\/trust\/accounts\/(\d+)\/reports$/, () => trustReportsView],
+  [/^#\/trust\/ledgers\/(\d+)$/, () => trustLedgerView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });

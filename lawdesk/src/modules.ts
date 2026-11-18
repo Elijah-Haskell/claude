@@ -13,6 +13,8 @@ import { routes as documentsRoutes } from "./documents/routes.ts";
 import { SCHEMA as DOCUMENTS_SCHEMA } from "./documents/schema.ts";
 import { routes as calendarRoutes } from "./calendar/routes.ts";
 import { SCHEMA as CALENDAR_SCHEMA } from "./calendar/schema.ts";
+import { routes as trustRoutes } from "./trust/routes.ts";
+import { SCHEMA as TRUST_SCHEMA } from "./trust/schema.ts";
 
 export interface Module {
   name: string;
@@ -28,4 +30,6 @@ export const modules: Module[] = [
   { name: "billing", routes: billingRoutes, schema: BILLING_SCHEMA },
   { name: "documents", routes: documentsRoutes, schema: DOCUMENTS_SCHEMA },
   { name: "calendar", routes: calendarRoutes, schema: CALENDAR_SCHEMA },
+  // After billing: trust entries refer to billing invoices and payments.
+  { name: "trust", routes: trustRoutes, schema: TRUST_SCHEMA },
 ];
