@@ -15,6 +15,8 @@ import { openDb, type DB } from "./db.ts";
 import { Engine } from "./engine.ts";
 import { addDays, rollForward, today as todayIn, type ISODate } from "./dates.ts";
 import { seedCalendar } from "./calendar/seed.ts";
+import { Billing } from "./billing/billing.ts";
+import { SCHEMA as BILLING_SCHEMA } from "./billing/schema.ts";
 
 export const DEMO_NOTE = "Fictional demo data. Not a real client.";
 
@@ -67,6 +69,7 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
     }
   };
 
+  db.exec(BILLING_SCHEMA);
   db.exec("BEGIN");
   try {
     // ---------------------------------------------------------------- people
@@ -330,9 +333,84 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
     e.addTask({ title: "Renew the firm's online research subscription", assigneeId: casey, priority: "low" }, casey);
     e.addTask({ title: "Review the month's open matters with Riley", assigneeId: jordan, dueDate: addDays(realToday, 3) }, jordan);
     seedCalendar(db, { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 } }, realToday, closed);
+
+    // ------------------------------------------------------- billing
+    // Made-up rates, hours and amounts. Two invoices are finalized (one partly paid,
+    // one awaiting payment); the rest of the work is unbilled.
+    const b = new Billing(db, { today: () => now, now: () => new Date(`${now}T16:00:00Z`) });
+    b.updateSettings({
+      firmName: "Reyes & Chen LLP (demo)",
+      firmAddress: "100 Example Street, Suite 2\nTopeka, KS 66603\nFictional demo firm",
+      defaultRateCents: 25000,
+      paymentTermsDays: 30,
+      firstInvoiceNumber: 1001,
+    }, jordan);
+    b.setUserRate(jordan, 30000);
+    b.setUserRate(riley, 27500);
+    b.setUserRate(sam, 13500);
+    b.setUserRate(casey, 9000);
+    b.setMatterBilling(m1, { method: "flat", flatFeeCents: 150000 }, jordan);
+    b.setMatterBilling(m5, { method: "flat", flatFeeCents: 90000 }, jordan);
+    const at = (offset: number) => addDays(realToday, offset);
+    const time = (matterId: number, userId: number, offset: number, hours: number, description: string, billable = true) =>
+      b.addTime({ matterId, userId, date: at(offset), minutes: Math.round(hours * 60), description, billable }, userId);
+    const cost = (matterId: number, userId: number, offset: number, dollars: number, description: string, receiptNote: string | null = null) =>
+      b.addExpense({ matterId, userId, date: at(offset), costCents: Math.round(dollars * 100), description, receiptNote }, userId);
+
+    // Equipment lease review (closed): billed on invoice 1001, partly paid, now past due.
+    time(m6, jordan, -60, 0.5, "Call with client about the equipment lease; reviewed the term sheet");
+    time(m6, jordan, -50, 1.8, "First read of the lease; prepared issues list");
+    time(m6, jordan, -45, 2.4, "Prepared redline of the lease");
+    time(m6, sam, -45, 0.6, "Assembled redline and issues memo for the client");
+    time(m6, jordan, -40, 0.9, "Call with lessor's counsel on our comments");
+    time(m6, casey, -33, 0.3, "Coordinated signatures", false);
+    cost(m6, casey, -33, 38.5, "Overnight courier of the signed lease", "Receipt in the file");
+    day(-32);
+    const inv1 = b.createDraft({ matterId: m6, to: at(-32) }, jordan);
+    b.finalize(inv1.id, jordan);
+    day(-15);
+    b.payInvoice(inv1.id, { amountCents: 100000, method: "Check", reference: "4417 (demo)" }, jordan);
+
+    // Riverside Plaza purchase: invoice 1002 for the title work, awaiting payment.
+    time(m4, riley, -25, 0.7, "Intake call; reviewed the purchase contract");
+    time(m4, sam, -18, 0.8, "Ordered the title commitment; opened the closing file");
+    time(m4, riley, -14, 2.2, "Reviewed the title commitment and exceptions");
+    time(m4, riley, -12, 1.4, "Drafted the title objection letter");
+    time(m4, sam, -12, 0.5, "Sent title objections to the title company and seller's counsel");
+    cost(m4, sam, -18, 350, "Title commitment fee (passed through)");
+    day(-10);
+    const inv2 = b.createDraft({ matterId: m4, to: at(-11) }, riley);
+    b.finalize(inv2.id, riley);
+    day(0);
+    time(m4, riley, -6, 1.0, "Reviewed the seller's response to title objections");
+    time(m4, sam, -5, 1.2, "Prepared the draft deed");
+    cost(m4, sam, -5, 24, "Certified copies from the county register of deeds");
+
+    // Sunflower Coffee formation (flat fee): time recorded, not charged; filing fee to pass on.
+    time(m1, jordan, -19, 0.4, "Prepared the engagement letter");
+    time(m1, sam, -12, 0.3, "Checked name availability");
+    time(m1, sam, -6, 1.5, "Drafted articles of organization");
+    time(m1, jordan, -2, 0.6, "Reviewed the draft articles with comments for Sam");
+    cost(m1, sam, -6, 165, "State filing fee for articles of organization (demo amount)");
+
+    // Supply agreement review (hourly): this week's work, not yet billed.
+    time(m2, jordan, -6, 0.4, "Prepared the engagement letter");
+    time(m2, jordan, -2, 0.5, "Reviewed the draft and deal terms from the client");
+    time(m2, casey, -2, 0.2, "Set up the matter file", false);
+    time(m2, jordan, -1, 2.8, "First read of the supply agreement; prepared issues list");
+    time(m2, jordan, 0, 0.7, "Outlined points for the call with the client on the indemnity cap");
+
+    // Office lease renewal and Brooks formation: a little intake time.
+    time(m3, riley, -1, 0.4, "Intake call with the practice manager about the renewal");
+    time(m5, jordan, 0, 0.5, "Initial consultation on forming the LLC");
     stampActivity();
     db.exec("COMMIT");
-    return { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 }, lists: { intake, llc, review, closing } };
+    return {
+      users: { jordan, riley, sam, casey },
+      matters: { m1, m2, m3, m4, m5, m6 },
+      lists: { intake, llc, review, closing },
+      invoices: { pastDue: inv1.id, open: inv2.id },
+    };
   } catch (err) {
     db.exec("ROLLBACK");
     throw err;

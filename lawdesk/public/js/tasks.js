@@ -6,6 +6,7 @@ import { h, append, clear, replace, fmtDate, relDate, daysBetween, addDays, week
 import { post, patch, del } from "./api.js";
 import { state, today, users, dateFieldLabel, initials, loadMatters } from "./state.js";
 import { parseQuickAdd } from "./quickadd.js";
+import { logTimeDialog } from "./billing/ui.js";
 
 // --------------------------------------------------------------- explaining dates
 
@@ -298,6 +299,7 @@ function moreMenu(t, anchor, refresh, titleEl) {
         .map((p) => item(`Priority: ${p}`, () => updateTask(t, { priority: p }, refresh, `Priority set to ${p}`))),
       finished ? item("Reopen", () => completeTask(t, refresh)) : item("Skip (not needed)", () => skipTask(t, refresh)),
       t.matter_id ? h("a.pop-item", { href: `#/matters/${t.matter_id}` }, "Open matter") : null,
+      t.matter_id ? item("Log time", () => logTimeDialog({ matterId: t.matter_id, taskId: t.id, taskTitle: t.title, description: t.title })) : null,
       item("Delete", () => deleteTask(t, refresh), ".danger"),
     ),
     "Task actions",

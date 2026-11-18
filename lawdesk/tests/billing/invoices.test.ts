@@ -273,7 +273,7 @@ test("printable invoice is self-contained and escapes text", () => {
   assert.ok(html.includes("Thanks &lt;3"));
   assert.ok(html.includes("1 Main St<br>Topeka, KS"));
   assert.ok(html.includes("Invoice 1"));
-  assert.ok(html.includes("Balance due"));
+  assert.ok(html.includes("Amount due"));
   assert.ok(html.includes("Discount (5%)"));
   // No external assets of any kind.
   assert.ok(!/\b(src|href)\s*=/.test(html));

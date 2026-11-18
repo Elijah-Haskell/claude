@@ -33,12 +33,33 @@ function qStatus(ctx: Ctx): "unbilled" | "billed" | "all" | undefined {
   return s as any;
 }
 
+/** Wrap a rendered invoice as a raw HTML response with a screen-only Print bar. */
+export function printablePage(html: string) {
+  const bar =
+    `<style>.ld-print-bar{position:sticky;top:0;display:flex;gap:12px;align-items:center;justify-content:center;padding:10px;` +
+    `margin:-32px -32px 24px;background:#1d3557;color:#fff;font:15px/1.4 "Segoe UI",Arial,sans-serif;flex-wrap:wrap}` +
+    `.ld-print-bar button{font:inherit;font-weight:600;padding:6px 16px;border:0;border-radius:4px;background:#fff;color:#1d3557;cursor:pointer}` +
+    `@media print{.ld-print-bar{display:none}}</style>` +
+    `<div class="ld-print-bar"><span>To save a PDF, choose “Save as PDF” in the print window.</span>` +
+    `<button type="button" id="ld-print">Print or save as PDF</button></div>` +
+    `<script src="/js/billing/print.js"></script>`;
+  return {
+    __raw: true,
+    contentType: "text/html; charset=utf-8",
+    headers: {
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; img-src data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+    },
+    body: html.replace(/<body>/, "<body>" + bar),
+  };
+}
+
 const body = (ctx: Ctx) => (ctx.body && typeof ctx.body === "object" ? ctx.body : {});
 
 export const routes: Route[] = [
   // ------------------------------------------------------------ settings & rates
   { method: "GET", path: "/billing/settings", handler: (ctx) => billing(ctx).settings() },
   { method: "PATCH", path: "/billing/settings", handler: (ctx) => billing(ctx).updateSettings(body(ctx), ctx.userId) },
+  { method: "GET", path: "/billing/users/rates", handler: (ctx) => billing(ctx).userRates() },
   {
     method: "PUT",
     path: "/billing/users/:userId/rate",
@@ -118,6 +139,17 @@ export const routes: Route[] = [
     handler: (ctx) => {
       const b = billing(ctx);
       return { html: renderInvoiceHtml(b.invoice(intParam(ctx, "id")), b.settings()) };
+    },
+  },
+  {
+    // The same invoice as a page of its own, for the browser's Print / Save as PDF.
+    // The app's normal policy forbids inline styles, so this one response allows them
+    // (and only them, plus the small script behind the Print button).
+    method: "GET",
+    path: "/billing/invoices/:id/print",
+    handler: (ctx) => {
+      const b = billing(ctx);
+      return printablePage(renderInvoiceHtml(b.invoice(intParam(ctx, "id")), b.settings()));
     },
   },
   { method: "PATCH", path: "/billing/invoices/:id", handler: (ctx) => billing(ctx).updateDraft(intParam(ctx, "id"), body(ctx), ctx.userId) },
