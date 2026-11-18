@@ -4,6 +4,7 @@ import { h, fmtDate } from "../dom.js";
 import { get } from "../api.js";
 import { state, today, userName } from "../state.js";
 import { quickAdd, taskGroup, taskRow, redraw } from "../tasks.js";
+import { todayStrip } from "../cal.js";
 
 export async function myTasksView() {
   const page = h("div.page.my-page");
@@ -67,6 +68,7 @@ export async function myTasksView() {
   await redraw(body, build);
   page.append(
     h("div.page-head", h("h1", "My tasks"), h("p.sub", `${userName(state.me)} · ${fmtDate(today(), today())}`)),
+    todayStrip(state.me),
     quickAdd({ onAdded: refresh }),
     body,
   );
