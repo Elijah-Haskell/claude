@@ -5,6 +5,7 @@ import { h, select, fmtDate, fmtTime, modal, toast, plural } from "../dom.js";
 import { get, post, put, patch } from "../api.js";
 import { state, today, users, prefs, loadMatters, loadSetup } from "../state.js";
 import { quickAdd, taskRow, effectLines, redraw } from "../tasks.js";
+import { upcomingCard } from "../cal.js";
 
 export async function matterView([idStr]) {
   const id = Number(idStr);
@@ -54,6 +55,7 @@ export async function matterView([idStr]) {
         h(
           "div.head-actions",
           m.status === "closed" ? h("span.tag", "Closed") : null,
+          h("a.btn", { href: `#/deadlines/${id}` }, "Court deadline"),
           h("button.btn", { type: "button", onclick: editDetails }, "Edit details"),
           m.status === "open"
             ? h("button.btn", { type: "button", onclick: () => closeMatter() }, "Close matter")
@@ -354,7 +356,7 @@ export async function matterView([idStr]) {
         : null,
     );
 
-    aside.replaceChildren(people, dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
+    aside.replaceChildren(upcomingCard(id), people, dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
   }
 
   function drawActivity() {

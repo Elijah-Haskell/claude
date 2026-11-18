@@ -9,11 +9,15 @@ import { mattersView } from "./views/matters.js";
 import { matterView } from "./views/matter.js";
 import { checklistsView, checklistEditView } from "./views/checklists.js";
 import { settingsView } from "./views/settings.js";
+import { calendarView } from "./views/calendar.js";
+import { deadlinesView } from "./views/deadlines.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
   { href: "#/firm", label: "Firm tasks", key: "f" },
   { href: "#/matters", label: "Matters", key: "a" },
+  { href: "#/calendar", label: "Calendar", key: "l", section: "Work", icon: "calendar" },
+  { href: "#/deadlines", label: "Deadlines", key: "d", section: "Practice", icon: "deadlines" },
   { href: "#/checklists", label: "Checklists", key: "c" },
   { href: "#/settings", label: "Settings", key: "s" },
 ];
@@ -26,6 +30,8 @@ const ROUTES = [
   [/^#\/checklists$/, () => checklistsView],
   [/^#\/checklists\/(new|\d+)$/, () => checklistEditView],
   [/^#\/settings$/, () => settingsView],
+  [/^#\/calendar$/, () => calendarView],
+  [/^#\/deadlines(?:\/(\d+))?$/, () => deadlinesView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });
@@ -94,7 +100,7 @@ function showHelp() {
     ["e", "Rename it"],
     ["m", "More actions"],
     ["Enter", "Open the task's matter"],
-    ["g then m / f / a / c / s", "Go to My tasks, Firm tasks, Matters, Checklists, Settings"],
+    ["g then m / f / a / l / d / c / s", "Go to My tasks, Firm tasks, Matters, Calendar, Deadlines, Checklists, Settings"],
     ["?", "This list"],
   ];
   modal(

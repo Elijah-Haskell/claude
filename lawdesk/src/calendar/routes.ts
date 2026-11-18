@@ -90,7 +90,8 @@ export const routes: Route[] = [
     path: "/calendar/agenda",
     handler: (ctx) => {
       const q = ctx.query;
-      return cal(ctx).agenda({
+      const matterId = optInt(q.get("matter"), "matter");
+      const out = cal(ctx).agenda({
         from: q.get("from") ?? "",
         to: q.get("to") ?? q.get("from") ?? "",
         userId: q.get("scope") === "firm" ? null : (optInt(q.get("user"), "user") ?? ctx.userId ?? null),
@@ -98,6 +99,12 @@ export const routes: Route[] = [
         includeTasks: q.get("tasks") !== "0",
         includeDoneTasks: q.get("done") === "1",
       });
+      // ?matter= keeps one matter's items (the matter page's "Upcoming" card).
+      if (matterId !== undefined) {
+        out.items = out.items.filter((i: any) => i.matterId === matterId);
+        out.conflicts = [];
+      }
+      return out;
     },
   },
   {

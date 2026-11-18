@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { openDb, type DB } from "./db.ts";
 import { Engine } from "./engine.ts";
 import { addDays, rollForward, today as todayIn, type ISODate } from "./dates.ts";
+import { seedCalendar } from "./calendar/seed.ts";
 
 export const DEMO_NOTE = "Fictional demo data. Not a real client.";
 
@@ -328,6 +329,7 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
     );
     e.addTask({ title: "Renew the firm's online research subscription", assigneeId: casey, priority: "low" }, casey);
     e.addTask({ title: "Review the month's open matters with Riley", assigneeId: jordan, dueDate: addDays(realToday, 3) }, jordan);
+    seedCalendar(db, { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 } }, realToday, closed);
     stampActivity();
     db.exec("COMMIT");
     return { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 }, lists: { intake, llc, review, closing } };

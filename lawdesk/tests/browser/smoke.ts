@@ -180,6 +180,162 @@ for (const [label, viewport] of [
     await noHorizontalScroll();
   });
 
+  // ------------------------------------------------------------ calendar
+  const nextTuesday = (() => {
+    let d = now;
+    do d = new Date(Date.parse(d + "T12:00:00Z") + 86_400_000).toISOString().slice(0, 10);
+    while (new Date(d + "T12:00:00Z").getUTCDay() !== 2);
+    return d;
+  })();
+
+  await check(`${label}: My tasks shows today's calendar`, async () => {
+    await page.goto(base + "/#/my");
+    await page.waitForSelector(".cal-today h2:has-text(\"Today's calendar\")");
+    await page.waitForSelector(".cal-today :is(.cal-line, p.muted)");
+  });
+
+  await check(`${label}: calendar month shows events and tasks`, async () => {
+    await page.evaluate(() => {
+      localStorage.setItem("lawdesk.cal.view", "month");
+      localStorage.setItem("lawdesk.cal.scope", "firm");
+    });
+    await page.goto(base + "/#/calendar");
+    await page.waitForSelector(".cal-month .cal-cell");
+    assert.equal(await page.locator(".cal-month .cal-cell").count(), 42);
+    await page.waitForSelector(".cal-daypanel");
+    if (label === "desktop") {
+      assert.ok(await page.locator(".cal-chip", { hasText: "Staff meeting" }).count() >= 3, "weekly staff meeting");
+      assert.ok(await page.locator(".cal-chip.is-task").count() > 0, "task due dates shown as tasks");
+    } else assert.ok(await page.locator(".cal-dot").count() > 0, "phone month shows dots");
+    await noHorizontalScroll();
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.screenshot({ path: shots + `calendar-month-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: new repeating event warns about double-booking`, async () => {
+    await page.locator(".page-head button", { hasText: "New event" }).click();
+    const dlg = page.locator("dialog.cal-dialog");
+    await dlg.locator("input[name=title]").fill(`Case strategy ${label}`);
+    await dlg.locator("select[name=matter]").selectOption({ label: "D-1002 Riverside Plaza purchase" });
+    await dlg.locator("input[name=date]").fill(nextTuesday);
+    await dlg.locator("input[name=date]").dispatchEvent("change");
+    await dlg.locator("input[name=startTime]").fill("09:00");
+    await dlg.locator("input[name=endTime]").fill("09:30");
+    const options = await dlg.locator("select[name=repeat] option").allInnerTexts();
+    assert.ok(options.includes("Every week on Tuesday"), options.join(" | "));
+    assert.ok(options.some((o) => / Tuesday of each month$/.test(o)), "nth weekday of the month");
+    await dlg.locator("select[name=repeat]").selectOption({ label: "Every week on Tuesday" });
+    await dlg.locator("select[name=repeatEnds]").selectOption("count");
+    await dlg.locator("button[type=submit]").click();
+    await dlg.locator(".cal-warning:has-text('Staff meeting')").waitFor();
+    assert.equal(await dlg.locator("button[type=submit]").innerText(), "Save anyway");
+    await page.screenshot({ path: shots + `calendar-event-dialog-${label}.png` });
+    await dlg.locator("button[type=submit]").click();
+    await page.waitForSelector(`.toast:has-text("Case strategy ${label}")`);
+    await page.waitForSelector(".toast:has-text('Double-booked')");
+  });
+
+  await check(`${label}: week and list views; cancel one date of a series`, async () => {
+    await page.locator(".segmented button", { hasText: "Week" }).click();
+    await page.waitForSelector(label === "desktop" ? ".cal-week .cal-block" : ".cal-list-day");
+    await noHorizontalScroll();
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.screenshot({ path: shots + `calendar-week-${label}.png`, fullPage: true });
+    await page.locator(".segmented button", { hasText: "List" }).click();
+    await page.waitForSelector(".cal-list .cal-line");
+    await noHorizontalScroll();
+    const before = await page.locator(".cal-line", { hasText: `Case strategy ${label}` }).count();
+    assert.ok(before >= 1, "the new series is listed");
+    await page.locator(".cal-line", { hasText: `Case strategy ${label}` }).first().locator("button").click();
+    page.once("dialog", (d: any) => d.accept());
+    await page.locator("dialog.cal-dialog button", { hasText: "Cancel this date" }).click();
+    await page.waitForSelector(".toast:has-text('Cancelled that date')");
+    await page.waitForFunction(
+      ([t, n]: [string, number]) => [...document.querySelectorAll(".cal-line")].filter((e) => e.textContent!.includes(t)).length === n - 1,
+      [`Case strategy ${label}`, before] as [string, number],
+    );
+    await page.screenshot({ path: shots + `calendar-list-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: import an .ics file`, async () => {
+    await page.locator(".page-head button", { hasText: "Import a calendar file" }).click();
+    const dlg = page.locator("dialog.cal-dialog");
+    const ics = [
+      "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Demo//EN", "BEGIN:VEVENT", `UID:smoke-${label}@example.com`,
+      `DTSTAMP:20261101T000000Z`, `DTSTART;VALUE=DATE:${nextTuesday.replaceAll("-", "")}`, `SUMMARY:Imported docket call ${label}`,
+      "END:VEVENT", "END:VCALENDAR", "",
+    ].join("\r\n");
+    await dlg.locator("input[type=file]").setInputFiles({ name: "court.ics", mimeType: "text/calendar", buffer: Buffer.from(ics) });
+    await dlg.locator("button[type=submit]").click();
+    await dlg.locator(".cal-import-result:has-text('1 event added')").waitFor();
+    await dlg.locator("button", { hasText: "Close" }).last().click();
+    await page.waitForSelector(`.cal-line:has-text("Imported docket call ${label}")`);
+  });
+
+  await check(`${label}: subscribe link: make, read, turn off`, async () => {
+    await page.locator(".page-head button", { hasText: "Subscribe" }).click();
+    const dlg = page.locator("dialog.cal-dialog");
+    await dlg.locator(".cal-steps li").first().waitFor();
+    await dlg.locator(".cal-app-tabs button", { hasText: "Google Calendar" }).click();
+    assert.match(await dlg.locator(".cal-steps").innerText(), /From URL/);
+    await dlg.locator(".cal-feed-form input").fill(`Smoke ${label}`);
+    await dlg.locator(".cal-feed-form button[type=submit]").click();
+    const url = await dlg.locator("input.cal-feed-url").inputValue();
+    assert.match(url, /\/api\/calendar\/feed\/[\w-]+\.ics$/);
+    const feed = await fetch(url);
+    assert.equal(feed.status, 200);
+    assert.match(await feed.text(), /BEGIN:VCALENDAR/);
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `calendar-subscribe-${label}.png` });
+    page.once("dialog", (d: any) => d.accept());
+    await dlg.locator(".cal-feed-list li", { hasText: `Smoke ${label}` }).locator("button", { hasText: "Turn off" }).click();
+    await page.waitForSelector(".toast:has-text('Link turned off')");
+    assert.equal((await fetch(url)).status, 404);
+    await dlg.locator(".modal-head button").click();
+  });
+
+  // ------------------------------------------------------ deadline calculator
+  await check(`${label}: deadline calculator shows working, warnings and disclaimer`, async () => {
+    await page.goto(base + `/#/deadlines/${demo.matters.m2}`);
+    await page.waitForSelector("#dl-rule");
+    await page.waitForSelector(".dl-disclaimer");
+    await page.selectOption("#dl-rule", "interrogatory-answers");
+    await page.fill("#dl-trigger", "2026-10-01");
+    await page.locator("#dl-trigger").dispatchEvent("change");
+    await page.selectOption("#dl-service", "mail");
+    await page.waitForSelector(".dl-date:has-text('Thursday, November 5, 2026')");
+    assert.ok(await page.locator(".dl-steps li").count() >= 4, "steps shown");
+    assert.ok(await page.locator(".dl-disclaimer").isVisible(), "disclaimer visible");
+    assert.ok(await page.locator(".dl-sources a", { hasText: "K.S.A. 60-233" }).count() > 0, "citation");
+    await noHorizontalScroll();
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.screenshot({ path: shots + `deadlines-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: add a deadline to a matter as event and task`, async () => {
+    // A trigger date of today keeps the deadline in the future, so it shows under Upcoming.
+    await page.fill("#dl-trigger", now);
+    await page.locator("#dl-trigger").dispatchEvent("change");
+    await page.waitForFunction(() => !document.querySelector(".dl-date")?.textContent?.includes("November 5, 2026"));
+    assert.equal(await page.locator("#dl-matter").inputValue(), String(demo.matters.m2));
+    await page.fill("#dl-title", `Interrogatory answers due ${label}`);
+    await page.locator("#dl-add").click();
+    await page.waitForSelector(".dl-added");
+    assert.ok(await page.locator(".dl-disclaimer").isVisible(), "disclaimer still visible");
+    await page.goto(base + `/#/matters/${demo.matters.m2}`);
+    await page.waitForSelector(`.cal-upcoming .cal-line:has-text("Interrogatory answers due ${label}")`);
+    const task = page.locator(".task", { hasText: `Interrogatory answers due ${label}` });
+    await task.waitFor();
+    assert.ok(await task.evaluate((e) => e.classList.contains("prio-high")), "high-priority task");
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.screenshot({ path: shots + `matter-upcoming-${label}.png`, fullPage: true });
+    await page.locator(".cal-upcoming .cal-line", { hasText: `Interrogatory answers due ${label}` }).locator("button").click();
+    const notes = await page.locator("dialog.cal-dialog .cal-notes").innerText();
+    assert.match(notes, /How it was computed/);
+    assert.match(notes, /VERIFY THIS DATE/);
+    await page.locator("dialog.cal-dialog .modal-head button").click();
+  });
+
   await check(`${label}: no script errors`, async () => {
     assert.deepEqual(errors, []);
   });
