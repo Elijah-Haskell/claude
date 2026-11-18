@@ -3,6 +3,8 @@
 // where it gets dealt with.
 
 import { h, fmtDate, plural } from "../dom.js";
+import { pageHeader, card as kitCard, pill, button, callout, sectionTitle } from "../ui/components.js";
+import { icon } from "../ui/icons.js";
 import { get } from "../api.js";
 import { columnChart, barList, legend } from "../charts.js";
 import { money, moneyWhole, moneyShort, hoursShort, hours, int, longDate } from "../report-format.js";
@@ -20,18 +22,27 @@ export const FIX = {
   },
 };
 
+const TILE_ICONS = { "t-overdue": "triangle-alert", "t-opened": "briefcase", "t-unbilled": "clock", "t-owed": "receipt", "t-received": "wallet" };
+
+/** A figure at the top; built like the kit's stat() so it matches Home, plus the overview's ids. */
 function tile({ n, label, sub, href, tone, id }) {
   return h(
-    "a.stat.ov-tile" + (tone ? "." + tone : ""),
+    "a.stat.stat-v2.ov-tile" + (tone ? "." + tone : ""),
     { href, id, dataset: { tile: id } },
+    h("span.stat-top", h("span.stat-icon", icon(TILE_ICONS[id] || "chart-column", { size: 16 })), h("span.stat-label", label)),
     h("span.stat-n", n),
-    h("span.stat-label", label),
-    sub ? h("span.ov-sub", sub) : null,
+    sub ? h("span.stat-hint.ov-sub", sub) : null,
   );
 }
 
-function card(title, sub, ...body) {
-  return h("section.card.ov-card", h("div.ov-card-head", h("h2", title), sub ? h("p.ov-card-sub", sub) : null), ...body);
+/** The stage charts run full width, one practice area per column. */
+function stagesCard(el) {
+  el.classList.add("ov-stages");
+  return el;
+}
+
+function card(title, sub, ic, ...body) {
+  return kitCard({ title, subtitle: sub, icon: ic, className: "ov-card", body });
 }
 
 function numbers(caption, head, rows) {
@@ -46,13 +57,14 @@ function notSetUp(what) {
   return h("p.empty", `${what} will show here once billing is set up.`);
 }
 
-function attention(title, count, items, empty, more) {
-  return h(
-    "section.card.ov-attn",
-    h("div.ov-card-head", h("h2", title, count ? h("span.badge.late.ov-count", String(count)) : null)),
-    items.length ? h("ul.ov-list", items) : h("p.empty.ov-clear", empty),
-    more,
-  );
+function attention(title, ic, count, items, empty, more) {
+  return kitCard({
+    title,
+    icon: ic,
+    className: "ov-attn",
+    actions: count == null ? null : count ? pill(String(count), "danger", { dot: false }) : pill("All clear", "success", { dot: false }),
+    body: [items.length ? h("ul.ov-list", items) : h("p.ov-clear", icon("circle-check", { size: 16 }), h("span", empty)), more],
+  });
 }
 
 function item(href, main, side, sub) {
@@ -179,11 +191,11 @@ export async function overviewView() {
     : [h("p.empty", "No open matters.")];
 
   const charts = h(
-    "div.ov-grid",
-    card("Payments received", "By month, last 12 months", ...collections),
-    card("Hours worked and billed", `By person, ${longDate(c.hours?.from ?? today)} to ${longDate(today)}`, ...hoursChart),
-    card("Money owed, by how late it is", `Days past due, as of ${longDate(today)}`, ...agingChart),
-    card("Open matters by stage", "For each practice area", ...stageCharts),
+    "div.ov-grid.ov-charts",
+    card("Payments received", "By month, last 12 months", "wallet", ...collections),
+    card("Hours worked and billed", `By person, ${longDate(c.hours?.from ?? today)} to ${longDate(today)}`, "clock", ...hoursChart),
+    card("Money owed, by how late it is", `Days past due, as of ${longDate(today)}`, "receipt", ...agingChart),
+    stagesCard(card("Open matters by stage", "For each practice area", "briefcase", ...stageCharts)),
   );
 
   // ------------------------------------------------------------- attention
@@ -193,6 +205,7 @@ export async function overviewView() {
     "div.ov-grid.ov-attn-grid",
     attention(
       "Overdue tasks by person",
+      "triangle-alert",
       overdueCount,
       a.overdue_by_person.map((p) => item(FIX.personTasks(p), p.name, plural(p.count, "task"), `Oldest was due ${fmtDate(p.oldest_due, today)} (${plural(p.days_late, "day")} ago)`)),
       "No overdue tasks.",
@@ -200,6 +213,7 @@ export async function overviewView() {
     ),
     attention(
       `Matters with no activity in ${d.settings.quiet_days} days`,
+      "hourglass",
       a.quiet_matters.total,
       a.quiet_matters.items.map((m) =>
         item(FIX.matter(m.id), [m.number ? h("span.num", m.number) : null, m.name], `${m.days_quiet} days`, [m.client_name, m.last_activity ? `last activity ${fmtDate(m.last_activity, today)}` : "no activity yet"].filter(Boolean).join(" · ")),
@@ -210,6 +224,7 @@ export async function overviewView() {
     a.past_due_invoices
       ? attention(
           `Invoices more than ${d.settings.past_due_days} days past due`,
+          "receipt",
           a.past_due_invoices.total,
           a.past_due_invoices.items.map((i) =>
             item(FIX.invoice(i), `Invoice ${i.number ?? "#" + i.id} · ${i.client_name}`, money(i.balance_cents), `${i.matter_name} · due ${fmtDate(i.due_on, today)}, ${i.days_past_due} days ago`),
@@ -217,10 +232,11 @@ export async function overviewView() {
           "No invoices are that far past due.",
           a.past_due_invoices.total ? h("p.ov-foot", `${money(a.past_due_invoices.balance_cents)} in all · `, h("a", { href: FIX.report("aging", { view: "invoice" }) }, "Aging by invoice")) : null,
         )
-      : attention(`Invoices more than ${d.settings.past_due_days} days past due`, 0, [], "Billing is not set up yet.", null),
+      : attention(`Invoices more than ${d.settings.past_due_days} days past due`, "receipt", null, [], "Billing is not set up yet.", null),
     a.undecided_conflicts
       ? attention(
           "Conflict checks without a decision",
+          "scale",
           a.undecided_conflicts.total,
           a.undecided_conflicts.items.map((k) =>
             item(
@@ -233,7 +249,7 @@ export async function overviewView() {
           "Every conflict check has a decision.",
           null,
         )
-      : attention("Conflict checks without a decision", 0, [], "Conflict checking is not set up yet.", null),
+      : attention("Conflict checks without a decision", "scale", null, [], "Conflict checking is not set up yet.", null),
   );
 
   const defs = h(
@@ -260,16 +276,18 @@ export async function overviewView() {
 
   return h(
     "div.page.overview-page",
-    h(
-      "div.page-head",
-      h("div", h("h1", "Firm overview"), h("p.sub", `The whole firm as of ${longDate(today)}`)),
-      h("div.head-actions", h("a.btn", { href: "#/reports" }, "All reports")),
-    ),
-    d.errors?.length ? h("div.error-box", h("p", "Some figures could not be worked out and are left out:"), h("ul", d.errors.map((e) => h("li", e)))) : null,
+    pageHeader({
+      title: "Firm overview",
+      subtitle: `The whole firm as of ${longDate(today)}. Every figure links to the list behind it.`,
+      actions: [button("All reports", { icon: "reports", href: "#/reports" })],
+    }),
+    d.errors?.length
+      ? callout({ tone: "danger", title: "Some figures could not be worked out and are left out.", body: h("ul.ov-errors", d.errors.map((e) => h("li", e))) })
+      : null,
     tiles,
-    h("h2.ov-section", "Needs attention"),
+    sectionTitle("Needs attention"),
     lists,
-    h("h2.ov-section", "At a glance"),
+    sectionTitle("At a glance"),
     charts,
     defs,
   );

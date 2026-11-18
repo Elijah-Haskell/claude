@@ -1,161 +1,431 @@
-/* Sign-in screens, the user menu, My account and Settings > Sign-in and access. */
+/* Sign-in screens, My account and Settings > Sign-in and access. Tokens only (see app.css). */
 
 /* ------------------------------------------------------- sign-in screens */
-body.signed-out { background: var(--bg); }
+body.signed-out {
+  background: var(--surface);
+}
 .auth-page {
   min-height: 100vh;
   display: grid;
-  place-items: start center;
-  padding: 12vh 16px 48px;
-  border-top: 6px solid var(--accent);
+  grid-template-columns: minmax(360px, 5fr) 7fr;
 }
-.auth-card.card {
-  width: 100%;
-  max-width: 420px;
-  padding: 32px 32px 26px;
-  box-shadow: var(--shadow-pop);
-  border-top: 3px solid var(--gold);
+
+/* Brand panel */
+.auth-aside {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-10);
+  padding: var(--sp-10) var(--sp-12);
+  background: linear-gradient(160deg, var(--brand-800) 0%, var(--brand-900) 55%, var(--brand-950) 100%);
+  color: var(--side-text);
+  overflow: hidden;
+}
+.auth-aside-body::before {
+  /* the brass tab from the mark, as a short rule above the tagline */
+  content: "";
+  display: block;
+  width: 40px;
+  height: 3px;
+  border-radius: var(--r-full);
+  background: var(--accent-500);
+  margin-bottom: var(--sp-6);
+}
+.auth-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.auth-logo img {
+  display: block;
+}
+.auth-wordmark {
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--side-text-strong);
+}
+.auth-aside-body {
+  margin: auto 0;
+  max-width: 440px;
+}
+.auth-tagline {
+  margin: 0 0 var(--sp-3);
+  font-size: 34px;
+  line-height: 1.15;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--side-text-strong);
+}
+.auth-lede {
+  margin: 0 0 var(--sp-8);
+  font-size: var(--fs-lg);
+  line-height: var(--lh);
+  color: var(--side-text);
+}
+.auth-highlights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-5);
+}
+.auth-highlights li {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+.auth-hl-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-md);
+  background: var(--side-active);
+  color: var(--accent-300);
+}
+.auth-hl-text {
+  display: grid;
+  gap: 2px;
+  font-size: var(--fs-md);
+  color: var(--side-text);
+}
+.auth-hl-text strong {
+  color: var(--side-text-strong);
+  font-weight: 600;
+}
+.auth-aside-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--side-muted);
+}
+
+/* Form panel */
+.auth-main {
+  display: grid;
+  place-items: center;
+  padding: var(--sp-12) var(--sp-8);
+  background: var(--surface);
   outline: none;
 }
-.auth-brand {
-  font-family: var(--serif);
-  font-size: 1.05rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 18px;
+.auth-card {
+  width: 100%;
+  max-width: 400px;
 }
-.auth-title { font-size: 1.6rem; margin-bottom: 8px; }
-.auth-intro { color: var(--muted); margin: 0 0 18px; }
-.auth-form { margin-top: 18px; }
-.auth-form input { width: 100%; min-height: 40px; font-size: 1rem; }
-.auth-form .error-box { margin: 0; }
-.auth-form .error-box[hidden] { display: none; }
-.auth-submit { width: 100%; min-height: 42px; margin-top: 6px; font-size: 1rem; }
-.auth-hint { margin: 14px 0 0; }
-.auth-foot { margin: 18px 0 0; text-align: center; }
-@media (max-width: 480px) {
-  .auth-page { padding-top: 32px; }
-  .auth-card.card { padding: 24px 20px 20px; }
+.auth-logo-compact {
+  display: none;
+  margin-bottom: var(--sp-8);
+}
+.auth-logo-compact .auth-wordmark {
+  color: var(--text);
+}
+.auth-title {
+  font-size: var(--fs-3xl);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin: 0 0 var(--sp-2);
+}
+.auth-intro {
+  color: var(--muted);
+  margin: 0 0 var(--sp-6);
+  font-size: var(--fs-md);
+}
+.auth-form {
+  gap: var(--sp-5);
+}
+.auth-form input:not([type="checkbox"]) {
+  min-height: 42px;
+  font-size: var(--fs-lg);
+}
+.auth-form .error-box {
+  margin: 0;
+}
+.auth-form .error-box[hidden] {
+  display: none;
+}
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+  margin-top: var(--sp-1);
+}
+.auth-hint {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.auth-foot {
+  margin: var(--sp-6) 0 0;
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  text-align: center;
 }
 
-/* -------------------------------------------------------------- user menu */
-.user-menu { position: relative; }
-.user-menu-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 4px 10px;
-  border: 1px solid color-mix(in srgb, var(--accent-text) 30%, transparent);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--accent-text) 10%, transparent);
-  color: var(--accent-text);
-  font: inherit;
-  cursor: pointer;
-  max-width: 220px;
+@media (max-width: 900px) {
+  .auth-page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+  .auth-aside {
+    display: none;
+  }
+  body.signed-out {
+    background: var(--bg);
+  }
+  .auth-main {
+    place-items: start center;
+    padding: var(--sp-12) var(--sp-4);
+    background: var(--bg);
+    border-top: 4px solid var(--brand-800);
+  }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-md);
+    padding: var(--sp-8) var(--sp-6) var(--sp-6);
+  }
+  .auth-logo-compact {
+    display: flex;
+  }
 }
-.user-menu-button:hover { background: color-mix(in srgb, var(--accent-text) 18%, transparent); }
-.user-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.user-menu-caret { font-size: 0.75em; opacity: 0.8; }
-.user-menu-list {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 50;
-  min-width: 220px;
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-pop);
-  padding: 6px 0;
+@media (max-width: 420px) {
+  .auth-main {
+    padding-top: var(--sp-8);
+  }
+  .auth-card {
+    padding: var(--sp-6) var(--sp-5) var(--sp-5);
+  }
+  .auth-title {
+    font-size: var(--fs-2xl);
+  }
 }
-.user-menu-list[hidden] { display: none; }
-.user-menu-who { display: grid; gap: 1px; padding: 8px 14px 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-.user-menu-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 8px 14px;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-}
-.user-menu-item:hover, .user-menu-item:focus { background: var(--surface-2); text-decoration: none; outline: none; }
 
 /* ------------------------------------------------------------- My account */
-.account-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
-.account-grid > .card { margin: 0; }
-@media (max-width: 860px) { .account-grid { grid-template-columns: minmax(0, 1fr); } }
-.account-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0 0 12px; }
-.account-facts dt { color: var(--muted); }
-.account-facts dd { margin: 0; overflow-wrap: anywhere; }
-.account-page .form-grid label { display: grid; gap: 4px; font-size: 0.9rem; color: var(--muted); }
-.account-page .form-grid input { width: 100%; }
-.account-page .form-actions { flex-wrap: wrap; margin-top: 4px; }
-.status-on { color: var(--good); font-weight: 600; }
-.setup-steps { padding-left: 20px; display: grid; gap: 10px; }
+.account-who {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-2);
+  font-weight: 550;
+}
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+  align-items: start;
+}
+.account-col {
+  display: grid;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+@media (max-width: 960px) {
+  .account-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.account-page .kv dd {
+  overflow-wrap: anywhere;
+}
+.account-note {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.account-2fa > p:first-child {
+  margin-top: 0;
+}
+.account-page .form-actions {
+  flex-wrap: wrap;
+}
+.setup-steps {
+  padding-left: 20px;
+  margin: 0 0 var(--sp-4);
+  display: grid;
+  gap: var(--sp-3);
+}
 .setup-key {
-  margin: 6px 0 4px;
-  padding: 10px 12px;
+  margin: var(--sp-2) 0 var(--sp-1);
+  padding: var(--sp-3);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 1.05rem;
-  letter-spacing: 0.08em;
+  border-radius: var(--r-md);
+  font-family: var(--mono);
+  font-size: var(--fs-lg);
+  letter-spacing: 0.06em;
   overflow-wrap: anywhere;
 }
 .recovery-codes {
   list-style: none;
-  padding: 12px;
-  margin: 0 0 12px;
+  padding: var(--sp-3) var(--sp-4);
+  margin: 0 0 var(--sp-3);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 18px;
+  gap: var(--sp-2) var(--sp-5);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 1.02rem;
-  letter-spacing: 0.06em;
+  border-radius: var(--r-md);
+  font-family: var(--mono);
+  font-size: var(--fs-md);
+  letter-spacing: 0.04em;
 }
-.session-list { display: grid; gap: 0; margin: 0 0 12px; }
-.session { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
-.session:last-child { border-bottom: 0; }
-.session > div { min-width: 0; overflow-wrap: anywhere; }
-.session-current { margin-left: 8px; background: var(--accent-soft); color: var(--accent); }
+.session-list {
+  margin: 0;
+}
+.session {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+.session:first-child {
+  border-top: 0;
+}
+.session-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  color: var(--muted);
+}
+.session-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.session-device {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 550;
+}
+.session-sub {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.account-page .card-footer .account-note {
+  margin: 0;
+}
 
 /* ------------------------------------------ Settings > Sign-in and access */
-.settings-note { background: var(--today-soft); color: var(--today); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin: 0 0 16px; }
-.accounts-table td { vertical-align: top; }
-.accounts-table select { max-width: 100%; }
-.acct-status { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.acct-status .muted { flex-basis: 100%; }
-.acct-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-.acct-ok { background: var(--good-soft); color: var(--good); }
-.acct-locked { background: var(--late-soft); color: var(--late); }
-.acct-off { background: var(--wait-soft); color: var(--wait); }
-.invite-form { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
-.invite-form h3 { color: var(--accent); }
-.temp-pw { display: flex; gap: 8px; }
-.temp-pw input { flex: 1; min-width: 0; }
+.settings-card {
+  scroll-margin-top: calc(var(--top-h) + 20px);
+}
+.accounts-pad {
+  padding: var(--sp-4) var(--sp-5);
+}
+.accounts-table td {
+  vertical-align: middle;
+}
+.acct-person {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.acct-person .person-sub {
+  overflow-wrap: anywhere;
+}
+.acct-you {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-3);
+  border-radius: var(--r-full);
+  padding: 1px 8px;
+}
+.acct-role {
+  min-width: 140px;
+}
+.acct-status {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.acct-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+.acct-last {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.acct-actions {
+  display: flex;
+  gap: var(--sp-1);
+  justify-content: flex-end;
+  align-items: center;
+}
+.accounts-table tr.inactive .person-name {
+  color: var(--muted);
+}
+.temp-pw {
+  display: flex;
+  gap: var(--sp-2);
+}
+.temp-pw input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+}
 @media (max-width: 720px) {
-  .invite-form .form-row { grid-template-columns: minmax(0, 1fr); }
-  .acct-actions { justify-content: flex-start; }
+  .acct-actions {
+    justify-content: flex-start;
+  }
+  .temp-pw {
+    flex-wrap: wrap;
+  }
 }
 
-/* Phones: each person becomes a small block instead of a table row. */
+/* Email, payments and e-signature sections drawn by their modules, framed like the rest. */
+.settings-frame > .card {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  margin: 0;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+/* Their own heading stays for screen readers; the frame header shows it on screen. */
+.settings-frame > .card > h2:first-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.settings-frame > .card {
+  position: relative;
+}
 @media (max-width: 720px) {
-  .accounts-table thead { display: none; }
-  .accounts-table, .accounts-table tbody, .accounts-table tr, .accounts-table td { display: block; width: 100%; }
-  .accounts-table tr { padding: 10px 0; border-bottom: 1px solid var(--border); }
-  .accounts-table td { padding: 3px 0; overflow-wrap: anywhere; }
-  .accounts-table td:first-child { font-weight: 600; }
-  .accounts-table td.acct-actions { display: flex; padding-top: 6px; }
+  .settings-frame > .card {
+    padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  }
 }
 
 @media print {
-  .top, .account-page .card:not(#a-2fa), .form-actions { display: none !important; }
+  .topbar,
+  .sidebar,
+  .account-page .card:not(#a-2fa),
+  .account-page .page-head,
+  .form-actions {
+    display: none !important;
+  }
 }

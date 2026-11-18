@@ -7,7 +7,7 @@ import { state, loadSetup, today } from "../state.js";
 import { emailSettingsSection } from "./email-settings.js";
 import { paymentSettingsSection, esignSettingsSection } from "./pay-esign.js";
 import { accountsSection } from "./accounts.js";
-import { pageHeader, avatar } from "../ui/components.js";
+import { pageHeader, avatar, callout, button } from "../ui/components.js";
 import { icon } from "../ui/icons.js";
 
 function sectionHead(ic, title, desc = null) {
@@ -63,7 +63,8 @@ export async function settingsView() {
             e.preventDefault();
             nav.querySelectorAll("a").forEach((a) => a.removeAttribute("aria-current"));
             e.currentTarget.setAttribute("aria-current", "true");
-            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            const target = document.getElementById(id);
+            (target?.closest(".settings-frame") || target)?.scrollIntoView({ behavior: "smooth", block: "start" });
           },
         },
         icon({ "s-people": "users", "s-accounts": "lock", "s-clients": "contact", "s-areas": "scale", "s-dates": "calendar-days", "s-closed": "calendar-clock", "s-auto": "zap", "s-email": "mail", "s-pay": "wallet", "s-esign": "pencil" }[id] || "settings", { size: 16 }),
@@ -79,8 +80,40 @@ export async function settingsView() {
 
   function draw() {
     const s = state.setup;
-    const note = state.account?.role === "admin" ? null : h("p.settings-note", "Only an administrator can change these settings.");
-    body.replaceChildren(...[note, people(s), accountsSection(), clients(s), areas(s), dateFields(s), closedDays(s), automations(s), emailSection, paymentSettingsSection(), esignSettingsSection()].filter(Boolean));
+    const note = state.account?.role === "admin" ? null : callout({ tone: "info", body: "Only an administrator can change these settings." });
+    body.replaceChildren(
+      ...[
+        note,
+        people(s),
+        accountsSection(),
+        clients(s),
+        areas(s),
+        dateFields(s),
+        closedDays(s),
+        automations(s),
+        frame("mail", "Email", "How Lawdesk sends email, the reminders it sends, and saved email templates.", emailSection),
+        frame("wallet", "Online payments", "Letting clients pay their invoices online.", paymentSettingsSection()),
+        frame("pencil", "Electronic signatures", "Sending documents to clients to sign online.", esignSettingsSection()),
+      ].filter(Boolean),
+    );
+  }
+
+  /**
+   * The email, payment and e-signature sections are drawn by their own modules, with their own
+   * card and heading. This puts them in the same card frame as the rest of Settings unchanged:
+   * their own h2 stays the section's heading for screen readers (visually hidden by auth.css),
+   * and the frame shows the same title with an icon and a description.
+   */
+  function frame(ic, title, desc, section) {
+    return h(
+      "div.card.card-v2.settings-card.settings-frame",
+      h(
+        "header.card-header",
+        { "aria-hidden": "true" },
+        h("div.card-heading", h("span.card-icon", icon(ic, { size: 16 })), h("div", h("div.card-title", title), h("p.card-subtitle", desc))),
+      ),
+      section,
+    );
   }
 
   // ---------------------------------------------------------------- people
@@ -322,7 +355,7 @@ export async function settingsView() {
     pageHeader({
       title: "Settings",
       subtitle: "Your firm's people, clients, practice areas and the rules that drive tasks.",
-      actions: h("a.btn#settings-import-clio", { href: "#/settings/import-clio" }, "Import from Clio"),
+      actions: button("Import from Clio", { href: "#/settings/import-clio", icon: "import", id: "settings-import-clio" }),
     }),
     h("div.settings-layout", nav, body),
   );

@@ -5,6 +5,19 @@
 import { h, select, addDays } from "../dom.js";
 import { get } from "../api.js";
 import { money, hours, pct, int, longDate } from "../report-format.js";
+import { pageHeader, button, pill, sectionTitle, card, emptyState, callout } from "../ui/components.js";
+import { icon } from "../ui/icons.js";
+
+const REPORT_ICONS = {
+  tasks: "list-checks",
+  matters: "briefcase",
+  clients: "contact",
+  activity: "activity",
+  productivity: "users",
+  "time-by-matter": "clock",
+  revenue: "wallet",
+  aging: "receipt",
+};
 
 const GROUPS = [
   { title: "Work and matters", keys: ["tasks", "matters", "clients", "activity"] },
@@ -18,15 +31,15 @@ export async function reportsListView() {
   const byKey = Object.fromEntries(cat.reports.map((r) => [r.key, r]));
   return h(
     "div.page.reports-page",
-    h(
-      "div.page-head",
-      h("div", h("h1", "Reports"), h("p.sub", "Each report can be narrowed by dates, person or matter, downloaded for Excel or printed.")),
-      h("div.head-actions", h("a.btn", { href: "#/overview" }, "Firm overview")),
-    ),
+    pageHeader({
+      title: "Reports",
+      subtitle: "Each report can be narrowed by dates, person or matter, downloaded for Excel or printed.",
+      actions: [button("Firm overview", { icon: "overview", href: "#/overview" })],
+    }),
     GROUPS.map((g) =>
       h(
         "section.rp-group",
-        h("h2", g.title),
+        sectionTitle(g.title),
         h(
           "ul.rp-cards",
           g.keys
@@ -38,9 +51,14 @@ export async function reportsListView() {
                 h(
                   "a.card.rp-card",
                   { href: `#/reports/${r.key}`, dataset: { report: r.key } },
-                  h("h3", r.title),
-                  h("p", r.summary),
-                  r.needsBilling && !cat.billing ? h("p.muted.small", "Needs billing to be set up") : null,
+                  h("span.rp-card-icon", icon(REPORT_ICONS[r.key] || "reports", { size: 18 })),
+                  h(
+                    "span.rp-card-text",
+                    h("h3", r.title),
+                    h("p", r.summary),
+                    r.needsBilling && !cat.billing ? h("span.rp-card-note", pill("Needs billing to be set up", "warning")) : null,
+                  ),
+                  icon("chevron-right", { size: 16, class: "rp-card-go" }),
                 ),
               ),
             ),
@@ -207,16 +225,17 @@ export async function reportView([key, qs]) {
     info.uses.matter ? field("Matter", "rp-matter", matters) : null,
     optSelects.map(({ o, el }) => field(o.label, el.id, el)),
     search ? field("Search", "rp-q", search, ".wide") : null,
-    h("div.rp-submit", h("button.btn.primary", { type: "submit" }, "Show report")),
+    h("div.rp-submit", button("Show report", { variant: "primary", type: "submit" })),
   );
 
   // ------------------------------------------------------------- table
   const csvHref = `/api/reports/${key}/csv${apiQuery ? "?" + apiQuery : ""}`;
-  const actions = h(
-    "div.head-actions",
-    r.available ? h("a.btn#rp-csv", { href: csvHref, download: "" }, "Download for Excel") : null,
-    r.available ? h("button.btn#rp-print", { type: "button", onclick: () => window.print() }, "Print") : null,
-  );
+  const actions = r.available
+    ? [
+        button("Download for Excel", { icon: "file-text", href: csvHref, download: "", id: "rp-csv" }),
+        button("Print", { icon: "file", id: "rp-print", onclick: () => window.print() }),
+      ]
+    : null;
 
   const describe = [];
   if (info.uses.dates) describe.push(f.from || f.to ? `${info.periodLabel || "Between"} ${f.from ? longDate(f.from) : "the beginning"} and ${f.to ? longDate(f.to) : "today"}` : "All dates");
@@ -234,8 +253,9 @@ export async function reportView([key, qs]) {
   if (f.options?.q) describe.push(`Containing “${f.options.q}”`);
 
   let table;
-  if (!r.available) table = h("div.card", h("p.empty", r.notes.join(" ")));
-  else if (!r.rows.length) table = h("div.card", h("p.empty.rp-none", "Nothing matches these filters."));
+  if (!r.available) table = card({ body: emptyState({ icon: REPORT_ICONS[key] || "reports", title: "This report isn't available yet", body: r.notes.join(" "), compact: true }) });
+  else if (!r.rows.length)
+    table = card({ className: "rp-none", body: emptyState({ icon: "search", title: "Nothing matches these filters", body: "Try a wider date range, or everyone and all matters.", compact: true }) });
   else {
     table = h(
       "div.rp-table-wrap",
@@ -265,14 +285,18 @@ export async function reportView([key, qs]) {
     "div.page.report-page",
     { dataset: { report: key } },
     h("div.rp-print-head", h("p.rp-firm", firm), h("p", `Printed ${longDate(today)}`)),
-    h("a.back.no-print", { href: "#/reports" }, "← All reports"),
-    h("div.page-head", h("div", h("h1", r.title), h("p.sub", info.summary)), actions),
+    pageHeader({
+      breadcrumbs: [{ label: "Reports", href: "#/reports" }, { label: r.title }],
+      title: r.title,
+      subtitle: info.summary,
+      actions,
+    }),
     form,
     h("p.rp-applied", describe.join(" · ")),
-    r.available && r.notes.length ? h("ul.rp-notes", r.notes.map((n) => h("li", n))) : null,
+    r.available && r.notes.length ? callout({ tone: "info", body: h("ul.rp-notes", r.notes.map((n) => h("li", n))) }) : null,
     table,
     r.definitions.length
-      ? h("section.card.rp-defs", h("h2", "What the figures mean"), h("dl.defs", r.definitions.map((d) => [h("dt", d.term), h("dd", d.meaning)])))
+      ? card({ title: "What the figures mean", icon: "info", className: "rp-defs", body: h("dl.defs", r.definitions.map((d) => [h("dt", d.term), h("dd", d.meaning)])) })
       : null,
   );
 }
