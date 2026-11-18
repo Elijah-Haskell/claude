@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/server.ts",
     "seed": "node --disable-warning=ExperimentalWarning src/seed.ts",
+    "create-admin": "node --disable-warning=ExperimentalWarning src/auth/cli.ts",
     "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.ts tests/**/*.test.ts",
     "test:browser": "NODE_PATH=$(npm root -g) node --disable-warning=ExperimentalWarning tests/browser/smoke.ts"
   }

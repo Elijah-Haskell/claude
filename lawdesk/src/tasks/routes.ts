@@ -7,6 +7,7 @@ import { tx, type DB } from "../db.ts";
 import { EngineError, type ListInput, type TemplateInput } from "../engine.ts";
 import { isISODate } from "../dates.ts";
 import { intParam, type Ctx, type Route } from "../http.ts";
+import { ADMIN, assertCanSeeMatter, filterVisible } from "../auth/access.ts";
 
 type Row = Record<string, any>;
 
@@ -150,6 +151,14 @@ function track<T>(ctx: Ctx, matterId: number | null, fn: () => T): { result: T; 
 function matterOfTask(ctx: Ctx, taskId: number): number | null {
   const t = one(ctx.db, "SELECT matter_id FROM tasks WHERE id = ?", taskId);
   if (!t) throw new EngineError("Task not found", 404);
+  // A task on a restricted matter is "not found" for people who can't see the matter.
+  if (t.matter_id != null) {
+    try {
+      assertCanSeeMatter(ctx.db, ctx.userId, t.matter_id);
+    } catch {
+      throw new EngineError("Task not found", 404);
+    }
+  }
   return t.matter_id;
 }
 
@@ -217,6 +226,7 @@ export const routes: Route[] = [
   {
     method: "POST",
     path: "/users",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const name = text(ctx.body.name, "Name", { required: true, max: 200 })!;
       const uid = ctx.engine.addUser(name, text(ctx.body.defaultRole, "Role", { max: 60 }), text(ctx.body.email, "Email", { max: 200 }));
@@ -227,6 +237,7 @@ export const routes: Route[] = [
   {
     method: "PATCH",
     path: "/users/:id",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const uid = intParam(ctx, "id");
       const u = one(ctx.db, "SELECT * FROM users WHERE id = ?", uid);
@@ -280,6 +291,7 @@ export const routes: Route[] = [
   {
     method: "POST",
     path: "/practice-areas",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const name = text(ctx.body.name, "Practice area name", { required: true, max: 200 })!;
       if (one(ctx.db, "SELECT 1 FROM practice_areas WHERE name = ?", name)) throw new EngineError("There is already a practice area with that name", 409);
@@ -294,6 +306,7 @@ export const routes: Route[] = [
   {
     method: "PATCH",
     path: "/practice-areas/:id",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const pid = intParam(ctx, "id");
       exists(ctx.db, "practice_areas", pid, "Practice area");
@@ -306,6 +319,7 @@ export const routes: Route[] = [
   {
     method: "POST",
     path: "/practice-areas/:id/stages",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const pid = intParam(ctx, "id");
       exists(ctx.db, "practice_areas", pid, "Practice area");
@@ -318,6 +332,7 @@ export const routes: Route[] = [
   {
     method: "PUT",
     path: "/practice-areas/:id/stage-order",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const pid = intParam(ctx, "id");
       const ids = ctx.body.stageIds;
@@ -330,6 +345,7 @@ export const routes: Route[] = [
   {
     method: "PATCH",
     path: "/stages/:id",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const sid = intParam(ctx, "id");
       exists(ctx.db, "stages", sid, "Stage");
@@ -340,6 +356,7 @@ export const routes: Route[] = [
   {
     method: "DELETE",
     path: "/stages/:id",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const sid = intParam(ctx, "id");
       exists(ctx.db, "stages", sid, "Stage");
@@ -360,6 +377,7 @@ export const routes: Route[] = [
   {
     method: "POST",
     path: "/date-fields",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const key = text(ctx.body.key, "Key", { required: true, max: 64 })!;
       const label = text(ctx.body.label, "Label", { required: true, max: 100 })!;
@@ -371,6 +389,7 @@ export const routes: Route[] = [
   {
     method: "PATCH",
     path: "/date-fields/:key",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const key = ctx.params.key;
       if (!one(ctx.db, "SELECT 1 FROM date_fields WHERE key = ?", key)) throw new EngineError("Date field not found", 404);
@@ -381,6 +400,7 @@ export const routes: Route[] = [
   {
     method: "DELETE",
     path: "/date-fields/:key",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const key = ctx.params.key;
       if (!one(ctx.db, "SELECT 1 FROM date_fields WHERE key = ?", key)) throw new EngineError("Date field not found", 404);
@@ -397,6 +417,7 @@ export const routes: Route[] = [
   {
     method: "POST",
     path: "/holidays",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const d = date(ctx.body.date, "Date");
       if (!d) bad("Date is required");
@@ -408,6 +429,7 @@ export const routes: Route[] = [
   {
     method: "DELETE",
     path: "/holidays/:date",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const d = date(ctx.params.date, "Date")!;
       ctx.engine.removeHoliday(d);
@@ -419,6 +441,7 @@ export const routes: Route[] = [
   {
     method: "POST",
     path: "/automations",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const b = ctx.body;
       const trigger = b.trigger;
@@ -443,6 +466,7 @@ export const routes: Route[] = [
   {
     method: "PATCH",
     path: "/automations/:id",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const aid = intParam(ctx, "id");
       ctx.engine.setAutomationEnabled(aid, !!ctx.body.enabled);
@@ -452,6 +476,7 @@ export const routes: Route[] = [
   {
     method: "DELETE",
     path: "/automations/:id",
+    roles: ADMIN, // firm settings: administrators only
     handler: (ctx) => {
       const aid = intParam(ctx, "id");
       exists(ctx.db, "automations", aid, "Automation");
@@ -512,7 +537,7 @@ export const routes: Route[] = [
     handler: (ctx) => {
       const s = ctx.query.get("status") ?? "open";
       if (s !== "open" && s !== "closed" && s !== "all") bad("Status must be open, closed or all");
-      return ctx.engine.listMatters(s);
+      return filterVisible(ctx.db, ctx.userId, ctx.engine.listMatters(s), "id");
     },
   },
   {
@@ -561,7 +586,9 @@ export const routes: Route[] = [
     method: "GET",
     path: "/matters/:id",
     handler: (ctx) => {
-      const d = ctx.engine.getMatter(intParam(ctx, "id"));
+      const mid = intParam(ctx, "id");
+      assertCanSeeMatter(ctx.db, ctx.userId, mid);
+      const d = ctx.engine.getMatter(mid);
       enrich(ctx.db, d.tasks);
       return d;
     },
@@ -571,6 +598,7 @@ export const routes: Route[] = [
     path: "/matters/:id",
     handler: (ctx) => {
       const mid = intParam(ctx, "id");
+      assertCanSeeMatter(ctx.db, ctx.userId, mid);
       const m = ctx.engine.getMatter(mid).matter;
       const b = ctx.body;
       const name = b.name !== undefined ? text(b.name, "Matter name", { required: true, max: 300 }) : m.name;
@@ -591,6 +619,7 @@ export const routes: Route[] = [
     path: "/matters/:id/stage",
     handler: (ctx) => {
       const mid = intParam(ctx, "id");
+      assertCanSeeMatter(ctx.db, ctx.userId, mid);
       const sid = id(ctx.body.stageId, "Stage");
       if (sid == null) bad("Pick a stage");
       return track(ctx, mid, () => ctx.engine.setStage(mid, sid, ctx.userId)).effects;
@@ -601,6 +630,7 @@ export const routes: Route[] = [
     path: "/matters/:id/dates/:key",
     handler: (ctx) => {
       const mid = intParam(ctx, "id");
+      assertCanSeeMatter(ctx.db, ctx.userId, mid);
       const value = date(ctx.body.value, "Date");
       return track(ctx, mid, () => ctx.engine.setMatterDate(mid, ctx.params.key, value, ctx.userId)).effects;
     },
@@ -610,6 +640,7 @@ export const routes: Route[] = [
     path: "/matters/:id/roles/:role",
     handler: (ctx) => {
       const mid = intParam(ctx, "id");
+      assertCanSeeMatter(ctx.db, ctx.userId, mid);
       const role = text(ctx.params.role, "Role", { required: true, max: 60 })!;
       const uid = id(ctx.body.userId, "Person");
       return track(ctx, mid, () => ctx.engine.setMatterRole(mid, role, uid, ctx.userId)).effects;
@@ -620,6 +651,7 @@ export const routes: Route[] = [
     path: "/matters/:id/close",
     handler: (ctx) => {
       const mid = intParam(ctx, "id");
+      assertCanSeeMatter(ctx.db, ctx.userId, mid);
       ctx.engine.closeMatter(mid, ctx.userId);
       return ctx.engine.getMatter(mid).matter;
     },
@@ -629,6 +661,7 @@ export const routes: Route[] = [
     path: "/matters/:id/reopen",
     handler: (ctx) => {
       const mid = intParam(ctx, "id");
+      assertCanSeeMatter(ctx.db, ctx.userId, mid);
       ctx.engine.getMatter(mid); // 404 if missing
       ctx.engine.reopenMatter(mid, ctx.userId);
       return ctx.engine.getMatter(mid).matter;
@@ -639,6 +672,7 @@ export const routes: Route[] = [
     path: "/matters/:id/checklists",
     handler: (ctx) => {
       const mid = intParam(ctx, "id");
+      assertCanSeeMatter(ctx.db, ctx.userId, mid);
       const lid = id(ctx.body.listId, "Checklist");
       if (lid == null) bad("Pick a checklist");
       return track(ctx, mid, () => ctx.engine.applyList(mid, lid, ctx.userId)).effects;
@@ -656,10 +690,10 @@ export const routes: Route[] = [
       const horizon = Number(ctx.query.get("days") ?? 7);
       if (!Number.isInteger(horizon) || horizon < 1 || horizon > 90) bad("Days must be between 1 and 90");
       const out: Row = ctx.engine.myTasks(uid, horizon);
-      for (const k of ["overdue", "dueToday", "upcoming", "later", "noDate", "waiting"]) enrich(ctx.db, out[k]);
+      for (const k of ["overdue", "dueToday", "upcoming", "later", "noDate", "waiting"]) out[k] = enrich(ctx.db, filterVisible(ctx.db, ctx.userId, out[k]));
       out.doneToday = enrich(
         ctx.db,
-        ctx.engine.firmTasks({ status: "done", assigneeId: uid }).filter((t) => t.completed_on === out.today),
+        filterVisible(ctx.db, ctx.userId, ctx.engine.firmTasks({ status: "done", assigneeId: uid }).filter((t) => t.completed_on === out.today)),
       );
       return out;
     },
@@ -672,11 +706,11 @@ export const routes: Route[] = [
       if (!["active", "open", "waiting", "done", "skipped", "all"].includes(status)) bad("Unknown status filter");
       const assignee = ctx.query.get("assigneeId");
       const unassigned = ctx.query.get("unassigned") === "1" || assignee === "none";
-      const rows = ctx.engine.firmTasks({
+      const rows = filterVisible(ctx.db, ctx.userId, ctx.engine.firmTasks({
         status,
         unassigned,
         assigneeId: unassigned || !assignee ? undefined : id(assignee, "Person")!,
-      });
+      }));
       const limit = 2000;
       return { today: ctx.engine.today(), total: rows.length, tasks: enrich(ctx.db, rows.slice(0, limit)) };
     },
@@ -687,6 +721,7 @@ export const routes: Route[] = [
     handler: (ctx) => {
       const b = ctx.body;
       const matterId = id(b.matterId, "Matter");
+      assertCanSeeMatter(ctx.db, ctx.userId, matterId);
       const assigneeId = id(b.assigneeId, "Person");
       exists(ctx.db, "users", assigneeId, "Person");
       const deps = b.dependsOn ?? [];
@@ -709,7 +744,15 @@ export const routes: Route[] = [
       return { task: taskById(ctx, r.result), effects: r.effects };
     },
   },
-  { method: "GET", path: "/tasks/:id", handler: (ctx) => taskById(ctx, intParam(ctx, "id")) },
+  {
+    method: "GET",
+    path: "/tasks/:id",
+    handler: (ctx) => {
+      const tid = intParam(ctx, "id");
+      matterOfTask(ctx, tid); // 404 for a task on a matter this person can't see
+      return taskById(ctx, tid);
+    },
+  },
   {
     method: "PATCH",
     path: "/tasks/:id",
@@ -755,12 +798,15 @@ export const routes: Route[] = [
     path: "/activity",
     handler: (ctx) => {
       const limit = Math.min(Math.max(Number(ctx.query.get("limit") ?? 50) || 50, 1), 500);
-      return all(
+      // Sign-in events (kinds starting auth_) are for administrators.
+      const rows = all(
         ctx.db,
         `SELECT a.*, u.name AS user_name, m.name AS matter_name FROM activity a
-         LEFT JOIN users u ON u.id = a.user_id LEFT JOIN matters m ON m.id = a.matter_id ORDER BY a.id DESC LIMIT ?`,
+         LEFT JOIN users u ON u.id = a.user_id LEFT JOIN matters m ON m.id = a.matter_id
+         ${ctx.role === "admin" ? "" : "WHERE substr(a.kind, 1, 5) <> 'auth_'"} ORDER BY a.id DESC LIMIT ?`,
         limit,
       );
+      return filterVisible(ctx.db, ctx.userId, rows);
     },
   },
 ];

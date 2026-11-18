@@ -164,6 +164,7 @@ export const routes: Route[] = [
     // GET /api/calendar/feed/<token>.ics — no sign-in; the token is the secret.
     method: "GET",
     path: "/calendar/feed/:file",
+    public: true,
     handler: (ctx): RawResponse => {
       const file = ctx.params.file ?? "";
       const token = file.endsWith(".ics") ? file.slice(0, -4) : file;

@@ -13,6 +13,8 @@ import { routes as documentsRoutes } from "./documents/routes.ts";
 import { SCHEMA as DOCUMENTS_SCHEMA } from "./documents/schema.ts";
 import { routes as calendarRoutes } from "./calendar/routes.ts";
 import { SCHEMA as CALENDAR_SCHEMA } from "./calendar/schema.ts";
+import { routes as authRoutes } from "./auth/routes.ts";
+import { SCHEMA as AUTH_SCHEMA } from "./auth/schema.ts";
 
 export interface Module {
   name: string;
@@ -28,4 +30,6 @@ export const modules: Module[] = [
   { name: "billing", routes: billingRoutes, schema: BILLING_SCHEMA },
   { name: "documents", routes: documentsRoutes, schema: DOCUMENTS_SCHEMA },
   { name: "calendar", routes: calendarRoutes, schema: CALENDAR_SCHEMA },
+  // Sign-in, accounts and matter access. The server checks permissions before every route (src/auth/guard.ts).
+  { name: "auth", routes: authRoutes, schema: AUTH_SCHEMA },
 ];

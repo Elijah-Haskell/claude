@@ -1,12 +1,15 @@
-// Shared app state: firm set-up (people, stages, date fields...), who we're working as,
+// Shared app state: firm set-up (people, stages, date fields...), who is signed in,
 // and the open matters (for quick-add's #matter lookups).
 
-import { get, setActingUser } from "./api.js";
+import { get } from "./api.js";
 
 export const state = {
   setup: null,
   matters: [],
+  /** The signed-in person's user id (set by auth.js from the session). */
   me: null,
+  /** The signed-in account: { id, name, email, role, roleLabel, twoFactor, ... }. */
+  account: null,
 };
 
 function store(key, value) {
@@ -27,22 +30,12 @@ export const prefs = {
 
 export async function loadSetup() {
   state.setup = await get("/setup");
-  const saved = Number(prefs.get("me"));
-  const users = state.setup.users;
-  if (!users.some((u) => u.id === state.me)) state.me = users.some((u) => u.id === saved) ? saved : users[0]?.id ?? null;
-  setActingUser(state.me);
   return state.setup;
 }
 
 export async function loadMatters() {
   state.matters = await get("/matters?status=open");
   return state.matters;
-}
-
-export function setMe(id) {
-  state.me = id;
-  prefs.set("me", id);
-  setActingUser(id);
 }
 
 export const today = () => state.setup?.today;

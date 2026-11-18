@@ -13,6 +13,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDb, type DB } from "./db.ts";
 import { Engine } from "./engine.ts";
+import { seedAccounts, DEMO_PASSWORD } from "./auth/seed.ts";
 import { addDays, rollForward, today as todayIn, type ISODate } from "./dates.ts";
 
 export const DEMO_NOTE = "Fictional demo data. Not a real client.";
@@ -73,6 +74,13 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
     const riley = e.addUser("Riley Chen", "attorney", "riley@example.com");
     const sam = e.addUser("Sam Patel", "paralegal", "sam@example.com");
     const casey = e.addUser("Casey Morgan", "assistant", "casey@example.com");
+    // Demo sign-in accounts, all with the published DEMO_PASSWORD.
+    seedAccounts(db, [
+      { userId: jordan, role: "admin" },
+      { userId: riley, role: "attorney" },
+      { userId: sam, role: "staff" },
+      { userId: casey, role: "staff" },
+    ]);
 
     const client = (name: string, kind: "person" | "company") => {
       const id = e.addContact(name, kind, null, null);
@@ -350,4 +358,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
   seed(db);
   console.log(`Loaded fictional demo data into ${path}. Start the app with "npm start".`);
+  console.log(`Demo sign-in (DEMO ONLY, the password is published in the code): jordan@example.com (administrator), riley@example.com (attorney), sam@example.com and casey@example.com (staff), all with the password "${DEMO_PASSWORD}".`);
 }

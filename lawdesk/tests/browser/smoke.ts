@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { openDb } from "../../src/db.ts";
 import { createServer } from "../../src/server.ts";
 import { seed } from "../../src/seed.ts";
+import { DEMO_PASSWORD } from "../../src/auth/seed.ts";
 import { today } from "../../src/dates.ts";
 
 const require = createRequire(import.meta.url);
@@ -52,9 +53,9 @@ for (const [label, viewport] of [
   const page = await ctx.newPage();
   page.setDefaultTimeout(8000);
   const errors: string[] = [];
+  let expected401 = 0;
   page.on("pageerror", (e: Error) => errors.push(e.message));
   page.on("console", (m: any) => m.type() === "error" && errors.push(m.text()));
-  await page.addInitScript((id: number) => localStorage.setItem("lawdesk.me", String(id)), demo.users.jordan);
 
   const noHorizontalScroll = async () => {
     const over = await page.evaluate(() => {
@@ -67,6 +68,22 @@ for (const [label, viewport] of [
     });
     assert.ok(over.extra <= 1, `page scrolls sideways by ${over.extra}px (${over.wide.join(", ")})`);
   };
+
+  await check(`${label}: sign-in screen refuses a wrong password, then signs in`, async () => {
+    await page.goto(base + "/#/my");
+    await page.waitForSelector(".auth-card");
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `sign-in-${label}.png`, fullPage: true });
+    await page.fill("#signin-email", "jordan@example.com");
+    await page.fill("#signin-password", "not the right password");
+    await page.click(".auth-submit");
+    await page.waitForSelector(".error-box:has-text('match an account')");
+    // The refused sign-in is a 401, which the browser reports as a console error (sometimes a little later).
+    expected401 = 1;
+    await page.fill("#signin-password", DEMO_PASSWORD);
+    await page.click(".auth-submit");
+    await page.waitForSelector(".user-menu-button:has-text('Jordan Reyes')");
+  });
 
   await check(`${label}: My tasks shows buckets and waiting reasons`, async () => {
     await page.goto(base + "/#/my");
@@ -180,8 +197,42 @@ for (const [label, viewport] of [
     await noHorizontalScroll();
   });
 
+  await check(`${label}: settings lists sign-in accounts for the administrator`, async () => {
+    await page.waitForSelector(".accounts-table tbody tr");
+    assert.ok((await page.locator(".accounts-table tbody tr").count()) >= 4);
+    assert.ok(await page.locator(".accounts-table", { hasText: "riley@example.com" }).count());
+    await page.locator("#s-accounts").scrollIntoViewIfNeeded();
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `settings-accounts-${label}.png` });
+  });
+
+  await check(`${label}: user menu opens My account with password, two-step sign-in and devices`, async () => {
+    await page.locator(".user-menu-button").click();
+    await page.locator(".user-menu-item", { hasText: "My account" }).click();
+    await page.waitForSelector("#a-sessions .session");
+    for (const id of ["a-details", "a-password", "a-2fa", "a-sessions"]) assert.equal(await page.locator("#" + id).count(), 1, id);
+    assert.ok(await page.locator(".session-current").count());
+    await page.locator("#a-2fa button", { hasText: "Turn on" }).click();
+    await page.waitForSelector(".setup-key");
+    assert.match(await page.locator(".setup-key").innerText(), /^[A-Z2-7]{4}( [A-Z2-7]{4}){7}$/);
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `account-${label}.png`, fullPage: true });
+    await page.locator("#a-2fa button", { hasText: "Cancel" }).click();
+    await page.waitForSelector("#a-2fa button:has-text('Turn on two-step')");
+  });
+
+  await check(`${label}: sign out returns to the sign-in screen`, async () => {
+    await page.locator(".user-menu-button").click();
+    await page.locator(".user-menu-item", { hasText: "Sign out" }).click();
+    await page.waitForSelector(".auth-card");
+    const res = await page.request.get(base + "/api/matters");
+    assert.equal(res.status(), 401);
+  });
+
   await check(`${label}: no script errors`, async () => {
-    assert.deepEqual(errors, []);
+    const i = errors.findIndex((e) => /status of 401/.test(e));
+    if (expected401 && i >= 0) errors.splice(i, 1);
+    assert.deepEqual(errors, [], errors.join(" / "));
   });
   await ctx.close();
 }

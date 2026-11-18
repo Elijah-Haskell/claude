@@ -1,5 +1,6 @@
-// Fetch wrapper for /api. Sends who the app is "working as" so the activity log can
-// name them (attribution only; there is no sign-in yet).
+// Fetch wrapper for /api. The session is an HttpOnly cookie the browser sends by itself;
+// every request also carries X-Requested-With, which the server requires on changes so
+// another website can't make them on your behalf.
 
 export class ApiError extends Error {
   constructor(message, status) {
@@ -8,19 +9,12 @@ export class ApiError extends Error {
   }
 }
 
-let actingUser = null;
-
-export function setActingUser(id) {
-  actingUser = id || null;
-}
-
 export async function api(method, path, body) {
-  const headers = { Accept: "application/json" };
+  const headers = { Accept: "application/json", "X-Requested-With": "lawdesk" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (actingUser) headers["X-Lawdesk-User"] = String(actingUser);
   let res;
   try {
-    res = await fetch("/api" + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    res = await fetch("/api" + path, { method, headers, credentials: "same-origin", body: body === undefined ? undefined : JSON.stringify(body) });
   } catch {
     throw new ApiError("Can't reach the Lawdesk server. Is it running?", 0);
   }
@@ -30,6 +24,8 @@ export async function api(method, path, body) {
   } catch {
     /* empty or non-JSON reply */
   }
+  // Signed out (session expired, or signed out on another device): back to sign-in.
+  if (res.status === 401 && !path.startsWith("/auth/")) window.dispatchEvent(new Event("lawdesk:signed-out"));
   if (!res.ok) throw new ApiError((data && data.error) || `Request failed (${res.status})`, res.status);
   return data;
 }
