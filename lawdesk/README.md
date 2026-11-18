@@ -56,3 +56,20 @@ office workflow steps, not statements of law.
 - Every change that matters to a lawyer is written to the `activity` table with who and when.
 - Never commit real client data.
 - Any statement of law (a statute, a court rule, a bar rule) in code or docs cites its source.
+
+## Intake (leads, web forms, consultation booking)
+
+`src/intake/` tracks people who contact the firm before they are clients: a pipeline (New, Contacted,
+Consultation scheduled, Engagement sent, Hired, Not hired), an automatic conflict check on the lead and
+any other parties, follow-up reminders (ordinary tasks for the lead's owner), an engagement letter made
+from a document template, and "Convert to client" (contact + matter + linked conflict check + history).
+
+Public pages, no sign-in: `/intake/form.html?f=<form link>` and `/intake/book.html?b=<booking link>`
+(add `&lead=<lead link>` for a lead's own booking link). Spam protection is a hidden field, a signed
+"form opened at" stamp (a form sent within 3 seconds is refused) and a per-address limit
+(5 per 10 minutes, 20 a day). The limit reads the socket address; behind a proxy it needs the
+forwarded address instead.
+
+Emails are not sent by intake. They wait in `intake_email_queue`; the email module sends rows from
+`dueEmails()` and records the result with `markEmailSent()` (both in `src/intake/leads.ts`). The
+e-signature module can set `intakeHooks.sendForSignature` to take over sending engagement letters.

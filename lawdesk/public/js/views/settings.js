@@ -43,6 +43,8 @@ export async function settingsView() {
     ].map(([id, label]) => h("a", { href: `#${id}`, onclick: (e) => (e.preventDefault(), document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })) }, label)),
     h("a", { href: "#/settings/templates" }, "Document templates"),
   );
+  // Intake has its own settings pages.
+  nav.append(h("a", { href: "#/settings/intake-forms" }, "Intake forms"), h("a", { href: "#/settings/booking" }, "Booking availability"));
   const body = h("div.settings-body");
   const emailSection = emailSettingsSection(); // loads its own data; kept across redraws
 

@@ -25,6 +25,7 @@ import { addDetail } from "./contacts/contacts.ts";
 import { Documents } from "./documents/documents.ts";
 import { existingDocuments } from "./documents/routes.ts";
 import { seedDocuments } from "./documents/seed.ts";
+import { seedIntake } from "./intake/seed.ts";
 
 export const DEMO_NOTE = "Fictional demo data. Not a real client.";
 
@@ -499,6 +500,8 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
     // Demo documents and a Word template. Files go to the documents store for this database
     // (LAWDESK_FILES, default ./files), or the one a caller set with setDocuments().
     seedDocuments(existingDocuments(db) ?? new Documents(db, { today: () => now }), db, { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 } });
+    // Intake: leads in every pipeline stage, a web form, consultation hours.
+    seedIntake(db, { today: realToday, users: { jordan, riley, sam, casey } });
     stampActivity();
     db.exec("COMMIT");
     return {

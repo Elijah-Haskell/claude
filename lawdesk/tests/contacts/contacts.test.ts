@@ -127,16 +127,18 @@ test("profile shows matters with roles, relationships both ways, and checks that
 test("saved checks: history filters, plain results, decision and link", async () => {
   const s = await start({ withSeed: true });
   const { users, matters, checks } = s.demo!;
+  // Intake leads add their own checks; these assertions are about the two seeded here.
+  const seeded = (id: number) => id === checks.intakeCheck || id === checks.leaseCheck;
   const all = await s.ok("GET", "/conflict-checks");
-  assert.deepEqual(all.map((k: any) => k.id), [checks.intakeCheck, checks.leaseCheck]);
-  assert.deepEqual((await s.ok("GET", "/conflict-checks?decision=pending")).map((k: any) => k.id), [checks.intakeCheck]);
-  assert.deepEqual((await s.ok("GET", "/conflict-checks?decision=cleared")).map((k: any) => k.id), [checks.leaseCheck]);
-  assert.deepEqual((await s.ok("GET", "/conflict-checks?q=cottonwood")).map((k: any) => k.id), [checks.leaseCheck]);
-  assert.deepEqual((await s.ok("GET", "/conflict-checks?hits=strong")).map((k: any) => k.id), [checks.intakeCheck]);
-  assert.deepEqual((await s.ok("GET", "/conflict-checks?hits=none")).map((k: any) => k.id), [checks.leaseCheck]);
-  assert.deepEqual((await s.ok("GET", "/conflict-checks?linked=yes")).map((k: any) => k.id), [checks.leaseCheck]);
-  assert.deepEqual((await s.ok("GET", `/conflict-checks?matterId=${matters.m3}`)).map((k: any) => k.id), [checks.leaseCheck]);
-  assert.equal((await s.ok("GET", "/conflict-checks?from=2026-11-18&to=2026-11-18")).length, 1);
+  assert.deepEqual(all.map((k: any) => k.id).filter(seeded), [checks.intakeCheck, checks.leaseCheck]);
+  assert.deepEqual((await s.ok("GET", "/conflict-checks?decision=pending")).map((k: any) => k.id).filter(seeded), [checks.intakeCheck]);
+  assert.deepEqual((await s.ok("GET", "/conflict-checks?decision=cleared")).map((k: any) => k.id).filter(seeded), [checks.leaseCheck]);
+  assert.deepEqual((await s.ok("GET", "/conflict-checks?q=cottonwood")).map((k: any) => k.id).filter(seeded), [checks.leaseCheck]);
+  assert.deepEqual((await s.ok("GET", "/conflict-checks?hits=strong")).map((k: any) => k.id).filter(seeded), [checks.intakeCheck]);
+  assert.deepEqual((await s.ok("GET", "/conflict-checks?hits=none")).map((k: any) => k.id).filter(seeded), [checks.leaseCheck]);
+  assert.deepEqual((await s.ok("GET", "/conflict-checks?linked=yes")).map((k: any) => k.id).filter(seeded), [checks.leaseCheck]);
+  assert.deepEqual((await s.ok("GET", `/conflict-checks?matterId=${matters.m3}`)).map((k: any) => k.id).filter(seeded), [checks.leaseCheck]);
+  assert.equal((await s.ok("GET", "/conflict-checks?from=2026-11-18&to=2026-11-18")).filter((k: any) => seeded(k.id)).length, 1);
   assert.equal((await s.call("GET", "/conflict-checks?from=yesterday")).status, 400);
   assert.equal((await s.call("GET", "/conflict-checks?decision=maybe")).status, 400);
 
@@ -183,9 +185,9 @@ test("the demo seed has other names, relationships, parties, details and saved c
   assert.ok(count("conflicts_relationships") >= 4);
   assert.ok(count("conflicts_matter_parties") >= 6);
   assert.ok(count("contacts_details") >= 5);
-  assert.equal(count("conflicts_checks"), 2);
+  assert.equal((s.db.prepare("SELECT COUNT(*) AS n FROM conflicts_checks WHERE id NOT IN (SELECT conflict_check_id FROM intake_leads WHERE conflict_check_id IS NOT NULL)").get() as any).n, 2);
   // Seeded parties predate the seeded check, so the matter page does not warn about them.
-  const late = s.db.prepare("SELECT COUNT(*) AS n FROM conflicts_matter_parties p JOIN conflicts_checks k ON k.matter_id = p.matter_id WHERE p.created_at > k.run_at").get() as any;
+  const late = s.db.prepare("SELECT COUNT(*) AS n FROM conflicts_matter_parties p JOIN conflicts_checks k ON k.matter_id = p.matter_id WHERE p.created_at > k.run_at AND k.id NOT IN (SELECT conflict_check_id FROM intake_leads WHERE conflict_check_id IS NOT NULL)").get() as any;
   assert.equal(late.n, 0);
   const contacts = await s.ok("GET", "/contacts");
   assert.ok(contacts.every((c: any) => /demo/i.test(c.name)));

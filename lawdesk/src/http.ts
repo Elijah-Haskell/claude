@@ -17,6 +17,8 @@ export interface Ctx {
   userId: number | null;
   /** Only on routes with `raw: true`: the request with its body still unread, to stream it. */
   req?: IncomingMessage;
+  /** The caller's network address (no proxy handling), for rate limits on public routes. */
+  ip?: string | null;
 }
 
 export interface Route {

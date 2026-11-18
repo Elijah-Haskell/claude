@@ -92,6 +92,7 @@ export function createServer(
     const body = route.raw ? {} : req.method === "GET" || req.method === "DELETE" ? await readBody(req, true) : await readBody(req, false);
     const ctx: Ctx = { db, engine, params: params!, query: url.searchParams, body, userId: actingUser(db, req) };
     if (route.raw) ctx.req = req;
+    ctx.ip = req.socket.remoteAddress ?? null; // for per-address limits on public routes (intake)
     const out: any = await route.handler(ctx);
     if (out && typeof out === "object" && out.__raw === true) return sendRaw(res, out);
     sendJson(res, 200, out === undefined ? { ok: true } : out);

@@ -20,6 +20,8 @@ import { routes as trustRoutes } from "./trust/routes.ts";
 import { SCHEMA as TRUST_SCHEMA } from "./trust/schema.ts";
 import { routes as contactsRoutes } from "./contacts/routes.ts";
 import { SCHEMA as CONTACTS_SCHEMA } from "./contacts/schema.ts";
+import { routes as intakeRoutes } from "./intake/routes.ts";
+import { SCHEMA as INTAKE_SCHEMA } from "./intake/schema.ts";
 
 export interface Module {
   name: string;
@@ -40,4 +42,5 @@ export const modules: Module[] = [
   // After billing: trust entries refer to billing invoices and payments.
   { name: "trust", routes: trustRoutes, schema: TRUST_SCHEMA },
   { name: "contacts", routes: contactsRoutes, schema: CONTACTS_SCHEMA },
+  { name: "intake", routes: intakeRoutes, schema: INTAKE_SCHEMA },
 ];

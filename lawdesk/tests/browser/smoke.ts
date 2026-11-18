@@ -1061,6 +1061,114 @@ for (const [label, viewport] of [
     assert.match(await page.locator(".doc-paper").innerText(), /Dear Taylor Brooks \(demo\):/);
   });
 
+  // ---------------------------------------------------------------- intake
+  const shot = async (name: string) => {
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.screenshot({ path: shots + `${name}-${label}.png`, fullPage: true });
+  };
+
+  await check(`${label}: intake pipeline shows every stage and moves a lead`, async () => {
+    await page.goto(base + "/#/intake");
+    await page.waitForSelector(".lead-card");
+    assert.equal(await page.locator(".intake-col").count(), 6);
+    for (const s of ["new", "contacted", "consult_scheduled", "engagement_sent", "hired", "not_hired"]) {
+      assert.ok(await page.locator(`.intake-col[data-status=${s}] .lead-card`).count() >= 1, `a lead in ${s}`);
+    }
+    await noHorizontalScroll();
+    await shot("intake-board");
+    const card = page.locator(".intake-col[data-status=new] .lead-card").first();
+    const name = (await card.locator(".lead-name").innerText()).trim();
+    await card.locator(".lead-move").selectOption("contacted");
+    await page.waitForSelector(`.intake-col[data-status=contacted] .lead-card:has-text("${name}")`);
+  });
+
+  await check(`${label}: lead page: conflict hits, clear, convert dialog`, async () => {
+    const id = (db.prepare("SELECT id FROM intake_leads WHERE name = 'Harper Quinn (demo)'").get() as any).id;
+    await page.goto(base + `/#/intake/leads/${id}`);
+    await page.waitForSelector(".conflict-card .hit");
+    assert.match(await page.locator(".conflict-card").innerText(), /Sunflower Coffee Roasters/);
+    await noHorizontalScroll();
+    await shot("intake-lead");
+    if ((await page.locator(".conflict-actions").count()) > 0) {
+      await page.locator(".conflict-actions button", { hasText: "Clear" }).click();
+      await page.locator("dialog[open] button[type=submit]").click();
+      await page.waitForSelector(".conflict-status.cleared");
+    }
+    await page.locator(".head-actions button", { hasText: "Convert to client" }).click();
+    await page.waitForSelector("dialog[open] select");
+    assert.match(await page.locator("dialog[open]").innerText(), /opens the client and the matter in one step/);
+    await page.locator("dialog[open] button", { hasText: "Cancel" }).click();
+    await page.locator(".note-add textarea").fill("Left a voicemail.");
+    await page.locator(".note-add button").click();
+    await page.waitForSelector(".note-list li:has-text('Left a voicemail.')");
+  });
+
+  await check(`${label}: intake list and reports`, async () => {
+    await page.goto(base + "/#/intake/list");
+    await page.waitForSelector(".leads-table .matter-row");
+    await noHorizontalScroll();
+    await page.goto(base + "/#/intake/reports");
+    await page.waitForSelector(".report-stats");
+    assert.match(await page.locator(".definitions").innerText(), /Conversion rate:/);
+    await noHorizontalScroll();
+    await shot("intake-reports");
+  });
+
+  await check(`${label}: intake form builder and booking settings`, async () => {
+    await page.goto(base + "/#/settings/intake-forms");
+    await page.waitForSelector(".form-list .card");
+    await noHorizontalScroll();
+    await page.locator(".form-list h3 a").first().click();
+    await page.waitForSelector(".q-list .q");
+    const before = await page.locator(".q").count();
+    await page.locator(".q-add button").click();
+    await page.locator(".q").last().locator(".q-label").fill("Is there a deadline coming up?");
+    await page.locator(".q").last().locator("select").first().selectOption("yesno");
+    await page.locator(".save-bar button[type=submit]").click();
+    await page.waitForSelector(".toast:has-text('Form saved')");
+    assert.equal(await page.locator(".q").count(), before + 1);
+    await noHorizontalScroll();
+    await shot("intake-form-builder");
+    await page.goto(base + "/#/settings/booking");
+    await page.waitForSelector(".person-hours .window-row");
+    await noHorizontalScroll();
+    await shot("intake-booking-settings");
+  });
+
+  await check(`${label}: public intake form creates a lead`, async () => {
+    const token = (db.prepare("SELECT token FROM intake_forms WHERE deleted_at IS NULL ORDER BY id LIMIT 1").get() as any).token;
+    await page.goto(base + `/intake/form.html?f=${token}`);
+    await page.waitForSelector(".public-form");
+    assert.match(await page.locator(".public-firm").innerText(), /Reyes & Chen/);
+    const who = `Web Visitor ${label} (demo)`;
+    await page.getByLabel("Your name").fill(who);
+    await page.getByLabel("Email").fill(`visitor-${label}@example.com`);
+    await page.getByLabel("Briefly, how can we help?").fill("Need a partnership agreement.");
+    await page.locator("input[name^=q-][value=no]").first().check();
+    await noHorizontalScroll();
+    await shot("intake-public-form");
+    await page.waitForTimeout(3100); // the time-to-submit check
+    await page.locator(".public-send").click();
+    await page.waitForSelector(".public-done");
+    assert.ok(db.prepare("SELECT 1 FROM intake_leads WHERE name = ?").get(who), "lead saved");
+  });
+
+  await check(`${label}: public booking page books a consultation`, async () => {
+    const token = (db.prepare("SELECT booking_token FROM intake_settings").get() as any).booking_token;
+    await page.goto(base + `/intake/book.html?b=${token}`);
+    await page.waitForSelector(".slot");
+    await page.locator(".slot").nth(label === "desktop" ? 1 : 2).click();
+    await page.getByLabel("Your name").fill(`Booker ${label} (demo)`);
+    await page.getByLabel("Phone").fill("785-555-0111");
+    await noHorizontalScroll();
+    await shot("intake-public-booking");
+    await page.waitForTimeout(3100);
+    await page.locator(".public-send").click();
+    await page.waitForSelector(".public-done");
+    assert.match(await page.locator(".public-done").innerText(), /You're booked/);
+    await shot("intake-public-booked");
+  });
+
   await check(`${label}: no script errors`, async () => {
     assert.deepEqual(errors, [], errors.slice(0, 3).join(" | "));
   });

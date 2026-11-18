@@ -20,6 +20,8 @@ import { contactsView, contactView } from "./views/contacts.js";
 import { conflictsView, checkView, checkHistoryView } from "./views/conflicts.js";
 import { documentsSearchView, matterDocumentsView } from "./views/documents.js";
 import { templatesSettingsView } from "./views/templates.js";
+import { intakeBoardView, intakeListView, intakeReportsView, leadView } from "./views/leads.js";
+import { intakeFormsView, intakeFormEditView, bookingSettingsView } from "./views/intake-settings.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
@@ -28,6 +30,7 @@ const NAV = [
   { href: "#/calendar", label: "Calendar", key: "l", section: "Work", icon: "calendar" },
   { href: "#/deadlines", label: "Deadlines", key: "d", section: "Practice", icon: "deadlines" },
   { href: "#/documents", label: "Documents", key: "e", section: "Practice", icon: "documents" },
+  { href: "#/intake", label: "Intake", key: "i", section: "Work", icon: "intake" },
   { href: "#/checklists", label: "Checklists", key: "c" },
   { href: "#/billing", label: "Billing", key: "b", section: "Finance", icon: "billing" },
   // Trust: limit to admins and attorneys once sign-in lands.
@@ -75,6 +78,13 @@ const ROUTES = [
   [/^#\/conflicts(?:\?.*)?$/, () => conflictsView],
   [/^#\/conflicts\/history$/, () => checkHistoryView],
   [/^#\/conflicts\/(\d+)$/, () => checkView],
+  [/^#\/intake$/, () => intakeBoardView],
+  [/^#\/intake\/list$/, () => intakeListView],
+  [/^#\/intake\/reports$/, () => intakeReportsView],
+  [/^#\/intake\/leads\/(\d+)$/, () => leadView],
+  [/^#\/settings\/intake-forms$/, () => intakeFormsView],
+  [/^#\/settings\/intake-forms\/(new|\d+)$/, () => intakeFormEditView],
+  [/^#\/settings\/booking$/, () => bookingSettingsView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });
@@ -144,7 +154,7 @@ function showHelp() {
     ["e", "Rename it"],
     ["m", "More actions"],
     ["Enter", "Open the task's matter"],
-    ["g then m / f / a / l / d / e / p / k / b / t / c / s / o / r", "Go to My tasks, Firm tasks, Matters, Calendar, Deadlines, Documents, Contacts, Conflict check, Billing, Trust, Checklists, Settings, Firm overview, Reports"],
+    ["g then m / f / a / i / l / d / e / p / k / b / t / c / s / o / r", "Go to My tasks, Firm tasks, Matters, Intake, Calendar, Deadlines, Documents, Contacts, Conflict check, Billing, Trust, Checklists, Settings, Firm overview, Reports"],
     ["?", "This list"],
   ];
   modal(
