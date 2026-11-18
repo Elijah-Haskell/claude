@@ -7,7 +7,9 @@
 // Not part of `npm test`, which stays dependency-free.
 
 import { createRequire } from "node:module";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 import assert from "node:assert/strict";
@@ -15,12 +17,18 @@ import { openDb } from "../../src/db.ts";
 import { createServer } from "../../src/server.ts";
 import { seed } from "../../src/seed.ts";
 import { today } from "../../src/dates.ts";
+import { Billing } from "../../src/billing/billing.ts";
+import { onlinePaymentAndSignatureChecks } from "./pay-esign.ts";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 
 const shots = fileURLToPath(new URL("../../screenshots/", import.meta.url));
 mkdirSync(shots, { recursive: true });
+
+// Document files (uploads, signature certificates) go to a throwaway folder.
+const filesDir = mkdtempSync(join(tmpdir(), "lawdesk-smoke-"));
+process.env.LAWDESK_FILES = filesDir;
 
 const now = today();
 const db = openDb();
@@ -180,6 +188,8 @@ for (const [label, viewport] of [
     await noHorizontalScroll();
   });
 
+  await onlinePaymentAndSignatureChecks({ label, page, ctx, base, db, check, noHorizontalScroll, shots, matterId: demo.matters.m1, billing: new Billing(db, { today: () => now }) });
+
   await check(`${label}: no script errors`, async () => {
     assert.deepEqual(errors, []);
   });
@@ -188,5 +198,6 @@ for (const [label, viewport] of [
 
 await browser.close();
 server.close();
+rmSync(filesDir, { recursive: true, force: true });
 console.log(`\n${results.length - failures} passed, ${failures} failed. Screenshots in ${shots}`);
 process.exit(failures ? 1 : 0);

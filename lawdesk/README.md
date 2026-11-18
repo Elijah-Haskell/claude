@@ -22,6 +22,9 @@ Settings: `PORT` (default 3000), `LAWDESK_DB` (default `lawdesk.db`), `HOST` (de
 there is no sign-in, so keep it on the local machine). The app's "Working as" picker sends the chosen
 person in an `X-Lawdesk-User` header so the activity log can name them; that is attribution, not security.
 
+Online payments and e-signatures: see `docs/payments.md` (Stripe keys via `STRIPE_*` environment
+variables, `LAWDESK_PUBLIC_URL`) and `docs/esign.md`. Their client-facing routes are marked `public: true`.
+
 In the app, press `?` for keyboard shortcuts. Quick-add understands dates (`fri`, `tomorrow`, `11/20`,
 `in 3 days`, `+5bd`), `@person`, `#matter-number` and `!high`.
 

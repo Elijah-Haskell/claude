@@ -1,6 +1,7 @@
 // Shared contract for API routes. Each module exports `routes: Route[]` from
 // src/<module>/routes.ts and the server mounts them all under /api.
 
+import type { IncomingMessage } from "node:http";
 import type { DB } from "./db.ts";
 import type { Engine } from "./engine.ts";
 
@@ -14,6 +15,10 @@ export interface Ctx {
   body: any;
   /** The signed-in user's id, or null until sign-in exists. */
   userId: number | null;
+  /** The request body exactly as received (webhook signatures are computed over it). */
+  rawBody?: string;
+  /** The underlying request, for headers, client IP and user agent (e.g. e-signature audit trails). */
+  req?: IncomingMessage;
 }
 
 export interface Route {

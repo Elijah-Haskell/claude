@@ -87,7 +87,7 @@ export function createServer(
     }
     if (!route) throw new HttpError(pathMatched ? 405 : 404, pathMatched ? "Method not allowed" : "No such API route");
     const body = req.method === "GET" || req.method === "DELETE" ? await readBody(req, true) : await readBody(req, false);
-    const ctx: Ctx = { db, engine, params: params!, query: url.searchParams, body, userId: actingUser(db, req) };
+    const ctx: Ctx = { db, engine, params: params!, query: url.searchParams, body, userId: actingUser(db, req), rawBody: rawBodies.get(req) ?? "", req };
     const out: any = await route.handler(ctx);
     if (out && typeof out === "object" && out.__raw === true) return sendRaw(res, out);
     sendJson(res, 200, out === undefined ? { ok: true } : out);
@@ -130,6 +130,9 @@ function actingUser(db: DB, req: http.IncomingMessage): number | null {
   return db.prepare("SELECT id FROM users WHERE id = ?").get(id) ? id : null;
 }
 
+/** Raw request text, kept for routes that verify a signature over the exact bytes (payment webhooks). */
+const rawBodies = new WeakMap<http.IncomingMessage, string>();
+
 function readBody(req: http.IncomingMessage, optional: boolean): Promise<any> {
   return new Promise((resolveBody, reject) => {
     const chunks: Buffer[] = [];
@@ -148,7 +151,9 @@ function readBody(req: http.IncomingMessage, optional: boolean): Promise<any> {
     });
     req.on("end", () => {
       if (failed) return;
-      const text = Buffer.concat(chunks).toString("utf8").trim();
+      const raw = Buffer.concat(chunks).toString("utf8");
+      rawBodies.set(req, raw);
+      const text = raw.trim();
       if (!text) return resolveBody({});
       try {
         const v = JSON.parse(text);

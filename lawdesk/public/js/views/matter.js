@@ -5,6 +5,7 @@ import { h, select, fmtDate, fmtTime, modal, toast, plural } from "../dom.js";
 import { get, post, put, patch } from "../api.js";
 import { state, today, users, prefs, loadMatters, loadSetup } from "../state.js";
 import { quickAdd, taskRow, effectLines, redraw } from "../tasks.js";
+import { matterPaymentsCard, matterSignaturesCard } from "./pay-esign.js";
 
 export async function matterView([idStr]) {
   const id = Number(idStr);
@@ -354,7 +355,15 @@ export async function matterView([idStr]) {
         : null,
     );
 
-    aside.replaceChildren(people, dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
+    const client = state.setup.contacts.find((c) => c.id === m.client_id);
+    aside.replaceChildren(
+      people,
+      dates,
+      checklists,
+      matterSignaturesCard({ id, client_name: m.client_name, client_email: client?.email ?? null }),
+      matterPaymentsCard(id),
+      m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null,
+    );
   }
 
   function drawActivity() {
