@@ -25,6 +25,12 @@ person in an `X-Lawdesk-User` header so the activity log can name them; that is 
 In the app, press `?` for keyboard shortcuts. Quick-add understands dates (`fri`, `tomorrow`, `11/20`,
 `in 3 days`, `+5bd`), `@person`, `#matter-number` and `!high`.
 
+Billing (the Billing menu) covers time by week with a timer that keeps running across pages,
+expenses, invoices (draft, write down, discount, finalize, print or save as PDF, void), payments
+spread over several invoices with any remainder kept as client credit, client statements and
+billing settings. The matter page has a Billing card, and a task's ⋯ menu has "Log time".
+The screens live in `public/js/billing/` with their styles in `public/css/billing.css`.
+
 The demo data (`src/seed.ts`) is made up: every client is marked "(demo)", and its checklists are
 office workflow steps, not statements of law.
 

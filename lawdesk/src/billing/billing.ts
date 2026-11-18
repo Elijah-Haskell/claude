@@ -203,6 +203,11 @@ export class Billing {
     else this.run("INSERT OR REPLACE INTO billing_user_rates (user_id, rate_cents) VALUES (?,?)", userId, int(rateCents, "Rate"));
   }
 
+  /** Every person's standard rate override, as [{user_id, rate_cents}]. */
+  userRates(): Row[] {
+    return this.all("SELECT user_id, rate_cents FROM billing_user_rates ORDER BY user_id");
+  }
+
   matterBilling(matterId: number): { matter_id: number; method: BillingMethod; rate_cents: number | null; flat_fee_cents: number | null } {
     this.matter(matterId);
     const r = this.one("SELECT * FROM billing_matters WHERE matter_id = ?", matterId);
@@ -375,9 +380,9 @@ export class Billing {
   }
 
   runningTimers(userId?: number): Row[] {
-    return userId != null
-      ? this.all("SELECT * FROM billing_time_entries WHERE timer_started_at IS NOT NULL AND user_id = ?", userId)
-      : this.all("SELECT * FROM billing_time_entries WHERE timer_started_at IS NOT NULL");
+    const sql = `SELECT t.*, m.name AS matter_name, m.number AS matter_number FROM billing_time_entries t
+      JOIN matters m ON m.id = t.matter_id WHERE t.timer_started_at IS NOT NULL`;
+    return userId != null ? this.all(sql + " AND t.user_id = ?", userId) : this.all(sql);
   }
 
   listTime(f: { matterId?: number; userId?: number; from?: ISODate; to?: ISODate; status?: "unbilled" | "billed" | "all" } = {}): Row[] {

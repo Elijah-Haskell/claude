@@ -173,6 +173,196 @@ for (const [label, viewport] of [
     await noHorizontalScroll();
   });
 
+  // ------------------------------------------------------------- billing
+  const pickOption = async (sel: string, text: string) => {
+    const value = await page.evaluate(
+      ([s, t]: string[]) => [...(document.querySelector(s) as HTMLSelectElement).options].find((o) => o.textContent!.includes(t))?.value,
+      [sel, text],
+    );
+    assert.ok(value, `option "${text}" in ${sel}`);
+    await page.selectOption(sel, value!);
+  };
+  const clearToasts = () => page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+
+  await check(`${label}: billing time: quick entry takes 1:30 and the week adds up`, async () => {
+    await page.goto(base + "/#/billing");
+    await page.waitForSelector(".bl-quick");
+    assert.match(page.url(), /#\/billing\/time$/);
+    await pickOption("#qt-matter", "D-1004");
+    await page.fill("#qt-hours", "1:30");
+    await page.fill("#qt-desc", `Reviewed exhibits (${label})`);
+    await page.locator(".bl-quick button[type=submit]").click();
+    await page.waitForSelector(`.bl-entry:has-text("Reviewed exhibits (${label})")`);
+    assert.equal(await page.locator(`.bl-entry:has-text("Reviewed exhibits (${label})") .bl-entry-hours`).innerText(), "1.5");
+    await page.fill("#qt-hours", "abc");
+    await page.locator(".bl-quick button[type=submit]").click();
+    await page.waitForSelector(".bl-quick .error-text:has-text('1.5 or 1:30')");
+    await page.fill("#qt-hours", "");
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `billing-time-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: billing timer keeps running across pages and stops from the header`, async () => {
+    await pickOption("#qt-matter", "D-1005");
+    await page.fill("#qt-desc", "Timer test");
+    await page.click("#qt-timer");
+    await page.waitForSelector(".bl-timer:not([hidden]) .bl-timer-clock");
+    await page.waitForSelector(".bl-running");
+    await page.goto(base + "/#/matters");
+    await page.waitForSelector(".matter-row");
+    await page.waitForSelector(".bl-timer:not([hidden])");
+    assert.match(await page.locator(".bl-timer").innerText(), /D-1005/);
+    await noHorizontalScroll();
+    await page.locator(".bl-timer-stop").click();
+    await page.waitForSelector(".bl-timer[hidden]", { state: "attached" });
+  });
+
+  await check(`${label}: billing expenses: add one`, async () => {
+    await page.goto(base + "/#/billing/expenses");
+    await page.waitForSelector(".bl-exp-table");
+    await pickOption("#qe-matter", "D-1004");
+    await page.fill("#qe-desc", `Courier (${label})`);
+    await page.fill("#qe-amount", "42.10");
+    await page.locator(".bl-quick button[type=submit]").click();
+    await page.waitForSelector(`.bl-exp-table tr:has-text("Courier (${label})"):has-text("$42.10")`);
+    await noHorizontalScroll();
+  });
+
+  await check(`${label}: billing invoices: amounts owed by age and the list`, async () => {
+    await page.goto(base + "/#/billing/invoices");
+    await page.waitForSelector(".bl-aging .bl-figure");
+    assert.equal(await page.locator(".bl-aging .bl-figure").count(), 6);
+    assert.ok(await page.locator(".bl-inv-table tr:has-text('No. 1001')").count() === 1, "invoice 1001 awaits payment");
+    assert.match(await page.locator(".bl-inv-table tr:has-text('No. 1001') .bl-status").innerText(), /Past due/);
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `billing-invoices-${label}.png`, fullPage: true });
+  });
+
+  let invoiceUrl = "";
+  await check(`${label}: billing matter card starts an invoice; edit, write down, discount, finalize`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m2}`);
+    await page.waitForSelector("#matter-billing .bl-mc-row");
+    assert.match(await page.locator("#matter-billing").innerText(), /Unbilled time/);
+    await page.click("#mc-start-invoice");
+    await page.waitForSelector(".bl-preview-list");
+    await page.locator("dialog button[type=submit]", { hasText: "Create draft" }).click();
+    await page.waitForSelector(".bl-invoice-page .bl-line-table");
+    invoiceUrl = page.url();
+    const firstLine = page.locator(".bl-line-table tbody tr").first();
+    await firstLine.locator(".bl-line-actions button", { hasText: "Write down" }).click();
+    await page.fill("#wd-amount", "10");
+    await page.locator("dialog button[type=submit]", { hasText: "Write down" }).click();
+    await page.waitForSelector("dialog .error-text:has-text('reason')");
+    await page.fill("#wd-reason", "Courtesy reduction");
+    await page.locator("dialog button[type=submit]", { hasText: "Write down" }).click();
+    await page.waitForSelector(".bl-line-note.wd:has-text('Courtesy reduction')");
+    await page.click("#inv-add-line");
+    await page.selectOption("dialog select", "flat");
+    await page.fill("dialog textarea", "Document preparation");
+    await page.locator("dialog input.bl-money:visible").fill("75");
+    await page.locator("dialog button[type=submit]", { hasText: "Add line" }).click();
+    await page.waitForSelector(".bl-line-table tr:has-text('Document preparation')");
+    await page.selectOption("#inv-discount-kind", "percent");
+    await page.fill("#inv-discount-value", "5");
+    await page.press("#inv-discount-value", "Tab");
+    await page.waitForSelector(".bl-totals:has-text('Discount (5%)')");
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `billing-draft-${label}.png`, fullPage: true });
+    await page.click("#inv-finalize");
+    await page.waitForSelector("dialog .bl-confirm-facts");
+    await page.locator("dialog button", { hasText: "Cancel" }).click();
+    assert.match(await page.locator("h1").innerText(), /Draft invoice/);
+    await page.click("#inv-finalize");
+    await page.locator("dialog button[type=submit]", { hasText: "Finalize invoice" }).click();
+    await page.waitForFunction(() => /Invoice \d+/.test(document.querySelector("h1")!.textContent!));
+    assert.equal(await page.locator("#inv-add-line").count(), 0, "a finalized invoice can't be edited");
+    await clearToasts();
+    await page.screenshot({ path: shots + `billing-invoice-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: billing printable invoice opens with a Print button and no errors`, async () => {
+    const href = await page.locator("#inv-print").getAttribute("href");
+    const p2 = await ctx.newPage();
+    const errs: string[] = [];
+    p2.on("console", (m: any) => m.type() === "error" && errs.push(m.text()));
+    await p2.goto(base + href);
+    await p2.waitForSelector("#ld-print");
+    assert.match(await p2.locator("h1").innerText(), /Reyes & Chen/);
+    assert.ok(await p2.evaluate(() => getComputedStyle(document.querySelector(".totals")!).width !== "auto"), "inline styles apply");
+    if (label === "desktop") await p2.screenshot({ path: shots + `billing-print-${label}.png`, fullPage: true });
+    await p2.close();
+    assert.deepEqual(errs, []);
+  });
+
+  await check(`${label}: billing record a payment across invoices, then void the invoice`, async () => {
+    const id = invoiceUrl.split("/").pop();
+    await page.goto(base + `/#/billing/payments?invoice=${id}`);
+    await page.waitForSelector(".bl-apply-table");
+    assert.notEqual(await page.inputValue("#pay-total"), "");
+    await page.fill("#pay-total", "100");
+    await page.click("#pay-auto");
+    await page.waitForSelector(".bl-apply-summary:has-text('$100.00')");
+    await page.click("#pay-submit");
+    await page.waitForSelector("dialog .bl-confirm-facts");
+    await page.locator("dialog button[type=submit]", { hasText: "Record payment" }).click();
+    await page.waitForSelector(".toast:has-text('Payment of $100.00 recorded')");
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `billing-payments-${label}.png`, fullPage: true });
+    await page.goto(invoiceUrl);
+    await page.waitForSelector(".bl-pay-list li");
+    assert.match(await page.locator(".bl-status").first().innerText(), /Partly paid/);
+    await page.click("#inv-void");
+    await page.locator("dialog button[type=submit]", { hasText: "Void invoice" }).click();
+    await page.waitForSelector("dialog .error-text:has-text('reason')");
+    await page.fill("dialog textarea", "Billed to the wrong matter");
+    await page.locator("dialog button[type=submit]", { hasText: "Void invoice" }).click();
+    await page.waitForSelector(".bl-banner.void:has-text('Billed to the wrong matter')");
+  });
+
+  await check(`${label}: billing client statement`, async () => {
+    await page.goto(base + "/#/billing/statements");
+    await page.waitForSelector("#st-client");
+    await pickOption("#st-client", "Meadowlark");
+    await page.waitForSelector(".bl-st-table");
+    assert.ok(await page.locator(".bl-st-table tr:has-text('Payment received')").count() >= 1);
+    assert.match(await page.locator(".bl-st-close").innerText(), /Amount due\s+\$799\.50/);
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `billing-statement-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: billing settings save the firm rate`, async () => {
+    await page.goto(base + "/#/billing/settings");
+    await page.waitForSelector("#bs-rate");
+    assert.equal(await page.inputValue("#bs-rate"), "250.00");
+    assert.ok(await page.locator("#bs-first").isDisabled(), "numbering has started");
+    assert.equal(await page.locator("#bs-tax").isChecked(), false);
+    await page.fill("#bs-rate", "250");
+    await page.press("#bs-rate", "Tab");
+    await page.waitForSelector(".toast:has-text('Firm rate saved')");
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `billing-settings-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: billing Log time from a task's menu links the task`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m2}`);
+    await page.waitForSelector(".task:has-text('indemnity cap')");
+    const row = page.locator(".task", { hasText: "Call client about the indemnity cap" });
+    await row.locator(".more").click();
+    await page.locator(".popover .pop-item", { hasText: "Log time" }).click();
+    await page.waitForSelector("dialog .bl-linked:has-text('indemnity cap')");
+    await page.fill("dialog .bl-hours", "0.3");
+    await page.locator("dialog button[type=submit]", { hasText: "Save time" }).click();
+    await page.waitForSelector(".toast:has-text('Logged 0.3 hours')");
+    await clearToasts();
+    await page.screenshot({ path: shots + `billing-matter-${label}.png`, fullPage: true });
+  });
+
   await check(`${label}: settings shows every section`, async () => {
     await page.goto(base + "/#/settings");
     await page.waitForSelector("#s-auto");

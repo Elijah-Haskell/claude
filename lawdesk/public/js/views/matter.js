@@ -5,6 +5,7 @@ import { h, select, fmtDate, fmtTime, modal, toast, plural } from "../dom.js";
 import { get, post, put, patch } from "../api.js";
 import { state, today, users, prefs, loadMatters, loadSetup } from "../state.js";
 import { quickAdd, taskRow, effectLines, redraw } from "../tasks.js";
+import { billingCard } from "../billing/matter-card.js";
 
 export async function matterView([idStr]) {
   const id = Number(idStr);
@@ -354,7 +355,7 @@ export async function matterView([idStr]) {
         : null,
     );
 
-    aside.replaceChildren(people, dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
+    aside.replaceChildren(people, billingCard(id), dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
   }
 
   function drawActivity() {

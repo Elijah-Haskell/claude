@@ -104,7 +104,7 @@ ${
   <tr class="grand"><td>Total</td><td class="n">${money(t.total_cents)}</td></tr>
   ${inv.paid_cents ? `<tr><td>Payments applied</td><td class="n">-${money(inv.paid_cents)}</td></tr>` : ""}
   ${inv.written_off_cents ? `<tr><td>Written off</td><td class="n">-${money(inv.written_off_cents)}</td></tr>` : ""}
-  ${inv.status === "final" ? `<tr class="grand"><td>Balance due</td><td class="n">${money(inv.balance_cents)}</td></tr>` : ""}
+  ${inv.status === "final" ? `<tr class="grand"><td>Amount due</td><td class="n">${money(inv.balance_cents)}</td></tr>` : ""}
 </table>
 ${inv.notes ? `<div class="notes">${multiline(inv.notes)}</div>` : ""}
 </div></body></html>

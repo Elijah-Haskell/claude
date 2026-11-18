@@ -9,12 +9,15 @@ import { mattersView } from "./views/matters.js";
 import { matterView } from "./views/matter.js";
 import { checklistsView, checklistEditView } from "./views/checklists.js";
 import { settingsView } from "./views/settings.js";
+import { BILLING_ROUTES } from "./billing/routes.js";
+import { timerBox } from "./billing/timer.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
   { href: "#/firm", label: "Firm tasks", key: "f" },
   { href: "#/matters", label: "Matters", key: "a" },
   { href: "#/checklists", label: "Checklists", key: "c" },
+  { href: "#/billing", label: "Billing", key: "b", section: "Finance", icon: "billing" },
   { href: "#/settings", label: "Settings", key: "s" },
 ];
 
@@ -26,6 +29,7 @@ const ROUTES = [
   [/^#\/checklists$/, () => checklistsView],
   [/^#\/checklists\/(new|\d+)$/, () => checklistEditView],
   [/^#\/settings$/, () => settingsView],
+  ...BILLING_ROUTES,
 ];
 
 const main = h("main#main", { tabindex: "-1" });
@@ -50,6 +54,7 @@ function drawWho() {
       "aria-label": "User",
       onchange: (e) => {
         setMe(Number(e.target.value));
+        window.dispatchEvent(new Event("lawdesk:me"));
         route();
       },
     },
@@ -176,6 +181,7 @@ async function start() {
       "header.top",
       h("a.brand", { href: "#/my" }, h("span.brand-mark", { "aria-hidden": "true" }, "L"), "Lawdesk"),
       nav,
+      timerBox(),
       whoBox,
       h("button.icon-btn.help-btn", { type: "button", "aria-label": "Keyboard shortcuts", title: "Keyboard shortcuts (?)", onclick: showHelp }, "?"),
     ),
