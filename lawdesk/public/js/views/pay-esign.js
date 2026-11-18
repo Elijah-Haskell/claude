@@ -9,6 +9,8 @@
 
 import { h, select, modal, toast, fmtTime } from "../dom.js";
 import { get, post, patch } from "../api.js";
+import { card, field, button, pill, callout, emptyState, loadingBlock } from "../ui/components.js";
+import { icon } from "../ui/icons.js";
 
 export const money = (c) => "$" + (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -27,38 +29,46 @@ function shareBox(url, { subject, body, email }) {
   const mailto = `mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`${body}\n\n${url}\n`)}`;
   return h(
     "div.share-box",
-    input,
+    h("div.share-url-row", icon("lock", { size: 15, class: "share-lock" }), input),
     h(
       "div.share-actions",
-      h(
-        "button.btn.primary",
-        {
-          type: "button",
-          onclick: async () => {
-            try {
-              await navigator.clipboard.writeText(url);
-              toast("Link copied");
-            } catch {
-              input.select();
-              toast("Press Ctrl+C (or ⌘C) to copy the selected link");
-            }
-          },
+      button("Copy link", {
+        variant: "primary",
+        icon: "copy",
+        onclick: async () => {
+          try {
+            await navigator.clipboard.writeText(url);
+            toast("Link copied");
+          } catch {
+            input.select();
+            toast("Press Ctrl+C (or ⌘C) to copy the selected link");
+          }
         },
-        "Copy link",
-      ),
-      h("a.btn", { href: mailto }, "Email to client"),
+      }),
+      button("Email to client", { href: mailto, icon: "mail" }),
     ),
   );
+}
+
+/** A card the matter page places once; later draws swap its contents in place. */
+function liveCard(opts) {
+  const el = card(opts);
+  el.put = (next) => {
+    const fresh = card({ ...opts, ...next });
+    el.className = fresh.className;
+    el.replaceChildren(...fresh.childNodes);
+  };
+  return el;
 }
 
 // ------------------------------------------------------------------ payments
 
 export function payOnlineButton(invoice, { onDone } = {}) {
-  return h("button.btn.small.pay-online", { type: "button", onclick: () => payOnlineDialog(invoice, onDone) }, "Pay online");
+  return button("Pay online", { size: "sm", icon: "wallet", class: "pay-online", onclick: () => payOnlineDialog(invoice, onDone) });
 }
 
 export function payOnlineDialog(invoice, onDone) {
-  const amount = h("input", { value: (invoice.balance_cents / 100).toFixed(2), inputmode: "decimal", "aria-label": "Amount" });
+  const amount = h("input", { value: (invoice.balance_cents / 100).toFixed(2), inputmode: "decimal" });
   const err = h("p.error-text", { role: "alert" });
   const out = h("div");
   const label = invoice.number != null ? `invoice ${invoice.number}` : "this invoice";
@@ -73,32 +83,39 @@ export function payOnlineDialog(invoice, onDone) {
         try {
           const r = await post(`/pay/invoices/${invoice.id}/links`, { amountCents: cents });
           out.replaceChildren(
-            h("p", `Send this link to the client. It is shown only once; it works until ${new Date(r.link.expires_at).toLocaleDateString()}.`),
+            callout({
+              tone: "success",
+              title: "Payment link ready",
+              body: `Send it to the client. It is shown only once and works until ${new Date(r.link.expires_at).toLocaleDateString()}.`,
+            }),
             shareBox(r.url, {
               subject: `Payment for ${label}`,
               body: `You can pay ${label} (${money(cents)}) online at the link below. You will enter your card details on our payment processor's secure page.`,
               email: r.client?.email,
             }),
           );
-          form.querySelector("button[type=submit]").textContent = "Make a new link";
+          form.querySelector("button[type=submit] .btn-label").textContent = "Make a new link";
           onDone?.();
         } catch (ex) {
           err.textContent = ex.message;
         }
       },
     },
-    h("p.muted", `Balance due on ${label}: ${money(invoice.balance_cents)}. The payment goes to the operating account and is recorded against this invoice automatically.`),
-    h("label", "Amount to request", amount),
-    invoice.activeLink ? h("p.note", "A link for this invoice is already out. Making a new one turns the old one off.") : null,
+    field("Amount to request", h("span.pay-amount-input", h("span.pay-unit", "$"), amount), { hint: `Balance due: ${money(invoice.balance_cents)}` }),
+    invoice.activeLink ? callout({ tone: "warning", body: "A link for this invoice is already out. Making a new one turns the old one off." }) : null,
     err,
     out,
-    h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Close"), h("button.btn.primary", { type: "submit" }, "Create payment link")),
+    h("div.form-actions", button("Close", { onclick: () => dlg.close() }), button("Create payment link", { variant: "primary", type: "submit" })),
   );
-  const dlg = modal(`Pay online: ${label}`, form, { wide: true });
+  const dlg = modal(`Pay online: ${label}`, form, {
+    wide: true,
+    subtitle:
+      "The client pays by card on the processor's secure page. The money goes to the operating account and is recorded against this invoice automatically.",
+  });
 }
 
 function trustDialog(matterId, onDone) {
-  const amount = h("input", { inputmode: "decimal", "aria-label": "Amount", required: true });
+  const amount = h("input", { inputmode: "decimal", required: true });
   const desc = h("input", { maxlength: 200, placeholder: "Retainer deposit to trust" });
   const err = h("p.error-text", { role: "alert" });
   const out = h("div");
@@ -111,102 +128,122 @@ function trustDialog(matterId, onDone) {
         if (!cents) return (err.textContent = "Enter an amount, like 2500.00");
         try {
           const r = await post("/pay/trust-links", { matterId, amountCents: cents, description: desc.value || null });
-          out.replaceChildren(shareBox(r.url, { subject: "Retainer deposit", body: `You can make the retainer deposit (${money(cents)}) online at the link below.` }));
+          out.replaceChildren(
+            shareBox(r.url, { subject: "Retainer deposit", body: `You can make the retainer deposit (${money(cents)}) online at the link below.` }),
+          );
           onDone?.();
         } catch (ex) {
           err.textContent = ex.message;
         }
       },
     },
-    h("p.muted", "This money is unearned and goes to the trust account through the separate trust processor account. It is not recorded in billing; it is held for entry in the trust ledger."),
-    h("label", "Amount", amount),
-    h("label", "Description shown to the client", desc),
+    field("Amount", h("span.pay-amount-input", h("span.pay-unit", "$"), amount), { required: true }),
+    field("Description shown to the client", desc, { optional: true }),
     err,
     out,
-    h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Close"), h("button.btn.primary", { type: "submit" }, "Create trust deposit link")),
+    h("div.form-actions", button("Close", { onclick: () => dlg.close() }), button("Create trust deposit link", { variant: "primary", type: "submit" })),
   );
-  const dlg = modal("Retainer deposit (trust)", form, { wide: true });
+  const dlg = modal("Retainer deposit (trust)", form, {
+    wide: true,
+    subtitle:
+      "This money is unearned and goes to the trust account through the separate trust processor account. It is not recorded in billing; it is held for entry in the trust ledger.",
+  });
 }
 
 export function matterPaymentsCard(matterId) {
-  const card = h("section.card.pay-card", h("h2", "Online payments"), h("p.muted", "Loading…"));
+  const base = { className: "pay-card", title: "Online payments", icon: "payments" };
+  const el = liveCard({ ...base, body: loadingBlock("Loading online payments", "lines", 2) });
   const draw = async () => {
     let o;
     try {
       o = await get(`/pay/matters/${matterId}`);
     } catch (err) {
-      card.replaceChildren(h("h2", "Online payments"), h("p.error-text", err.message));
+      el.put({ body: callout({ tone: "danger", title: "Online payments didn't load", body: err.message }) });
       return;
     }
     const due = o.invoices.filter((i) => i.balance_cents > 0);
-    card.replaceChildren(
-      h("h2", "Online payments"),
-      o.provider === "off"
-        ? h("p.muted", "Online payments are turned off. Turn them on in Settings.")
-        : due.length
-          ? h(
-              "ul.plain.pay-list",
-              due.map((i) =>
-                h(
-                  "li",
-                  h("span.pay-what", `Invoice ${i.number}`, h("span.muted.small", ` ${money(i.balance_cents)} due`)),
-                  i.activeLink ? h("span.tag", "Link sent") : null,
-                  payOnlineButton(i, { onDone: draw }),
-                ),
-              ),
-            )
-          : h("p.muted", o.invoices.length ? "Every finalized invoice is paid." : "No finalized invoices yet."),
-      o.provider !== "off" && o.testMode ? h("p.muted.small", "Test mode: no real cards are charged.") : null,
-      o.attention.length
-        ? h(
-            "div.pay-attention",
-            h("h3", "Needs attention"),
-            h(
-              "ul.plain",
-              o.attention.map((a) =>
-                h(
-                  "li",
-                  h("span", a.message),
+    el.put({
+      subtitle: o.provider !== "off" && o.testMode ? "Test mode: no real cards are charged" : null,
+      flush: o.provider !== "off" && due.length > 0,
+      body: [
+        o.provider === "off"
+          ? emptyState({
+              icon: "wallet",
+              title: "Online payments are off",
+              body: "An administrator can turn them on in Settings, Online payments.",
+              compact: true,
+            })
+          : due.length
+            ? h(
+                "ul.plain.pay-list",
+                due.map((i) =>
                   h(
-                    "button.btn.small",
-                    { type: "button", onclick: () => post(`/pay/attention/${a.id}/done`, {}).then(() => (toast("Marked done"), draw()), fail) },
-                    "Mark done",
+                    "li",
+                    h("span.pay-what", h("span.pay-inv", `Invoice ${i.number}`), h("span.pay-due", `${money(i.balance_cents)} due`)),
+                    i.activeLink ? pill("Link sent", "info") : null,
+                    payOnlineButton(i, { onDone: draw }),
                   ),
                 ),
-              ),
-            ),
-          )
-        : null,
-      h(
+              )
+            : emptyState({
+                icon: "circle-check",
+                title: o.invoices.length ? "Every invoice is paid" : "No finalized invoices yet",
+                body: o.invoices.length ? null : "Once an invoice is finalized, you can send the client a link to pay it by card.",
+                compact: true,
+              }),
+        o.attention.length
+          ? h(
+              "div.pay-attention",
+              callout({
+                tone: "warning",
+                title: "Needs attention",
+                body: h(
+                  "ul.plain",
+                  o.attention.map((a) =>
+                    h(
+                      "li",
+                      h("span", a.message),
+                      button("Mark done", {
+                        size: "sm",
+                        onclick: () => post(`/pay/attention/${a.id}/done`, {}).then(() => (toast("Marked done"), draw()), fail),
+                      }),
+                    ),
+                  ),
+                ),
+              }),
+            )
+          : null,
+      ],
+      footer: h(
         "div.pay-trust",
         o.trustEnabled
-          ? h("button.btn.small", { type: "button", onclick: () => trustDialog(matterId, draw) }, "Retainer deposit (trust)…")
-          : h("p.muted.small", "Retainer deposits to trust can't be taken online until a separate trust processor account is set up (Settings, Online payments)."),
+          ? button("Retainer deposit (trust)…", { size: "sm", icon: "landmark", onclick: () => trustDialog(matterId, draw) })
+          : h("span.muted", "Retainer deposits to trust can't be taken online until a separate trust processor account is set up (Settings, Online payments)."),
       ),
-    );
+    });
   };
   draw();
-  return card;
+  return el;
 }
 
 // ---------------------------------------------------------------- signatures
 
 const STATUS = {
-  sent: ["Waiting", ""],
-  viewed: ["Opened", ""],
-  signed: ["Signed", ".good"],
-  declined: ["Wants paper", ".high"],
-  cancelled: ["Cancelled", ".low"],
-  expired: ["Expired", ".low"],
+  sent: ["Waiting", "info"],
+  viewed: ["Opened", "info"],
+  signed: ["Signed", "success"],
+  declined: ["Wants paper", "warning"],
+  cancelled: ["Cancelled", "neutral"],
+  expired: ["Expired", "neutral"],
 };
 
 export function statusTag(status) {
-  const [label, cls] = STATUS[status] ?? [status, ""];
-  return h("span.tag" + cls, label);
+  const [label, tone] = STATUS[status] ?? [status, "neutral"];
+  return pill(label, tone);
 }
 
 export function sendForSignatureButton(doc, opts = {}) {
-  return h("button.btn.small", { type: "button", onclick: () => sendDialog({ ...opts, doc }) }, "Send for signature");
+  return button("Send for signature", { size: "sm", icon: "signatures", onclick: () => sendDialog({ ...opts, doc }) });
 }
 
 /** opts: { matter: {id, client_name, client_email}, doc?: {id,name}, onDone } */
@@ -220,7 +257,10 @@ export async function sendDialog(opts) {
   }
   const signable = docs.filter((d) => d.mime === "application/pdf" || /wordprocessingml/.test(d.mime || ""));
   const docSel = select(
-    [{ value: "", label: signable.length ? "Choose a document…" : "No PDF or Word documents on this matter" }, ...signable.map((d) => ({ value: d.id, label: d.folder ? `${d.folder}/${d.name}` : d.name }))],
+    [
+      { value: "", label: signable.length ? "Choose a document…" : "No PDF or Word documents on this matter" },
+      ...signable.map((d) => ({ value: d.id, label: d.folder ? `${d.folder}/${d.name}` : d.name })),
+    ],
     opts.doc?.id ?? "",
     { required: true },
   );
@@ -245,7 +285,11 @@ export async function sendDialog(opts) {
             expiresDays: days.value ? Number(days.value) : null,
           });
           out.replaceChildren(
-            h("p", `Send this private link to ${r.request.signer_name}. It is shown only once and works until ${new Date(r.request.expires_at).toLocaleDateString()}.`),
+            callout({
+              tone: "success",
+              title: "Signing link ready",
+              body: `Send this private link to ${r.request.signer_name}. It is shown only once and works until ${new Date(r.request.expires_at).toLocaleDateString()}.`,
+            }),
             shareBox(r.url, {
               subject: `Please sign: ${r.request.doc_name}`,
               body: `Please review and sign "${r.request.doc_name}" at the private link below.`,
@@ -259,16 +303,19 @@ export async function sendDialog(opts) {
         }
       },
     },
-    h("label", "Document", docSel),
-    h("div.form-row", h("label", "Signer's name", name), h("label", "Signer's email", email)),
-    h("label", "Message", msg),
-    h("label", "Link works for (days)", days),
-    h("p.muted.small", "The signer opens the document, agrees to sign electronically (or asks for paper), and signs. A certificate of completion is saved to this matter's documents."),
+    field("Document", docSel, { required: true, hint: "PDF and Word documents on this matter." }),
+    h("div.form-row", field("Signer's name", name, { required: true }), field("Signer's email", email, { optional: true })),
+    field("Message", msg, { optional: true }),
+    field("Link works for (days)", days, { optional: true }),
     err,
     out,
-    h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Close"), h("button.btn.primary", { type: "submit" }, "Create signing link")),
+    h("div.form-actions", button("Close", { onclick: () => dlg.close() }), button("Create signing link", { variant: "primary", type: "submit" })),
   );
-  const dlg = modal("Send for signature", form, { wide: true });
+  const dlg = modal("Send for signature", form, {
+    wide: true,
+    subtitle:
+      "The signer opens the document, agrees to sign electronically (or asks for paper), and signs. A certificate of completion is saved to this matter's documents.",
+  });
 }
 
 const EVENT_LABEL = {
@@ -303,8 +350,21 @@ async function requestDialog(id, onDone) {
   const out = h("div");
   const body = h(
     "div.modal-body",
-    h("p", h("b", r.doc_name), ` (version ${r.version}) to ${r.signer_name}`, r.signer_email ? ` <${r.signer_email}>` : "", " ", statusTag(r.status)),
-    r.newer_version_exists && r.status !== "signed" ? h("p.note", "A newer version of this document was uploaded after it was sent. The signer sees the version that was sent; cancel and send again if that is wrong.") : null,
+    h(
+      "div.sign-req-head",
+      h(
+        "div.cell-stack",
+        h("strong", r.doc_name),
+        h("span.cell-sub", `Version ${r.version} · to ${r.signer_name}`, r.signer_email ? ` <${r.signer_email}>` : ""),
+      ),
+      statusTag(r.status),
+    ),
+    r.newer_version_exists && r.status !== "signed"
+      ? callout({
+          tone: "warning",
+          body: "A newer version of this document was uploaded after it was sent. The signer sees the version that was sent; cancel and send again if that is wrong.",
+        })
+      : null,
     r.closed_reason ? h("p.muted", `Reason: ${r.closed_reason}`) : null,
     h(
       "table.settings-table.audit-table",
@@ -321,53 +381,53 @@ async function requestDialog(id, onDone) {
         ),
       ),
     ),
-    h("p.muted.small", r.chain_intact ? "Audit trail check: intact." : "Audit trail check FAILED: an entry was changed or removed."),
+    r.chain_intact
+      ? h("p.sign-chain.ok", icon("circle-check", { size: 15 }), "Audit trail check: intact.")
+      : callout({ tone: "danger", title: "Audit trail check failed", body: "An entry was changed or removed." }),
     out,
     h(
       "div.form-actions",
-      r.certificate_document_id ? h("button.btn", { type: "button", onclick: () => saveDocument(r.certificate_document_id).catch(fail) }, "Download certificate") : null,
-      open
-        ? h(
-            "button.btn",
-            {
-              type: "button",
-              onclick: async () => {
-                if (!confirm("Cancel this signature request? The link will stop working.")) return;
-                try {
-                  await post(`/esign/requests/${id}/cancel`, { reason: prompt("Reason (optional)") || null });
-                  toast("Cancelled");
-                  dlg.close();
-                  onDone?.();
-                } catch (err) {
-                  fail(err);
-                }
-              },
-            },
-            "Cancel request",
-          )
+      r.certificate_document_id
+        ? button("Download certificate", { icon: "file-text", onclick: () => saveDocument(r.certificate_document_id).catch(fail) })
         : null,
       open
-        ? h(
-            "button.btn.primary",
-            {
-              type: "button",
-              onclick: async () => {
-                try {
-                  const x = await post(`/esign/requests/${id}/resend`, {});
-                  out.replaceChildren(
-                    h("p", "New link (the old one no longer works):"),
-                    shareBox(x.url, { subject: `Please sign: ${r.doc_name}`, body: `Please review and sign "${r.doc_name}" at the private link below.`, email: r.signer_email }),
-                  );
-                  onDone?.();
-                } catch (err) {
-                  fail(err);
-                }
-              },
+        ? button("Cancel request", {
+            variant: "danger",
+            onclick: async () => {
+              if (!confirm("Cancel this signature request? The link will stop working.")) return;
+              try {
+                await post(`/esign/requests/${id}/cancel`, { reason: prompt("Reason (optional)") || null });
+                toast("Cancelled");
+                dlg.close();
+                onDone?.();
+              } catch (err) {
+                fail(err);
+              }
             },
-            "New link",
-          )
+          })
         : null,
-      h("button.btn", { type: "button", onclick: () => dlg.close() }, "Close"),
+      open
+        ? button("New link", {
+            variant: "primary",
+            onclick: async () => {
+              try {
+                const x = await post(`/esign/requests/${id}/resend`, {});
+                out.replaceChildren(
+                  h("p", "New link (the old one no longer works):"),
+                  shareBox(x.url, {
+                    subject: `Please sign: ${r.doc_name}`,
+                    body: `Please review and sign "${r.doc_name}" at the private link below.`,
+                    email: r.signer_email,
+                  }),
+                );
+                onDone?.();
+              } catch (err) {
+                fail(err);
+              }
+            },
+          })
+        : null,
+      button("Close", { onclick: () => dlg.close() }),
     ),
   );
   const dlg = modal("Signature request", body, { wide: true });
@@ -375,51 +435,68 @@ async function requestDialog(id, onDone) {
 
 /** matter: { id, client_name, client_email } */
 export function matterSignaturesCard(matter) {
-  const card = h("section.card.sign-card", h("h2", "Signatures"), h("p.muted", "Loading…"));
+  const base = { className: "sign-card", title: "Signatures", icon: "signatures" };
+  const el = liveCard({ ...base, body: loadingBlock("Loading signatures", "lines", 2) });
+  const sendBtn = () => button("Send a document for signature…", { size: "sm", icon: "plus", onclick: () => sendDialog({ matter, onDone: draw }) });
   const draw = async () => {
     let rows;
     try {
       rows = await get(`/matters/${matter.id}/esign`);
     } catch (err) {
-      card.replaceChildren(h("h2", "Signatures"), h("p.error-text", err.message));
+      el.put({ body: callout({ tone: "danger", title: "Signatures didn't load", body: err.message }) });
       return;
     }
-    card.replaceChildren(
-      h("h2", "Signatures"),
-      rows.length
+    el.put({
+      flush: rows.length > 0,
+      body: rows.length
         ? h(
             "ul.plain.sign-list",
-            rows.slice(0, 12).map((r) =>
-              h(
-                "li",
+            rows
+              .slice(0, 12)
+              .map((r) =>
                 h(
-                  "button.linklike",
-                  { type: "button", onclick: () => requestDialog(r.id, draw) },
-                  h("span.sign-doc", r.doc_name),
-                  h("span.muted.small", ` ${r.signer_name} · ${r.signed_at ? "signed " + fmtTime(r.signed_at) : "sent " + fmtTime(r.created_at)}`),
+                  "li",
+                  h(
+                    "button.linklike",
+                    { type: "button", onclick: () => requestDialog(r.id, draw) },
+                    h("span.sign-doc", r.doc_name),
+                    h("span.sign-sub", `${r.signer_name} · ${r.signed_at ? "signed " + fmtTime(r.signed_at) : "sent " + fmtTime(r.created_at)}`),
+                  ),
+                  statusTag(r.status),
                 ),
-                statusTag(r.status),
               ),
-            ),
           )
-        : h("p.muted", "Nothing sent for signature yet."),
-      h("button.btn.small", { type: "button", onclick: () => sendDialog({ matter, onDone: draw }) }, "Send a document for signature…"),
-    );
+        : emptyState({
+            icon: "signatures",
+            title: "Nothing sent for signature yet",
+            body: "Send a PDF or Word document from this matter; the client signs from a private link.",
+            compact: true,
+          }),
+      footer: sendBtn(),
+    });
   };
   draw();
-  return card;
+  return el;
 }
 
 // ------------------------------------------------------------------ settings
 
+function sectionHead(ic, title, desc = null) {
+  return h(
+    "header.card-header",
+    h("div.card-heading", h("span.card-icon", icon(ic, { size: 16 })), h("div", h("h2.card-title", title), desc ? h("p.card-subtitle", desc) : null)),
+  );
+}
+
 export function paymentSettingsSection() {
-  const sec = h("section.card#s-pay", h("h2", "Online payments"), h("p.muted", "Loading…"));
+  const head = () => sectionHead("payments", "Online payments", "Clients pay on the payment processor's own secure page. Card numbers never reach Lawdesk.");
+  const sec = h("section.card.settings-section.pay-settings-section#s-pay", head(), loadingBlock("Loading online payment settings", "lines", 3));
   const draw = async () => {
     let s;
     try {
       s = await get("/pay/settings");
     } catch (err) {
-      sec.replaceChildren(h("h2", "Online payments"), h("p.error-text", err.message));
+      sec.replaceChildren(head(), callout({ tone: "danger", title: "Settings didn't load", body: err.message }));
       return;
     }
     const save = (p, msg) =>
@@ -427,14 +504,17 @@ export function paymentSettingsSection() {
         () => (toast(msg || "Saved"), draw()),
         (err) => (fail(err), draw()),
       );
-    const yes = (b, what, env) => h("li", b ? `${what}: set` : `${what}: not set (server setting ${env})`);
+    const yes = (b, what, env) =>
+      h(
+        "li.pay-check",
+        icon(b ? "circle-check" : "circle-alert", { size: 15, class: b ? "ok" : "bad" }),
+        h("span", b ? `${what}: set` : `${what}: not set (server setting ${env})`),
+      );
     sec.replaceChildren(
-      h("h2", "Online payments"),
-      h("p.muted", "Clients pay on the payment processor's own secure page. Card numbers never reach Lawdesk."),
+      head(),
       h(
         "div.form-grid.pay-settings",
-        h(
-          "label",
+        field(
           "Payment processor",
           select(
             [
@@ -448,10 +528,18 @@ export function paymentSettingsSection() {
         ),
         h(
           "label.check-line",
-          h("input", { type: "checkbox", checked: s.testMode, disabled: s.provider === "test", onchange: (e) => save({ testMode: e.target.checked }, e.target.checked ? "Test mode on" : "Test mode off") }),
+          h("input", {
+            type: "checkbox",
+            checked: s.testMode,
+            disabled: s.provider === "test",
+            onchange: (e) => save({ testMode: e.target.checked }, e.target.checked ? "Test mode on" : "Test mode off"),
+          }),
           " Test mode (no real cards are charged)",
         ),
-        h("label", "Payment links work for (days)", h("input", { type: "number", min: 1, max: 180, value: s.linkDays, onchange: (e) => save({ linkDays: Number(e.target.value) }) })),
+        field(
+          "Payment links work for (days)",
+          h("input", { type: "number", min: 1, max: 180, value: s.linkDays, onchange: (e) => save({ linkDays: Number(e.target.value) }) }),
+        ),
       ),
       s.provider === "stripe"
         ? h(
@@ -463,7 +551,12 @@ export function paymentSettingsSection() {
               yes(s.stripe.operatingWebhookSecret, "Operating webhook signing secret", "STRIPE_WEBHOOK_SECRET"),
             ),
             s.webhookUrls ? h("p.small", "Webhook address to register in Stripe: ", h("code", s.webhookUrls.operating)) : null,
-            !s.publicUrl ? h("p.note", "Set LAWDESK_PUBLIC_URL on the server to the address clients use (https), so links and Stripe return pages point to the right place.") : null,
+            !s.publicUrl
+              ? callout({
+                  tone: "warning",
+                  body: "Set LAWDESK_PUBLIC_URL on the server to the address clients use (https), so links and Stripe return pages point to the right place.",
+                })
+              : null,
           )
         : null,
       h(
@@ -472,8 +565,12 @@ export function paymentSettingsSection() {
         h("p.small", s.trust.note),
         h(
           "ul.plain",
-          h("li", s.trust.processorConfigured ? "Separate trust processor account: set up" : "Separate trust processor account: not set up (STRIPE_TRUST_SECRET_KEY and STRIPE_TRUST_WEBHOOK_SECRET)"),
-          h("li", s.trust.enabled ? "Trust deposit links: on" : "Trust deposit links: off"),
+          yes(s.trust.processorConfigured, "Separate trust processor account", "STRIPE_TRUST_SECRET_KEY and STRIPE_TRUST_WEBHOOK_SECRET"),
+          h(
+            "li.pay-check",
+            icon(s.trust.enabled ? "circle-check" : "circle-dot", { size: 15, class: s.trust.enabled ? "ok" : "off" }),
+            h("span", s.trust.enabled ? "Trust deposit links: on" : "Trust deposit links: off"),
+          ),
         ),
         h(
           "label.check-line",
@@ -493,26 +590,56 @@ export function paymentSettingsSection() {
 }
 
 export function esignSettingsSection() {
-  const sec = h("section.card#s-esign", h("h2", "Electronic signatures"), h("p.muted", "Loading…"));
+  const head = () =>
+    sectionHead(
+      "signatures",
+      "Electronic signatures",
+      "Signers see these contact details in the consent they agree to: how to ask for paper, withdraw consent, or update their email.",
+    );
+  const sec = h("section.card.settings-section#s-esign", head(), loadingBlock("Loading signature settings", "lines", 2));
   const draw = async () => {
     let s;
     try {
       s = await get("/esign/settings");
     } catch (err) {
-      sec.replaceChildren(h("h2", "Electronic signatures"), h("p.error-text", err.message));
+      sec.replaceChildren(head(), callout({ tone: "danger", title: "Settings didn't load", body: err.message }));
       return;
     }
-    const save = (p) => patch("/esign/settings", p).then(() => toast("Saved"), (err) => (fail(err), draw()));
+    const save = (p) =>
+      patch("/esign/settings", p).then(
+        () => toast("Saved"),
+        (err) => (fail(err), draw()),
+      );
+    const paperFee = (e) => {
+      const c = toCents(e.target.value);
+      c == null ? fail(new Error("Enter an amount, like 0.00")) : save({ paperFeeCents: c });
+    };
     sec.replaceChildren(
-      h("h2", "Electronic signatures"),
-      h("p.muted", "Signers see these contact details in the consent they agree to: how to ask for paper, withdraw consent, or update their email."),
+      head(),
       h(
         "div.form-grid",
-        h("div.form-row", h("label", "Contact email", h("input", { type: "email", value: s.contactEmail || "", maxlength: 200, onchange: (e) => save({ contactEmail: e.target.value || null }) })), h("label", "Contact phone", h("input", { value: s.contactPhone || "", maxlength: 60, onchange: (e) => save({ contactPhone: e.target.value || null }) }))),
         h(
           "div.form-row",
-          h("label", "Fee for a paper copy ($)", h("input", { inputmode: "decimal", value: (s.paperFeeCents / 100).toFixed(2), onchange: (e) => { const c = toCents(e.target.value); c == null ? fail(new Error("Enter an amount, like 0.00")) : save({ paperFeeCents: c }); } })),
-          h("label", "Signing links work for (days)", h("input", { type: "number", min: 1, max: 90, value: s.defaultDays, onchange: (e) => save({ defaultDays: Number(e.target.value) }) })),
+          field(
+            "Contact email",
+            h("input", { type: "email", value: s.contactEmail || "", maxlength: 200, onchange: (e) => save({ contactEmail: e.target.value || null }) }),
+          ),
+          field("Contact phone", h("input", { value: s.contactPhone || "", maxlength: 60, onchange: (e) => save({ contactPhone: e.target.value || null }) })),
+        ),
+        h(
+          "div.form-row",
+          field(
+            "Fee for a paper copy",
+            h(
+              "span.pay-amount-input",
+              h("span.pay-unit", "$"),
+              h("input", { inputmode: "decimal", value: (s.paperFeeCents / 100).toFixed(2), onchange: paperFee }),
+            ),
+          ),
+          field(
+            "Signing links work for (days)",
+            h("input", { type: "number", min: 1, max: 90, value: s.defaultDays, onchange: (e) => save({ defaultDays: Number(e.target.value) }) }),
+          ),
         ),
       ),
     );

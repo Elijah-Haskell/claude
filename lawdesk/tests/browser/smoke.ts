@@ -460,7 +460,8 @@ for (const [label, viewport] of [
     await page.goto(invoiceUrl);
     await page.waitForSelector(".bl-pay-list li");
     assert.match(await page.locator(".bl-status").first().innerText(), /Partly paid/);
-    await page.click("#inv-void");
+    await page.click("#inv-more");
+    await page.locator(".popover .pop-item", { hasText: "Void invoice" }).click();
     await page.locator("dialog button[type=submit]", { hasText: "Void invoice" }).click();
     await page.waitForSelector("dialog .error-text:has-text('reason')");
     await page.fill("dialog textarea", "Billed to the wrong matter");
@@ -495,9 +496,10 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: billing Log time from a task's menu links the task`, async () => {
+    // The task also shows under Overview's "Next up", so use the one on the Tasks tab.
     await page.goto(base + `/#/matters/${demo.matters.m2}/tasks`);
-    await page.waitForSelector(".task:has-text('indemnity cap')");
-    const row = page.locator(".task", { hasText: "Call client about the indemnity cap" });
+    await page.waitForSelector("#tab-panel-tasks .task:has-text('indemnity cap')");
+    const row = page.locator("#tab-panel-tasks .task", { hasText: "Call client about the indemnity cap" });
     await row.locator(".more").click();
     await page.locator(".popover .pop-item", { hasText: "Log time" }).click();
     await page.waitForSelector("dialog .bl-linked:has-text('indemnity cap')");

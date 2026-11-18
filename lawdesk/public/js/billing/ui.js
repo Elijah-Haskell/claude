@@ -6,31 +6,30 @@ import { get, post, patch } from "../api.js";
 import { state, today } from "../state.js";
 import { money, hours, parseHours, parseMoney, moneyInput } from "./format.js";
 import { startTimer } from "./timer.js";
+import { pageHeader, field, button, pill, statusPill } from "../ui/components.js";
+import { icon } from "../ui/icons.js";
 
 export const SUBNAV = [
-  ["#/billing/time", "Time"],
-  ["#/billing/expenses", "Expenses"],
-  ["#/billing/invoices", "Invoices"],
-  ["#/billing/payments", "Payments"],
-  ["#/billing/statements", "Statements"],
-  ["#/billing/settings", "Billing settings"],
+  ["#/billing/time", "Time", "clock"],
+  ["#/billing/expenses", "Expenses", "wallet"],
+  ["#/billing/invoices", "Invoices", "receipt"],
+  ["#/billing/payments", "Payments", "landmark"],
+  ["#/billing/statements", "Statements", "file-text"],
+  ["#/billing/settings", "Billing settings", "settings"],
 ];
 
 /** The tab strip under the page title. `current` is one of the SUBNAV hrefs. */
 export function subnav(current) {
   return h(
-    "nav.bl-subnav",
+    "nav.tabs.bl-subnav",
     { "aria-label": "Billing" },
-    SUBNAV.map(([href, label]) => h("a", { href, "aria-current": href === current ? "page" : null }, label)),
+    SUBNAV.map(([href, label, ic]) => h("a.tab", { href, "aria-current": href === current ? "page" : null }, icon(ic, { size: 15 }), h("span", label))),
   );
 }
 
+/** The top of every billing screen: header (with up to one primary action) and the billing tabs. */
 export function billingPage(current, title, sub, actions = []) {
-  return h(
-    "div.page.bl-page",
-    h("div.page-head.bl-head", h("div", h("h1", title), sub ? h("p.sub", sub) : null), actions.length ? h("div.head-actions", actions) : null),
-    subnav(current),
-  );
+  return h("div.page.bl-page", pageHeader({ title, subtitle: sub, eyebrow: "Billing", actions: actions.length ? actions : null }), subnav(current));
 }
 
 export const fail = (err) => toast(err.message || String(err), { error: true });
@@ -78,9 +77,14 @@ export function invoiceStatus(inv, now = today()) {
   return { label: "Awaiting payment", tone: "open" };
 }
 
+// Invoice states mapped onto the shared status colours (STATUS_TONES in ui/components.js).
+const TONE_STATUS = { draft: "draft", void: "void", paid: "paid", late: "overdue", partial: "in progress", open: "sent" };
+
 export function statusTag(inv) {
   const s = invoiceStatus(inv);
-  return h(`span.bl-status.${s.tone}`, s.label);
+  const el = statusPill(TONE_STATUS[s.tone] || "draft", s.label);
+  el.classList.add("bl-status");
+  return el;
 }
 
 export function invoiceTitle(inv) {
@@ -90,10 +94,10 @@ export function invoiceTitle(inv) {
 /** A summary figure: big number, small label. */
 export function figure(label, value, opts = {}) {
   return h(
-    `div.stat.bl-figure${opts.tone ? "." + opts.tone : ""}`,
-    h("div.stat-n.bl-figure-value", value),
-    h("div.stat-label.bl-figure-label", label),
-    opts.note ? h("div.bl-figure-note", opts.note) : null,
+    `div.bl-figure${opts.tone ? "." + opts.tone : ""}`,
+    h("span.bl-figure-label", label),
+    h("span.bl-figure-value", value),
+    opts.note ? h("span.bl-figure-note", opts.note) : null,
   );
 }
 
@@ -179,20 +183,24 @@ export async function logTimeDialog(opts = {}) {
   const form = h(
     "form.modal-body.form-grid.bl-form",
     { onsubmit: (ev) => (ev.preventDefault(), save(false)) },
-    h("label", "Matter", matter),
-    opts.taskTitle ? h("p.bl-linked", "For the task: ", h("strong", opts.taskTitle)) : null,
-    h("div.form-row.bl-two", h("label", "Date", date), h("label", "Hours", hrs, h("span.bl-help#lt-hours-help", "Type 1.5 or 1:30"))),
-    h("label", "Description", desc),
-    h("label.check-line", billable, " Billable to the client"),
+    opts.taskTitle ? h("p.bl-linked", icon("square-check-big", { size: 15 }), h("span", "For the task: ", h("strong", opts.taskTitle))) : null,
+    field("Matter", matter, { required: true }),
+    h(
+      "div.form-row.bl-two",
+      field("Date", date),
+      h("label.field", h("span.field-label", "Hours"), hrs, h("span.field-hint#lt-hours-help", "Type 1.5 or 1:30")),
+    ),
+    field("Description", desc),
+    h("label.check-line", billable, h("span", "Billable to the client")),
     err,
     h(
       "div.form-actions",
-      h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"),
-      !e ? h("button.btn", { type: "button", onclick: () => save(true) }, "Start timer instead") : null,
-      h("button.btn.primary", { type: "submit" }, e ? "Save changes" : "Save time"),
+      button("Cancel", { onclick: () => dlg.close() }),
+      !e ? button("Start timer instead", { icon: "clock", onclick: () => save(true) }) : null,
+      button(e ? "Save changes" : "Save time", { variant: "primary", type: "submit" }),
     ),
   );
-  const dlg = modal(e ? "Edit time entry" : "Log time", form);
+  const dlg = modal(e ? "Edit time entry" : "Log time", form, { subtitle: e ? null : "Record time spent on a matter." });
   (matter.value ? hrs : matter).focus();
   return dlg;
 }
@@ -217,13 +225,9 @@ export function confirmDialog(title, lines, { confirmLabel = "Confirm", danger =
         },
       },
       lines.map((l) => (typeof l === "string" ? h("p", l) : l)),
-      reason ? h("label.bl-reason", reasonLabel, reason) : null,
+      reason ? field(reasonLabel, reason, { required: true, className: "bl-reason" }) : null,
       err,
-      h(
-        "div.form-actions",
-        h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"),
-        h(`button.btn.primary${danger ? ".bl-danger" : ""}`, { type: "submit" }, confirmLabel),
-      ),
+      h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), button(confirmLabel, { variant: danger ? "danger" : "primary", type: "submit" })),
     );
     const dlg = modal(title, form);
     dlg.addEventListener("close", () => resolve(ok ? (reason ? reason.value.trim() : true) : false));
@@ -235,4 +239,4 @@ export function userName(id) {
   return state.setup?.allUsers?.find((u) => u.id === id)?.name ?? "";
 }
 
-export { moneyInput, parseMoney };
+export { moneyInput, parseMoney, pill };

@@ -7,6 +7,10 @@ import { get, post, patch, del } from "../api.js";
 import { today, users, state } from "../state.js";
 import { money, hours, moneyInput, bpToPercent, percentToBp } from "./format.js";
 import { matterLabel, statusTag, invoiceTitle, moneyField, readMoney, readHours, confirmDialog, fail, subnav } from "./ui.js";
+import { pageHeader, card, field, button, iconButton, callout, kv, emptyState } from "../ui/components.js";
+import { dataTable } from "../ui/table.js";
+import { menu } from "../ui/popover.js";
+import { icon } from "../ui/icons.js";
 
 export async function invoiceView([idStr], ctx) {
   const id = Number(idStr);
@@ -31,47 +35,60 @@ export async function invoiceView([idStr], ctx) {
     const exps = inv.lines.filter((l) => l.kind === "expense");
     const printHref = `/api/billing/invoices/${id}/print`;
 
-    const actions = [h("a.btn", { href: printHref, target: "_blank", rel: "noopener", id: "inv-print" }, "Print or save as PDF")];
+    const more = [];
+    const actions = [button("Print or save as PDF", { href: printHref, target: "_blank", rel: "noopener", id: "inv-print", icon: "external-link" })];
     if (isDraft()) {
-      actions.push(
-        h("button.btn.danger-text", { type: "button", onclick: deleteDraft }, "Delete draft"),
-        h("button.btn.primary", { type: "button", id: "inv-finalize", onclick: finalize, disabled: inv.lines.length === 0 }, "Finalize invoice"),
-      );
+      more.push({ label: "Delete draft", icon: "trash-2", danger: true, onSelect: deleteDraft });
+      actions.push(button("Finalize invoice", { variant: "primary", icon: "check", id: "inv-finalize", onclick: finalize, disabled: inv.lines.length === 0 }));
     } else if (inv.status === "final") {
       if (inv.balance_cents > 0 && credit > 0)
-        actions.push(h("button.btn", { type: "button", onclick: applyCredit }, `Use ${money(Math.min(credit, inv.balance_cents))} credit`));
-      if (inv.balance_cents > 0) actions.push(h("button.btn", { type: "button", onclick: writeOff }, "Write off"));
-      actions.push(h("button.btn.danger-text", { type: "button", id: "inv-void", onclick: voidInvoice }, "Void invoice"));
-      if (inv.balance_cents > 0) actions.push(h("button.btn.primary", { type: "button", id: "inv-pay", onclick: recordPayment }, "Record payment"));
+        more.push({ label: `Use ${money(Math.min(credit, inv.balance_cents))} credit`, icon: "wallet", onSelect: applyCredit });
+      if (inv.balance_cents > 0) more.push({ label: "Write off amount due", icon: "archive", onSelect: writeOff });
+      if (more.length) more.push("-");
+      more.push({ label: "Void invoice", icon: "circle-alert", danger: true, onSelect: voidInvoice });
+      if (inv.balance_cents > 0) actions.push(button("Record payment", { variant: "primary", icon: "plus", id: "inv-pay", onclick: recordPayment }));
     }
+    if (more.length)
+      actions.splice(
+        1,
+        0,
+        iconButton("ellipsis", "More invoice actions", {
+          id: "inv-more",
+          variant: "bordered",
+          "aria-haspopup": "menu",
+          onclick: (e) => menu(e.currentTarget, more, "Invoice actions"),
+        }),
+      );
 
-    const banner = isDraft()
-      ? h(
-          "div.bl-banner",
-          h("strong", "Draft. "),
-          "Nothing has been sent and no invoice number is used until you finalize it. Its time and expenses stay off other invoices while it exists.",
-        )
-      : inv.status === "void"
-        ? h(
-            "div.bl-banner.void",
-            h("strong", `Voided ${fmtDate(inv.voided_on, now)}. `),
-            inv.void_reason,
-            ". Its work went back to unbilled; any payments became client credit.",
-          )
-        : null;
+    let banner = null;
+    if (isDraft()) {
+      banner = callout({
+        tone: "info",
+        title: "Draft",
+        body: "Nothing has been sent and no invoice number is used until you finalize it. Its time and expenses stay off other invoices while it exists.",
+      });
+      banner.classList.add("bl-banner");
+    } else if (inv.status === "void") {
+      banner = callout({
+        tone: "warning",
+        title: `Voided ${fmtDate(inv.voided_on, now)}`,
+        body: `${inv.void_reason}. Its work went back to unbilled; any payments became client credit.`,
+      });
+      banner.classList.add("bl-banner", "void");
+    }
 
     replace(
       page,
-      h("a.back", { href: "#/billing/invoices" }, "← Invoices"),
-      h(
-        "div.page-head.bl-head",
-        h(
-          "div",
-          h("h1", invoiceTitle(inv), isDraft() ? null : [" ", statusTag(inv)]),
-          h("p.sub", inv.client?.name ?? "", " · ", h("a", { href: `#/matters/${inv.matter_id}` }, matterLabel(inv.matter))),
-        ),
-        h("div.head-actions", actions),
-      ),
+      pageHeader({
+        breadcrumbs: [{ label: "Billing", href: "#/billing" }, { label: "Invoices", href: "#/billing/invoices" }, { label: invoiceTitle(inv) }],
+        title: invoiceTitle(inv),
+        meta: [
+          statusTag(inv),
+          h("span.bl-meta-item", icon("building-2", { size: 14 }), inv.client?.name ?? ""),
+          h("a.bl-meta-item", { href: `#/matters/${inv.matter_id}` }, icon("briefcase", { size: 14 }), matterLabel(inv.matter)),
+        ],
+        actions,
+      }),
       subnav("#/billing/invoices"),
       banner,
       h(
@@ -80,7 +97,7 @@ export async function invoiceView([idStr], ctx) {
           "div.bl-inv-main",
           linesCard("Professional services", fees, true),
           exps.length || isDraft() ? linesCard("Expenses", exps, false) : null,
-          isDraft() ? h("div.bl-add-line", h("button.btn", { type: "button", id: "inv-add-line", onclick: () => lineDialog(null) }, "Add a line")) : null,
+          isDraft() ? h("div.bl-add-line", button("Add a line", { icon: "plus", id: "inv-add-line", onclick: () => lineDialog(null) })) : null,
         ),
         h("aside.bl-inv-aside", totalsCard(t), isDraft() ? detailsCard() : infoCard(), inv.status !== "draft" ? paymentsCard() : null),
       ),
@@ -89,68 +106,80 @@ export async function invoiceView([idStr], ctx) {
 
   // ---------------------------------------------------------------- lines
   function linesCard(title, lines, withTime) {
-    const rows = lines.map((l) => {
+    const sum = lines.reduce((s, l) => s + l.net_cents, 0);
+    const describe = (l) => {
       const notes = [];
-      if (l.no_charge_note) notes.push(h("div.bl-line-note", l.no_charge_note));
+      if (l.no_charge_note) notes.push(h("span.bl-line-note", l.no_charge_note));
       if (l.writedown_cents)
         notes.push(
           h(
-            "div.bl-line-note.wd",
+            "span.bl-line-note.wd",
             l.writedown_cents === l.amount_cents ? "No charge" : `Written down ${money(l.writedown_cents)}`,
             l.writedown_reason ? `: ${l.writedown_reason}` : "",
           ),
         );
       return h(
-        "tr" + (l.writedown_cents ? ".bl-wd" : ""),
-        { dataset: { line: l.id } },
-        h("td.bl-c-date", { "data-label": "Date" }, l.date ? fmtDate(l.date, now) : "–"),
-        withTime ? h("td.bl-c-by", { "data-label": "By" }, l.user_name || "–") : null,
-        h(
-          "td.bl-c-what",
-          h("div.pre", l.description || h("span.muted", "No description")),
-          notes,
-          isDraft()
-            ? h(
-                "div.bl-line-actions",
-                h("button.bl-link", { type: "button", onclick: () => lineDialog(l) }, "Edit"),
-                h("button.bl-link", { type: "button", onclick: () => writeDownDialog(l) }, "Write down"),
-                h("button.bl-link.danger", { type: "button", onclick: () => removeLine(l) }, "Remove"),
-              )
-            : null,
-        ),
-        withTime ? h("td.bl-c-num", { "data-label": "Hours" }, l.minutes != null ? hours(l.minutes) : "–") : null,
-        withTime ? h("td.bl-c-money", { "data-label": "Rate" }, l.rate_cents != null ? money(l.rate_cents) : "–") : null,
-        h(
-          "td.bl-c-money",
-          { "data-label": "Amount" },
-          l.writedown_cents ? h("div.bl-was", money(l.amount_cents)) : null,
-          h("div.bl-strong", money(l.net_cents)),
-        ),
+        "div.cell-stack",
+        h("span.pre.bl-line-desc", l.description || h("span.muted", "No description")),
+        notes,
+        isDraft()
+          ? h(
+              "div.bl-line-actions",
+              button("Edit", { size: "sm", variant: "ghost", onclick: () => lineDialog(l) }),
+              button("Write down", { size: "sm", variant: "ghost", onclick: () => writeDownDialog(l) }),
+              button("Remove", { size: "sm", variant: "ghost", class: "danger-text", onclick: () => removeLine(l) }),
+            )
+          : null,
       );
+    };
+    const columns = [
+      { key: "date", label: "Date", className: "nowrap bl-c-date", render: (l) => (l.date ? fmtDate(l.date, now) : h("span.muted", "–")) },
+      withTime ? { key: "user_name", label: "By", className: "nowrap", render: (l) => l.user_name || h("span.muted", "–") } : null,
+      { key: "description", label: "Description", primary: true, render: describe },
+      withTime
+        ? { key: "minutes", label: "Hours", align: "right", className: "nowrap", render: (l) => (l.minutes != null ? hours(l.minutes) : h("span.muted", "–")) }
+        : null,
+      withTime
+        ? {
+            key: "rate_cents",
+            label: "Rate",
+            align: "right",
+            className: "nowrap",
+            render: (l) => (l.rate_cents != null ? money(l.rate_cents) : h("span.muted", "–")),
+          }
+        : null,
+      {
+        key: "net_cents",
+        label: "Amount",
+        align: "right",
+        className: "nowrap",
+        render: (l) => h("div.bl-amount", l.writedown_cents ? h("span.bl-was", money(l.amount_cents)) : null, h("strong", money(l.net_cents))),
+      },
+    ].filter(Boolean);
+    return card({
+      className: "bl-lines",
+      flush: true,
+      title,
+      icon: withTime ? "clock" : "wallet",
+      actions: lines.length ? h("span.bl-card-sum", money(sum)) : null,
+      body: dataTable({
+        columns,
+        rows: lines,
+        toolbar: false,
+        sortable: false,
+        pageSize: 1000,
+        tableClass: "bl-line-table" + (withTime ? " with-time" : ""),
+        label: title,
+        rowClass: (l) => (l.writedown_cents ? "bl-wd" : ""),
+        rowAttrs: (l) => ({ "data-line": String(l.id) }),
+        empty: emptyState({
+          icon: withTime ? "clock" : "wallet",
+          title: withTime ? "No services on this invoice" : "No expenses on this invoice",
+          body: isDraft() ? "Use Add a line to put a charge on this draft." : null,
+          compact: true,
+        }),
+      }),
     });
-    const sum = lines.reduce((s, l) => s + l.net_cents, 0);
-    return h(
-      "section.card.bl-lines",
-      h("div.bl-list-head", h("h2", title), lines.length ? h("span.muted", money(sum)) : null),
-      lines.length
-        ? h(
-            "table.bl-table.bl-line-table" + (withTime ? ".with-time" : ""),
-            h(
-              "thead",
-              h(
-                "tr",
-                h("th", "Date"),
-                withTime ? h("th", "By") : null,
-                h("th", "Description"),
-                withTime ? h("th.bl-c-num", "Hours") : null,
-                withTime ? h("th.bl-c-money", "Rate") : null,
-                h("th.bl-c-money", "Amount"),
-              ),
-            ),
-            h("tbody", rows),
-          )
-        : h("p.empty", withTime ? "No services on this invoice." : "No expenses on this invoice."),
-    );
   }
 
   function lineDialog(l) {
@@ -169,8 +198,8 @@ export async function invoiceView([idStr], ctx) {
     const hrs = h("input.bl-hours", { inputmode: "decimal", value: l?.minutes != null ? hours(l.minutes) : "", placeholder: "1.5 or 1:30" });
     const rate = moneyField(l?.rate_cents ?? null);
     const amount = moneyField(l?.amount_cents ?? null);
-    const timeBox = h("div.form-row.bl-two", h("label", "Hours", hrs), h("label", "Hourly rate", rate));
-    const amountBox = h("label", "Amount", amount);
+    const timeBox = h("div.form-row.bl-two", field("Hours", hrs), field("Hourly rate", rate));
+    const amountBox = field("Amount", amount);
     const err = h("p.error-text", { role: "alert" });
     const noCharge = l && l.no_charge_note;
     const sync = () => {
@@ -209,18 +238,14 @@ export async function invoiceView([idStr], ctx) {
           }
         },
       },
-      h("label", "Type of line", kind),
-      h("div.form-row.bl-two", h("label", "Date", date), !l ? h("label", "Done by", who) : h("span")),
-      h("label", "Description", desc),
+      field("Type of line", kind),
+      h("div.form-row.bl-two", field("Date", date), !l ? field("Done by", who) : h("span")),
+      field("Description", desc),
       timeBox,
       amountBox,
-      l && l.minutes != null && !noCharge ? h("p.muted.small", `Hours are billed in ${settings.increment_minutes}-minute steps.`) : null,
+      l && l.minutes != null && !noCharge ? h("p.field-hint", `Hours are billed in ${settings.increment_minutes}-minute steps.`) : null,
       err,
-      h(
-        "div.form-actions",
-        h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"),
-        h("button.btn.primary", { type: "submit" }, l ? "Save line" : "Add line"),
-      ),
+      h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), button(l ? "Save line" : "Add line", { variant: "primary", type: "submit" })),
     );
     sync();
     fillRate();
@@ -232,7 +257,7 @@ export async function invoiceView([idStr], ctx) {
     const all = h("input", { type: "checkbox", checked: l.writedown_cents > 0 && l.writedown_cents === l.amount_cents });
     const reason = h("textarea", { rows: 2, maxlength: 1000, id: "wd-reason" }, l.writedown_reason ?? "");
     const err = h("p.error-text", { role: "alert" });
-    const after = h("p.bl-wd-after");
+    const after = h("p.bl-wd-after", { "aria-live": "polite" });
     const update = () => {
       amount.disabled = all.checked;
       let wd = 0;
@@ -271,27 +296,31 @@ export async function invoiceView([idStr], ctx) {
           }
         },
       },
-      h("p", h("strong", l.description || "This line"), h("span.muted", ` — ${money(l.amount_cents)}`)),
-      h("label", "Write down by", amount),
-      h("label.check-line", all, " Don't charge for this line at all"),
-      h("label", "Reason (kept on the invoice record)", reason),
+      h("div.bl-wd-line", h("span", l.description || "This line"), h("strong", money(l.amount_cents))),
+      field("Write down by", amount),
+      h("label.check-line", all, h("span", "Don't charge for this line at all")),
+      field("Reason", reason, { required: true, hint: "Kept on the invoice record." }),
       after,
       err,
       h(
         "div.form-actions",
-        l.writedown_cents ? h("button.btn", { type: "button", onclick: () => send({ amountCents: 0 }) }, "Remove write-down") : null,
-        h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"),
-        h("button.btn.primary", { type: "submit" }, "Write down"),
+        l.writedown_cents ? button("Remove write-down", { onclick: () => send({ amountCents: 0 }) }) : null,
+        button("Cancel", { onclick: () => dlg.close() }),
+        button("Write down", { variant: "primary", type: "submit" }),
       ),
     );
     update();
-    const dlg = modal("Write down a line", form);
+    const dlg = modal("Write down a line", form, { subtitle: "Reduce what the client is charged for this line." });
     amount.focus();
   }
 
   async function removeLine(l) {
     const src = l.source_time_id ? " The time entry goes back to unbilled." : l.source_expense_id ? " The expense goes back to unbilled." : "";
-    if (!confirm(`Remove “${l.description || "this line"}” from the draft?${src}`)) return;
+    const ok = await confirmDialog("Remove this line?", [`“${l.description || "This line"}” comes off the draft.${src}`], {
+      confirmLabel: "Remove line",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await del(`/billing/invoices/${id}/lines/${l.id}`);
       toast("Line removed");
@@ -305,18 +334,21 @@ export async function invoiceView([idStr], ctx) {
   function totalsCard(t) {
     const row = (label, value, cls = "") => h("div.bl-total-row" + cls, h("span", label), h("span", value));
     const discountLabel = inv.discount_kind === "percent" ? `Discount (${bpToPercent(inv.discount_value)}%)` : "Discount";
-    return h(
-      "section.card.bl-totals",
-      h("h2", "Totals"),
-      row("Services and expenses", money(t.subtotal_cents)),
-      t.discount_cents ? row(discountLabel, `-${money(t.discount_cents)}`) : null,
-      t.tax_cents ? row("Sales tax", money(t.tax_cents)) : null,
-      row("Invoice total", money(t.total_cents), ".grand"),
-      inv.status === "final" || inv.paid_cents ? row("Payments received", inv.paid_cents ? `-${money(inv.paid_cents)}` : money(0)) : null,
-      inv.written_off_cents ? row("Written off", `-${money(inv.written_off_cents)}`) : null,
-      inv.status === "final" ? row("Amount due", money(inv.balance_cents), ".due") : null,
-      inv.status === "final" && credit > 0 ? h("p.muted.small", `${inv.client?.name ?? "The client"} has ${money(credit)} of unused credit.`) : null,
-    );
+    return card({
+      className: "bl-totals",
+      title: "Totals",
+      icon: "receipt",
+      body: [
+        row("Services and expenses", money(t.subtotal_cents)),
+        t.discount_cents ? row(discountLabel, `-${money(t.discount_cents)}`) : null,
+        t.tax_cents ? row("Sales tax", money(t.tax_cents)) : null,
+        row("Invoice total", money(t.total_cents), ".grand"),
+        inv.status === "final" || inv.paid_cents ? row("Payments received", inv.paid_cents ? `-${money(inv.paid_cents)}` : money(0)) : null,
+        inv.written_off_cents ? row("Written off", `-${money(inv.written_off_cents)}`) : null,
+        inv.status === "final" ? row("Amount due", money(inv.balance_cents), ".due" + (inv.balance_cents > 0 && inv.due_on < now ? ".late" : "")) : null,
+        inv.status === "final" && credit > 0 ? h("p.bl-card-note", `${inv.client?.name ?? "The client"} has ${money(credit)} of unused credit.`) : null,
+      ],
+    });
   }
 
   function detailsCard() {
@@ -338,7 +370,7 @@ export async function invoiceView([idStr], ctx) {
       value: inv.discount_kind === "percent" ? bpToPercent(inv.discount_value) : inv.discount_kind === "fixed" ? moneyInput(inv.discount_value) : "",
       placeholder: inv.discount_kind === "percent" ? "10" : "0.00",
     });
-    const dUnit = h("span.muted", inv.discount_kind === "percent" ? "%" : "");
+    const dUnit = h("span.muted.bl-unit", inv.discount_kind === "percent" ? "%" : "");
     const notes = h("textarea", { rows: 3, maxlength: 4000, placeholder: "Printed at the bottom of the invoice" }, inv.notes ?? "");
     const err = h("p.error-text", { role: "alert" });
     const save = async (body, msg = "Saved") => {
@@ -380,44 +412,46 @@ export async function invoiceView([idStr], ctx) {
     dValue.addEventListener("change", saveDiscount);
     dValue.hidden = inv.discount_kind === "none";
     const termsDue = addDays(inv.issued_on || now, settings.payment_terms_days);
-    return h(
-      "section.card.bl-details",
-      h("h2", "Invoice details"),
-      h("label.bl-field", h("span", "Invoice date"), issued, h("span.bl-help", inv.issued_on ? "" : "Left blank, it is dated the day you finalize.")),
-      h(
-        "label.bl-field",
-        h("span", "Due date"),
-        due,
-        h(
-          "span.bl-help",
-          inv.due_on
-            ? ""
+    return card({
+      className: "bl-details",
+      title: "Invoice details",
+      icon: "pencil",
+      body: h(
+        "div.form-grid",
+        field("Invoice date", issued, { hint: inv.issued_on ? null : "Left blank, it is dated the day you finalize." }),
+        field("Due date", due, {
+          hint: inv.due_on
+            ? null
             : `Left blank, it is due ${settings.payment_terms_days} days after the invoice date (${fmtDate(termsDue, now)} if dated ${inv.issued_on ? fmtDate(inv.issued_on, now) : "today"}).`,
-        ),
+        }),
+        h("div.field", h("span.field-label", "Discount"), h("div.bl-discount", dKind, dValue, dUnit)),
+        field("Note to the client", notes, { optional: true }),
+        inv.period_from || inv.period_to
+          ? h(
+              "p.field-hint",
+              `Work ${inv.period_from ? `from ${fmtDate(inv.period_from, now)} ` : ""}${inv.period_to ? `through ${fmtDate(inv.period_to, now)}` : ""}.`,
+            )
+          : null,
+        err,
       ),
-      h("div.bl-field", h("span", "Discount"), h("div.bl-discount", dKind, dValue, dUnit)),
-      h("label.bl-field", h("span", "Note to the client"), notes),
-      inv.period_from || inv.period_to
-        ? h(
-            "p.muted.small",
-            `Work ${inv.period_from ? `from ${fmtDate(inv.period_from, now)} ` : ""}${inv.period_to ? `through ${fmtDate(inv.period_to, now)}` : ""}.`,
-          )
-        : null,
-      err,
-    );
+    });
   }
 
   function infoCard() {
-    const line = (label, value) => (value ? h("div.bl-info-row", h("span.muted", label), h("span", value)) : null);
-    return h(
-      "section.card.bl-details",
-      h("h2", "Invoice details"),
-      line("Invoice date", inv.issued_on ? fmtDate(inv.issued_on, now) : null),
-      line("Due date", inv.due_on ? fmtDate(inv.due_on, now) : null),
-      line("Billed to", inv.client?.name),
-      line("Work through", inv.period_to ? fmtDate(inv.period_to, now) : null),
-      inv.notes ? h("div.bl-info-note", h("span.muted", "Note to the client"), h("p.pre", inv.notes)) : null,
-    );
+    return card({
+      className: "bl-details",
+      title: "Invoice details",
+      icon: "file-text",
+      body: [
+        kv([
+          inv.issued_on ? ["Invoice date", fmtDate(inv.issued_on, now)] : null,
+          inv.due_on ? ["Due date", fmtDate(inv.due_on, now)] : null,
+          inv.client?.name ? ["Billed to", inv.client.name] : null,
+          inv.period_to ? ["Work through", fmtDate(inv.period_to, now)] : null,
+        ]),
+        inv.notes ? h("div.bl-info-note", h("span.field-label", "Note to the client"), h("p.pre", inv.notes)) : null,
+      ],
+    });
   }
 
   function paymentsCard() {
@@ -430,28 +464,42 @@ export async function invoiceView([idStr], ctx) {
       })),
       ...inv.writeoffs.map((w) => ({ date: w.written_on, what: `Written off: ${w.reason}`, amount: w.amount_cents })),
     ].sort((a, b) => (a.date < b.date ? -1 : 1));
-    return h(
-      "section.card.bl-payments",
-      h("h2", "Payments"),
-      items.length
+    return card({
+      className: "bl-payments",
+      title: "Payments",
+      icon: "landmark",
+      flush: !!items.length,
+      body: items.length
         ? h(
             "ul.bl-pay-list",
             items.map((p) =>
               h(
                 "li" + (p.released ? ".released" : ""),
-                h("span.muted", fmtDate(p.date, now)),
-                h("span", p.what, p.released ? h("span.muted.small", ` (taken back ${fmtDate(p.released, now)})`) : null),
-                h("span.bl-strong", money(p.amount)),
+                h(
+                  "span.cell-stack",
+                  h("span", p.what),
+                  h("span.cell-sub", fmtDate(p.date, now), p.released ? ` · taken back ${fmtDate(p.released, now)}` : ""),
+                ),
+                h("strong.bl-pay-amt", money(p.amount)),
               ),
             ),
           )
-        : h("p.muted", "No payments yet."),
-    );
+        : emptyState({
+            icon: "landmark",
+            title: "No payments yet",
+            body: inv.status === "final" ? "Payments you record against this invoice appear here." : null,
+            compact: true,
+          }),
+    });
   }
 
   // -------------------------------------------------------------- actions
   async function deleteDraft() {
-    if (!confirm("Delete this draft? Its time and expenses go back to unbilled. No invoice number is used.")) return;
+    const ok = await confirmDialog("Delete this draft?", ["Its time and expenses go back to unbilled. No invoice number is used."], {
+      confirmLabel: "Delete draft",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await del(`/billing/invoices/${id}`);
       toast("Draft deleted");
@@ -548,18 +596,13 @@ export async function invoiceView([idStr], ctx) {
           }
         },
       },
-      h("p", `Amount due on invoice ${inv.number}: `, h("strong", money(inv.balance_cents))),
-      h("div.form-row.bl-two", h("label", "Amount received", amount), h("label", "Date received", date)),
-      h("div.form-row.bl-two", h("label", "How it was paid", method), h("label", "Reference", ref)),
-      h("p.muted.small", "Anything over the amount due is kept as credit for the client. To spread one payment over several invoices, use Payments."),
+      h("div.form-row.bl-two", field("Amount received", amount), field("Date received", date)),
+      h("div.form-row.bl-two", field("How it was paid", method), field("Reference", ref, { optional: true })),
+      h("p.field-hint", "Anything over the amount due is kept as credit for the client. To spread one payment over several invoices, use Payments."),
       err,
-      h(
-        "div.form-actions",
-        h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"),
-        h("button.btn.primary", { type: "submit" }, "Record payment"),
-      ),
+      h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), button("Record payment", { variant: "primary", type: "submit" })),
     );
-    const dlg = modal("Record a payment", form);
+    const dlg = modal("Record a payment", form, { subtitle: `Invoice ${inv.number}: ${money(inv.balance_cents)} due` });
     amount.focus();
     amount.select();
   }
@@ -593,7 +636,11 @@ export async function invoiceView([idStr], ctx) {
           try {
             const cents = readMoney(amount, "Amount");
             if (!reason.value.trim()) throw new Error("Give a reason. It is kept with the invoice.");
-            if (!confirm(`Write off ${money(cents)} of invoice ${inv.number}? This can't be undone.`)) return;
+            const ok = await confirmDialog(`Write off ${money(cents)}?`, [`On invoice ${inv.number}. This can't be undone.`], {
+              confirmLabel: "Write off",
+              danger: true,
+            });
+            if (!ok) return;
             await post(`/billing/invoices/${id}/write-off`, { amountCents: cents, reason: reason.value });
             dlg.close();
             toast(`${money(cents)} written off`);
@@ -603,17 +650,14 @@ export async function invoiceView([idStr], ctx) {
           }
         },
       },
-      h("p", "Use this when the firm won't collect part or all of what is owed. The invoice itself doesn't change."),
-      h("label", "Amount to write off", amount),
-      h("label", "Reason", reason),
+      field("Amount to write off", amount),
+      field("Reason", reason, { required: true }),
       err,
-      h(
-        "div.form-actions",
-        h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"),
-        h("button.btn.primary", { type: "submit" }, "Write off"),
-      ),
+      h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), button("Write off", { variant: "primary", type: "submit" })),
     );
-    const dlg = modal("Write off amount due", form);
+    const dlg = modal("Write off amount due", form, {
+      subtitle: "Use this when the firm won't collect part or all of what is owed. The invoice itself doesn't change.",
+    });
   }
 
   await load();
