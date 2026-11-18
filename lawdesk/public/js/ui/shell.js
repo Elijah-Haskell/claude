@@ -361,7 +361,7 @@ export function drawDemoBanner() {
       "div.demo-banner",
       { role: "note" },
       icon("info", { size: 15 }),
-      h("span", h("strong", "Demo data. "), "Every client, matter and person here is fictional. Don't enter real client information until sign-in is set up."),
+      h("span", h("strong", "Demo data. "), "Every client, matter and person here is fictional. Don't enter real client information until the app is hosted and backed up."),
       h(
         "button.icon-btn.sm",
         {
