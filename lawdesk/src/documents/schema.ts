@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS doc_text (
   body TEXT NOT NULL
 );
 
+-- Folders made on purpose (possibly still empty). A folder also exists while documents are in it.
+CREATE TABLE IF NOT EXISTS doc_folders (
+  matter_id INTEGER NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  PRIMARY KEY (matter_id, path)
+);
+
 CREATE INDEX IF NOT EXISTS doc_documents_matter ON doc_documents(matter_id, folder, name);
 CREATE INDEX IF NOT EXISTS doc_versions_doc ON doc_versions(document_id, version);
 CREATE INDEX IF NOT EXISTS doc_versions_hash ON doc_versions(sha256);

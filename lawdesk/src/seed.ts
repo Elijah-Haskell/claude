@@ -14,6 +14,9 @@ import { fileURLToPath } from "node:url";
 import { openDb, type DB } from "./db.ts";
 import { Engine } from "./engine.ts";
 import { addDays, rollForward, today as todayIn, type ISODate } from "./dates.ts";
+import { Documents } from "./documents/documents.ts";
+import { existingDocuments } from "./documents/routes.ts";
+import { seedDocuments } from "./documents/seed.ts";
 
 export const DEMO_NOTE = "Fictional demo data. Not a real client.";
 
@@ -328,6 +331,9 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
     );
     e.addTask({ title: "Renew the firm's online research subscription", assigneeId: casey, priority: "low" }, casey);
     e.addTask({ title: "Review the month's open matters with Riley", assigneeId: jordan, dueDate: addDays(realToday, 3) }, jordan);
+    // Demo documents and a Word template. Files go to the documents store for this database
+    // (LAWDESK_FILES, default ./files), or the one a caller set with setDocuments().
+    seedDocuments(existingDocuments(db) ?? new Documents(db, { today: () => now }), db, { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 } });
     stampActivity();
     db.exec("COMMIT");
     return { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 }, lists: { intake, llc, review, closing } };

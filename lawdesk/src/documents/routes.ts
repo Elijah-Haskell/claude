@@ -1,14 +1,18 @@
 // HTTP routes for documents and document assembly (all under /api).
 //
-// Uploads are JSON for now: { filename, contentBase64, ... }. The decoded file may be at most
-// LAWDESK_MAX_UPLOAD_BYTES (default 25 MiB); base64 makes the request body about a third larger,
-// so the server's JSON body limit must allow roughly 34 MiB for this route.
-// Downloads return { filename, mime, size, sha256, version, base64 }.
+// Files move as bytes. Uploads go to the `.../upload` routes (raw routes: the body is the file,
+// with ?name=<file name>&folder=..., or multipart/form-data with a file part and text fields).
+// Downloads come from `.../file` with Content-Disposition: attachment (?inline=1 shows PDFs and
+// images in the browser instead). A file may be at most LAWDESK_MAX_UPLOAD_BYTES (default 25 MiB).
+//
+// The older JSON forms still work for scripts: { filename, contentBase64, ... } uploads, and
+// GET .../download returning { filename, mime, size, sha256, version, base64 }.
 
 import type { DB } from "../db.ts";
 import { EngineError } from "../engine.ts";
 import { type Ctx, type Route, intParam } from "../http.ts";
 import { Documents, decodeBase64 } from "./documents.ts";
+import { fileResponse, readUpload, tagsField } from "./transfer.ts";
 
 const instances = new WeakMap<DB, Documents>();
 
@@ -20,6 +24,11 @@ export function documentsFor(ctx: Pick<Ctx, "db" | "engine">): Documents {
     instances.set(ctx.db, d);
   }
   return d;
+}
+
+/** The instance already set for a database, if any (the demo seed uses it). */
+export function existingDocuments(db: DB): Documents | undefined {
+  return instances.get(db);
 }
 
 /** Use a specific Documents instance for a database (tests, or a server with custom options). */
@@ -45,7 +54,120 @@ function fileOut(f: { filename: string; mime: string; data: Buffer; [k: string]:
   return { ...rest, base64: data.toString("base64") };
 }
 
+/** The request of a raw route (the server sets it). */
+function source(ctx: Ctx) {
+  if (!ctx.req) throw new EngineError("This route needs the request body", 500);
+  return ctx.req;
+}
+
 export const routes: Route[] = [
+  // Binary transfer. Listed first so "facets" is never read as an id.
+  {
+    method: "POST",
+    path: "/matters/:id/documents/upload",
+    raw: true,
+    handler: async (ctx) => {
+      const docs = documentsFor(ctx);
+      const matterId = intParam(ctx, "id");
+      const { fields, file } = await readUpload(source(ctx), ctx.query, docs.maxBytes);
+      return docs.upload({
+        matterId,
+        filename: file.filename,
+        data: file.data,
+        folder: fields.folder,
+        category: fields.category,
+        tags: tagsField(fields.tags),
+        onConflict: fields.onConflict as any,
+        userId: ctx.userId,
+      });
+    },
+  },
+  {
+    method: "POST",
+    path: "/documents/:id/versions/upload",
+    raw: true,
+    handler: async (ctx) => {
+      const docs = documentsFor(ctx);
+      const id = intParam(ctx, "id");
+      const { fields, file } = await readUpload(source(ctx), ctx.query, docs.maxBytes);
+      return docs.addVersion(id, { filename: file.filename, data: file.data, userId: ctx.userId, note: fields.note || null });
+    },
+  },
+  {
+    method: "GET",
+    path: "/documents/:id/file",
+    handler: (ctx) => {
+      const inline = ctx.query.get("inline") === "1";
+      const f = documentsFor(ctx).download(intParam(ctx, "id"), {
+        version: optInt(ctx.query.get("version"), "version"),
+        userId: ctx.userId,
+        action: inline ? "view" : "download",
+      });
+      return fileResponse(f, inline);
+    },
+  },
+  { method: "GET", path: "/documents/:id/text", handler: (ctx) => documentsFor(ctx).text(intParam(ctx, "id")) },
+  { method: "GET", path: "/documents/facets", handler: (ctx) => documentsFor(ctx).facets() },
+  {
+    method: "POST",
+    path: "/matters/:id/folders",
+    handler: (ctx) => documentsFor(ctx).createFolder(intParam(ctx, "id"), bodyObj(ctx).path, ctx.userId),
+  },
+  {
+    method: "PATCH",
+    path: "/matters/:id/folders",
+    handler: (ctx) => {
+      const b = bodyObj(ctx);
+      return documentsFor(ctx).renameFolder(intParam(ctx, "id"), b.from, b.to, ctx.userId);
+    },
+  },
+  {
+    method: "DELETE",
+    path: "/matters/:id/folders",
+    handler: (ctx) => documentsFor(ctx).deleteFolder(intParam(ctx, "id"), ctx.query.get("path"), ctx.userId),
+  },
+  {
+    method: "GET",
+    path: "/matters/:id/templates/:templateId/check",
+    handler: (ctx) => documentsFor(ctx).checkTemplate(intParam(ctx, "templateId"), intParam(ctx, "id"), ctx.userId),
+  },
+  { method: "GET", path: "/document-templates/fields", handler: (ctx) => documentsFor(ctx).fieldCatalog() },
+  {
+    method: "POST",
+    path: "/document-templates/upload",
+    raw: true,
+    handler: async (ctx) => {
+      const docs = documentsFor(ctx);
+      const { fields, file } = await readUpload(source(ctx), ctx.query, docs.maxBytes);
+      return docs.createTemplate(
+        {
+          name: fields.templateName || file.filename.replace(/\.[^.]+$/, ""),
+          filename: file.filename,
+          data: file.data,
+          description: fields.description,
+          category: fields.category,
+        },
+        ctx.userId,
+      );
+    },
+  },
+  {
+    method: "POST",
+    path: "/document-templates/:id/upload",
+    raw: true,
+    handler: async (ctx) => {
+      const docs = documentsFor(ctx);
+      const id = intParam(ctx, "id");
+      const { file } = await readUpload(source(ctx), ctx.query, docs.maxBytes);
+      return docs.updateTemplate(id, { filename: file.filename, data: file.data }, ctx.userId);
+    },
+  },
+  {
+    method: "GET",
+    path: "/document-templates/:id/file",
+    handler: (ctx) => fileResponse(documentsFor(ctx).downloadTemplate(intParam(ctx, "id")), false),
+  },
+
   // Search is listed before /documents/:id so "search" is never read as an id.
   {
     method: "GET",

@@ -5,6 +5,7 @@ import { h, select, fmtDate, fmtTime, modal, toast, plural } from "../dom.js";
 import { get, post, put, patch } from "../api.js";
 import { state, today, users, prefs, loadMatters, loadSetup } from "../state.js";
 import { quickAdd, taskRow, effectLines, redraw } from "../tasks.js";
+import { matterDocumentsCard } from "./documents.js";
 
 export async function matterView([idStr]) {
   const id = Number(idStr);
@@ -20,6 +21,7 @@ export async function matterView([idStr]) {
   const tasksBox = h("div.matter-tasks");
   const aside = h("aside.matter-aside");
   const activityBox = h("section.card.activity");
+  const docsCard = matterDocumentsCard(id);
 
   const refresh = async () => {
     d = await get(`/matters/${id}`);
@@ -354,7 +356,7 @@ export async function matterView([idStr]) {
         : null,
     );
 
-    aside.replaceChildren(people, dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
+    aside.replaceChildren(people, dates, checklists, docsCard, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
   }
 
   function drawActivity() {

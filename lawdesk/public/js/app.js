@@ -9,11 +9,14 @@ import { mattersView } from "./views/matters.js";
 import { matterView } from "./views/matter.js";
 import { checklistsView, checklistEditView } from "./views/checklists.js";
 import { settingsView } from "./views/settings.js";
+import { documentsSearchView, matterDocumentsView } from "./views/documents.js";
+import { templatesSettingsView } from "./views/templates.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
   { href: "#/firm", label: "Firm tasks", key: "f" },
   { href: "#/matters", label: "Matters", key: "a" },
+  { href: "#/documents", label: "Documents", key: "d", section: "Practice", icon: "documents" },
   { href: "#/checklists", label: "Checklists", key: "c" },
   { href: "#/settings", label: "Settings", key: "s" },
 ];
@@ -23,6 +26,9 @@ const ROUTES = [
   [/^#\/firm$/, () => firmTasksView],
   [/^#\/matters$/, () => mattersView],
   [/^#\/matters\/(\d+)$/, () => matterView],
+  [/^#\/matters\/(\d+)\/documents(?:\/(\d+|trash))?$/, () => matterDocumentsView],
+  [/^#\/documents$/, () => documentsSearchView],
+  [/^#\/settings\/templates$/, () => templatesSettingsView],
   [/^#\/checklists$/, () => checklistsView],
   [/^#\/checklists\/(new|\d+)$/, () => checklistEditView],
   [/^#\/settings$/, () => settingsView],
@@ -94,7 +100,7 @@ function showHelp() {
     ["e", "Rename it"],
     ["m", "More actions"],
     ["Enter", "Open the task's matter"],
-    ["g then m / f / a / c / s", "Go to My tasks, Firm tasks, Matters, Checklists, Settings"],
+    ["g then m / f / a / d / c / s", "Go to My tasks, Firm tasks, Matters, Documents, Checklists, Settings"],
     ["?", "This list"],
   ];
   modal(

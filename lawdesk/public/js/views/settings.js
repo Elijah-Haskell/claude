@@ -39,6 +39,7 @@ export async function settingsView() {
       ["s-closed", "Closed days"],
       ["s-auto", "Automatic steps"],
     ].map(([id, label]) => h("a", { href: `#${id}`, onclick: (e) => (e.preventDefault(), document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })) }, label)),
+    h("a", { href: "#/settings/templates" }, "Document templates"),
   );
   const body = h("div.settings-body");
 

@@ -22,6 +22,12 @@ Settings: `PORT` (default 3000), `LAWDESK_DB` (default `lawdesk.db`), `HOST` (de
 there is no sign-in, so keep it on the local machine). The app's "Working as" picker sends the chosen
 person in an `X-Lawdesk-User` header so the activity log can name them; that is attribution, not security.
 
+Documents: files are stored by content hash under `LAWDESK_FILES` (default `./files`); the largest
+file accepted is `LAWDESK_MAX_UPLOAD_BYTES` (default 25 MiB). Files travel as bytes: upload with
+`POST /api/matters/:id/documents/upload?name=<file name>` (raw body, or multipart/form-data), download
+with `GET /api/documents/:id/file` (attachment; `?inline=1` shows PDFs and images; `?version=n`).
+A route marked `raw: true` in `src/http.ts` gets the unread request stream as `ctx.req`.
+
 In the app, press `?` for keyboard shortcuts. Quick-add understands dates (`fri`, `tomorrow`, `11/20`,
 `in 3 days`, `+5bd`), `@person`, `#matter-number` and `!high`.
 

@@ -7,7 +7,7 @@ import { docxToText } from "../../src/documents/text.ts";
 import { JPG, PDF, PNG, makeDocx, makeXlsx, p, setup } from "./helpers.ts";
 
 const activity = (db: any, kind?: string) =>
-  (db.prepare(`SELECT * FROM activity WHERE kind LIKE ? ORDER BY id`).all(kind ?? "%") as any[]).map((r) => ({ ...r, detail: JSON.parse(r.detail) }));
+  (db.prepare(`SELECT * FROM activity WHERE kind LIKE ? ORDER BY id`).all(kind ?? "%") as any[]).map((r) => ({ ...r }));
 
 test("documents: upload stores the file content-addressed and logs who and when", () => {
   const s = setup();
@@ -34,7 +34,7 @@ test("documents: upload stores the file content-addressed and logs who and when"
     assert.equal(log[0].kind, "document_uploaded");
     assert.equal(log[0].user_id, s.atty);
     assert.equal(log[0].matter_id, s.matterId);
-    assert.equal(log[0].detail.documentId, d.id);
+    assert.match(log[0].detail, /^Uploaded “/);
     // Same bytes on another matter are stored once
     s.docs.upload({ matterId: s.other, filename: "copy.pdf", data: PDF });
     const files = readdirSync(s.dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile());
@@ -162,8 +162,8 @@ test("documents: rename, move, categorise and tag, with the changes logged", () 
     assert.deepEqual(u.tags, ["Review", "title"]);
     const log = activity(s.db, "document_updated");
     assert.equal(log.length, 1);
-    assert.deepEqual(log[0].detail.name, { from: "scan.pdf", to: "Title commitment.pdf" });
-    assert.deepEqual(log[0].detail.tags, { from: ["inbox"], to: ["title", "Review"] });
+    assert.match(log[0].detail, /Renamed “scan.pdf” to “Title commitment.pdf”/);
+    assert.match(log[0].detail, /Tagged “Title commitment.pdf”: title, Review/);
     assert.throws(() => s.docs.update(d.id, { name: "Taken.pdf", folder: "Closing" }), (e: any) => e.status === 409);
     assert.throws(() => s.docs.update(d.id, { name: "now-a.docx" }), (e: any) => e.status === 415, "rename must keep the type honest");
     assert.throws(() => s.docs.update(d.id, { name: "../x.pdf" }), (e: any) => e.status === 400);
@@ -197,7 +197,7 @@ test("documents: soft delete hides a document; restore brings it back (renamed i
     assert.equal(s.docs.search({ q: "privileged" }).results.length, 1);
     assert.throws(() => s.docs.restore(d.id), (e: any) => e.status === 409);
     const log = activity(s.db, "document_restored");
-    assert.equal(log[0].detail.renamedFrom, "Memo.txt");
+    assert.match(log[0].detail, /^Restored “Memo.txt” as “/);
     assert.equal(activity(s.db, "document_deleted")[0].user_id, s.atty);
     // Files are never removed by a delete
     assert.ok(s.docs.store.has(r.sha256!));
@@ -366,9 +366,8 @@ test("assembly: generate a docx from a template and save it on the matter", () =
     assert.deepEqual(s.docs.search({ q: "flat fee", matterId: s.matterId }).results.map((r: any) => r.id), [g.document.id]);
     const log = activity(s.db, "document_generated");
     assert.equal(log.length, 2);
-    assert.equal(log[0].detail.templateId, t.id);
-    assert.deepEqual(log[1].detail.empty, ["user.name"]);
-    assert.deepEqual(log[1].detail.unknown, ["custom.fee"], "custom values not supplied this time");
+    assert.match(log[0].detail, /from the template “Engagement letter”/);
+    assert.match(log[1].detail, /left blank: user\.name, custom\.fee$/, "custom values not supplied this time");
   } finally {
     s.cleanup();
   }

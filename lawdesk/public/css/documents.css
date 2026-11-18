@@ -1,0 +1,622 @@
+/* Documents, document templates and "create from template". Layout for these screens only;
+   colours come from the shared tokens in app.css. */
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.linkish {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.doc-type {
+  display: inline-block;
+  min-width: 3.6em;
+  padding: 0 5px;
+  margin-right: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  text-align: center;
+  text-transform: uppercase;
+  vertical-align: 0.12em;
+}
+
+.drop-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+  background: var(--accent-soft) !important;
+}
+
+/* Upload progress rows */
+.upload-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.upload-list:empty {
+  display: none;
+}
+.upload-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.upload-row .progress-bar {
+  width: 100%;
+}
+.upload-row .progress-fill {
+  background: var(--accent);
+  transition: width 0.15s;
+}
+.upload-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upload-row.failed .upload-status {
+  color: var(--late);
+}
+.upload-row.done .upload-status {
+  color: var(--good);
+}
+
+/* ------------------------------------------------------------ matter card */
+
+.docs-card .doc-mini li {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.doc-mini-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.docs-all {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+.docs-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* --------------------------------------------------------- documents page */
+
+.docs-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.docs-tree {
+  padding: 8px 6px;
+  position: sticky;
+  top: 12px;
+}
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tree-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+}
+.tree-item:hover {
+  background: var(--surface-2);
+  text-decoration: none;
+}
+.tree-item.current {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-count {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+.trash-link {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  padding-top: 10px;
+  color: var(--muted);
+}
+
+.docs-main {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.docs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.docs-toolbar .spacer {
+  flex: 1;
+}
+.folder-tools {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.dropzone {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  background: var(--surface);
+  text-align: center;
+}
+.dropzone p {
+  margin: 2px 0;
+}
+
+.table-card {
+  padding: 0;
+  overflow: hidden;
+}
+.docs-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.docs-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.docs-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.docs-table tr:last-child td {
+  border-bottom: 0;
+}
+.docs-table .num-cell {
+  text-align: right;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.doc-row[draggable="true"] {
+  cursor: grab;
+}
+.doc-name-cell {
+  min-width: 0;
+  word-break: break-word;
+}
+.doc-name {
+  font-weight: 600;
+}
+.doc-sub {
+  display: block;
+  margin-left: calc(3.6em + 18px);
+}
+.doc-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 4px;
+}
+.row-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Detail */
+.doc-title {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.doc-title h2 {
+  word-break: break-word;
+}
+.doc-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+.doc-side {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.doc-preview-card {
+  padding: 0;
+  overflow: hidden;
+  min-width: 0;
+}
+.doc-frame {
+  display: block;
+  width: 100%;
+  height: 78vh;
+  min-height: 480px;
+  border: 0;
+  background: var(--surface-2);
+}
+.doc-image {
+  display: block;
+  max-width: 100%;
+  max-height: 78vh;
+  margin: 0 auto;
+  background: var(--surface-2);
+}
+.doc-preview > .muted {
+  padding: 8px 16px;
+  margin: 0;
+}
+.doc-paper {
+  max-height: 78vh;
+  overflow: auto;
+  padding: 36px 44px;
+  background: var(--surface);
+  font-family: var(--serif);
+  font-size: 1rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.doc-nopreview {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.doc-form label {
+  display: grid;
+  gap: 4px;
+}
+.doc-form input,
+.doc-form select {
+  width: 100%;
+}
+.versions {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.version {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.version:last-child {
+  border-bottom: 0;
+}
+.version-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.version-n {
+  font-weight: 600;
+}
+.version-main .muted,
+.version-note {
+  flex-basis: 100%;
+}
+.version-note {
+  font-style: italic;
+}
+.version-actions {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+/* ----------------------------------------------------------- firm search */
+
+.result-list {
+  display: grid;
+  gap: 10px;
+}
+.result {
+  padding: 14px 18px;
+}
+.result-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  word-break: break-word;
+}
+.result-meta {
+  margin: 2px 0 0;
+}
+.doc-snippet {
+  margin: 8px 0 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  color: var(--text);
+  font-size: 0.92rem;
+}
+.doc-snippet mark {
+  background: var(--today-soft);
+  color: inherit;
+  font-weight: 600;
+  padding: 0 1px;
+}
+
+/* -------------------------------------------------------------- templates */
+
+.templates-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  align-items: start;
+}
+.templates-main {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.template-upload .progress-bar {
+  width: 100%;
+}
+.template-upload .progress-fill {
+  background: var(--accent);
+}
+.templates {
+  display: grid;
+  gap: 12px;
+}
+.template.deleted {
+  opacity: 0.65;
+}
+.template-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+.template-fields {
+  margin-top: 8px;
+}
+.field-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.field-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+  font-size: 0.82rem;
+}
+.field-reference {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+}
+.field-group {
+  margin-top: 14px;
+}
+.field-group h3 {
+  margin-bottom: 4px;
+}
+.field-list {
+  margin: 0;
+}
+.field-list dt {
+  margin-top: 8px;
+}
+.field-list dd {
+  margin: 2px 0 0;
+  font-size: 0.88rem;
+}
+.field-code,
+.field-list code {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--accent);
+  padding: 1px 6px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.82rem;
+  cursor: pointer;
+  word-break: break-all;
+  text-align: left;
+}
+.field-list code {
+  cursor: default;
+}
+
+/* Create from template */
+.field-check {
+  display: grid;
+  gap: 10px;
+}
+.check-warn {
+  border-left: 3px solid var(--today);
+  background: var(--today-soft);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+}
+.check-warn ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.check-ok {
+  color: var(--good);
+}
+.check-filled summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.field-values {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  font-size: 0.88rem;
+}
+.field-values dt {
+  color: var(--muted);
+}
+.field-values dd {
+  margin: 0;
+  word-break: break-word;
+}
+.custom-fields label {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+/* ------------------------------------------------------------------ phone */
+
+@media (max-width: 900px) {
+  .docs-layout,
+  .doc-detail,
+  .templates-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .docs-tree,
+  .field-reference {
+    position: static;
+    max-height: none;
+  }
+  .doc-frame {
+    height: 70vh;
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 720px) {
+  .docs-table thead {
+    display: none;
+  }
+  .docs-table,
+  .docs-table tbody,
+  .docs-table tr,
+  .docs-table td {
+    display: block;
+    width: 100%;
+  }
+  .docs-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 14px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .docs-table tr:last-child {
+    border-bottom: 0;
+  }
+  .docs-table td {
+    width: auto;
+    padding: 0;
+    border: 0;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+  .docs-table td:empty {
+    display: none;
+  }
+  .docs-table td.doc-name-cell,
+  .docs-table td:nth-child(2) {
+    flex-basis: 100%;
+    color: var(--text);
+    font-size: 1rem;
+  }
+  .docs-table td.doc-name-cell {
+    margin-bottom: 2px;
+  }
+  .docs-table .num-cell {
+    text-align: left;
+  }
+  .docs-table td.row-actions {
+    margin-left: auto;
+  }
+  .doc-sub {
+    margin-left: 0;
+  }
+  .doc-paper {
+    padding: 20px 18px;
+  }
+  .upload-row {
+    grid-template-columns: minmax(0, 1fr) 70px;
+  }
+  .upload-status {
+    grid-column: 1 / -1;
+  }
+  .field-values {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .field-values dd {
+    margin-bottom: 6px;
+  }
+}
+.field-hint {
+  display: block;
+}

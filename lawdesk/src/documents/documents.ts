@@ -201,14 +201,15 @@ export class Documents {
     return new Date().toISOString();
   }
 
-  private log(kind: string, detail: object, matterId: number | null, userId: number | null | undefined) {
+  /** Write to the activity log in plain English, like the rest of the log (see describe()). */
+  private log(kind: string, detail: Record<string, any>, matterId: number | null, userId: number | null | undefined) {
     this.run(
       "INSERT INTO activity (at, user_id, matter_id, task_id, kind, detail) VALUES (?,?,?,NULL,?,?)",
       this.now(),
       userId ?? null,
       matterId,
       kind,
-      JSON.stringify(detail),
+      describe(kind, detail),
     );
   }
 
@@ -415,9 +416,12 @@ export class Documents {
       params.push(f, likeEscape(f) + "/%");
     }
     const rows = this.all(`SELECT * FROM doc_documents WHERE ${where.join(" AND ")} ORDER BY folder, lower(name)`, ...params);
-    const folders = this.all("SELECT DISTINCT folder FROM doc_documents WHERE matter_id = ? AND deleted_at IS NULL AND folder != '' ORDER BY folder", matterId).map(
-      (r) => r.folder,
-    );
+    const folders = this.all(
+      `SELECT folder FROM doc_documents WHERE matter_id = ? AND deleted_at IS NULL AND folder != ''
+       UNION SELECT path FROM doc_folders WHERE matter_id = ? ORDER BY 1`,
+      matterId,
+      matterId,
+    ).map((r) => r.folder);
     return { documents: rows.map((r) => this.summary(r)), folders };
   }
 
@@ -432,7 +436,7 @@ export class Documents {
   }
 
   /** The file's bytes (newest version unless one is named). Downloads are logged. */
-  download(documentId: number, opts: { version?: number | null; userId?: number | null } = {}) {
+  download(documentId: number, opts: { version?: number | null; userId?: number | null; action?: "download" | "view" } = {}) {
     const d = this.liveDoc(documentId);
     const v = opts.version
       ? this.one("SELECT * FROM doc_versions WHERE document_id = ? AND version = ?", d.id, opts.version)
@@ -442,7 +446,7 @@ export class Documents {
     const isCurrent = v.id === d.current_version_id;
     const ext = extensionOf(v.filename);
     const filename = isCurrent ? d.name : `${splitExt(d.name)[0]} (version ${v.version})${ext ? "." + ext : ""}`;
-    this.log("document_downloaded", { documentId: d.id, version: v.version }, d.matter_id, opts.userId);
+    this.log(opts.action === "view" ? "document_viewed" : "document_downloaded", { documentId: d.id, name: d.name, version: v.version, current: isCurrent }, d.matter_id, opts.userId);
     return { filename, mime: v.mime, version: v.version, size: v.size, sha256: v.sha256, data };
   }
 
@@ -463,7 +467,7 @@ export class Documents {
       this.addVersionRow(d.id, { data, mime: v.mime, filename: v.filename, userId: uid, note: `Restored from version ${version}`, restoredFrom: version });
       this.reindex(d.id);
       const s = this.summary(this.docRow(d.id));
-      this.log("document_version_restored", { documentId: d.id, from: version, version: s.version }, d.matter_id, uid);
+      this.log("document_version_restored", { documentId: d.id, name: s.name, from: version, version: s.version }, d.matter_id, uid);
       return s;
     });
   }
@@ -506,7 +510,7 @@ export class Documents {
       if (Object.keys(changes).length) {
         this.run("UPDATE doc_documents SET updated_at = ? WHERE id = ?", this.now(), d.id);
         this.reindex(d.id);
-        this.log("document_updated", { documentId: d.id, ...changes }, d.matter_id, uid);
+        this.log("document_updated", { documentId: d.id, current: name, ...changes }, d.matter_id, uid);
       }
       return this.summary(this.docRow(d.id));
     });
@@ -576,7 +580,7 @@ export class Documents {
         const fq = ftsQuery(q);
         if (!fq) return { results: [], fts: true };
         rows = this.all(
-          `SELECT d.*, snippet(doc_fts, 1, '[', ']', '…', 12) AS snippet, bm25(doc_fts, 10.0, 1.0, 5.0) AS rank
+          `SELECT d.*, snippet(doc_fts, 1, '${MARK_ON}', '${MARK_OFF}', '…', 12) AS marked, bm25(doc_fts, 10.0, 1.0, 5.0) AS rank
            FROM doc_fts JOIN doc_documents d ON d.id = doc_fts.rowid
            WHERE doc_fts MATCH ? ${where.length ? "AND " + where.join(" AND ") : ""}
            ORDER BY rank LIMIT ?`,
@@ -596,6 +600,10 @@ export class Documents {
           params.push(pat, pat, pat);
         }
         rows = this.all(`SELECT d.* FROM doc_documents d WHERE ${where.join(" AND ")} ORDER BY d.updated_at DESC LIMIT ?`, ...params, limit);
+        for (const r of rows) {
+          const body = this.one("SELECT body FROM doc_text WHERE document_id = ?", r.id)?.body;
+          r.marked = body ? likeSnippet(body, words) : null;
+        }
       }
     } else {
       rows = this.all(
@@ -604,7 +612,18 @@ export class Documents {
         limit,
       );
     }
-    return { results: rows.map((r) => ({ ...this.summary(r), snippet: r.snippet ?? null })), fts: this.ftsAvailable };
+    return {
+      results: rows.map((r) => {
+        const parts = r.marked ? snippetParts(r.marked) : null;
+        return {
+          ...this.summary(r),
+          // Plain text with [brackets] round the matches, and the same as parts for safe display.
+          snippet: parts ? parts.map((p) => (p.hit ? `[${p.text}]` : p.text)).join("") : null,
+          highlights: parts && parts.some((p) => p.hit) ? parts : null,
+        };
+      }),
+      fts: this.ftsAvailable,
+    };
   }
 
   // ---------------------------------------------------------------- templates
@@ -740,7 +759,7 @@ export class Documents {
       } else if (patch.filename !== undefined) throw new EngineError("Send the new file's contents along with its file name");
       if (changed.length) {
         this.run("UPDATE doc_templates SET updated_at = ?, updated_by = ? WHERE id = ?", this.now(), uid, id);
-        this.log("template_updated", { templateId: id, changed }, null, uid);
+        this.log("template_updated", { templateId: id, name: this.templateRow(id).name, changed }, null, uid);
       }
       return this.templateSummary(this.templateRow(id));
     });
@@ -813,21 +832,202 @@ export class Documents {
     };
   }
 
+  private fill(t: Row, data: MergeData): { out: Buffer; unknown: string[]; empty: string[] } {
+    const src = this.store.get(t.sha256);
+    if (t.kind === "docx") {
+      const r = fillDocx(src, data);
+      return { out: r.output, unknown: r.unknown, empty: r.empty };
+    }
+    const r = fillText(src.toString("utf8"), data, { html: t.kind === "html" });
+    return { out: Buffer.from(r.output, "utf8"), unknown: r.unknown, empty: r.empty };
+  }
+
+  /**
+   * What generating this template for this matter would fill in, without saving anything:
+   * each field the template uses with its value, and which will come out blank.
+   */
+  checkTemplate(templateId: number, matterId: number, userId?: number | null) {
+    const t = this.templateRow(templateId);
+    const uid = this.checkUser(userId);
+    const data = this.mergeData(matterId, uid);
+    const { unknown, empty } = this.fill(t, data);
+    const catalog = new Map(this.fieldCatalog().flatMap((g) => g.fields).map((f) => [f.field, f.label]));
+    const fields = (JSON.parse(t.fields) as string[]).map((field) => {
+      const value = resolvePath(data, field);
+      const status = unknown.includes(field) || value === undefined ? "unknown" : value === "" ? "empty" : "filled";
+      return { field, label: catalog.get(field) ?? labelFor(field), value: value ?? "", status };
+    });
+    const ext = extensionOf(t.filename);
+    const matter = data.matter as MergeData;
+    return {
+      template: this.templateSummary(t),
+      fields,
+      unknown,
+      empty,
+      suggestedName: `${safeName(`${t.name} - ${matter.number || matter.name}`)}${ext ? "." + ext : ""}`,
+    };
+  }
+
+  /** Every merge field a template can use, grouped, with a plain-English description. */
+  fieldCatalog(): { group: string; fields: { field: string; label: string; example?: string; hint?: string }[] }[] {
+    const dates = this.all("SELECT key, label FROM date_fields ORDER BY label").map((f) => ({
+      field: `matter.dates.${f.key}`,
+      label: f.label,
+      hint: "Add |long to write the date out, like November 18, 2026",
+    }));
+    const roleNames = this.all(
+      "SELECT role FROM matter_roles UNION SELECT default_role FROM users WHERE default_role IS NOT NULL ORDER BY 1",
+    ).map((r) => r.role as string);
+    const roles = roleNames
+      .filter((r) => /^[A-Za-z0-9_]+$/.test(r))
+      .map((r) => ({ field: `matter.roles.${r}`, label: `Name of the matter's ${r.replace(/_/g, " ")}` }));
+    return [
+      {
+        group: "Dates",
+        fields: [
+          { field: "today", label: "Today's date, written out", example: longDate(this.todayFn()) },
+          { field: "today_iso", label: "Today's date as numbers (YYYY-MM-DD)", example: this.todayFn() },
+        ],
+      },
+      {
+        group: "Client",
+        fields: [
+          { field: "client.name", label: "Client's name" },
+          { field: "client.email", label: "Client's email address" },
+          { field: "client.phone", label: "Client's phone number" },
+          { field: "client.kind", label: "Whether the client is a person or a company" },
+        ],
+      },
+      {
+        group: "Matter",
+        fields: [
+          { field: "matter.number", label: "Matter number" },
+          { field: "matter.name", label: "Matter name" },
+          { field: "matter.description", label: "Matter description" },
+          { field: "matter.practice_area", label: "Practice area" },
+          { field: "matter.stage", label: "Current stage" },
+          { field: "matter.status", label: "Open or closed" },
+          { field: "matter.opened_on", label: "Date the matter was opened", hint: "Add |long to write the date out" },
+          { field: "matter.closed_on", label: "Date the matter was closed", hint: "Add |long to write the date out" },
+        ],
+      },
+      { group: "Matter dates", fields: dates },
+      { group: "People on the matter", fields: roles },
+      {
+        group: "You",
+        fields: [
+          { field: "user.name", label: "Your name (the person creating the document)" },
+          { field: "user.email", label: "Your email address" },
+        ],
+      },
+    ];
+  }
+
+  /** Extracted text of the newest version (for previewing Word and text files). */
+  text(documentId: number) {
+    const d = this.liveDoc(documentId);
+    const row = this.one("SELECT body FROM doc_text WHERE document_id = ?", d.id);
+    if (!row) return { text: null, truncated: false };
+    const MAX = 200_000;
+    return { text: row.body.length > MAX ? row.body.slice(0, MAX) : row.body, truncated: row.body.length > MAX };
+  }
+
+  /** Values in use, for search filters, and the upload limit. */
+  facets() {
+    return {
+      maxBytes: this.maxBytes,
+      categories: this.all(
+        "SELECT DISTINCT category FROM doc_documents WHERE deleted_at IS NULL AND category IS NOT NULL ORDER BY lower(category)",
+      ).map((r) => r.category),
+      tags: this.all(
+        `SELECT MIN(t.tag) AS tag FROM doc_tags t JOIN doc_documents d ON d.id = t.document_id
+         WHERE d.deleted_at IS NULL GROUP BY lower(t.tag) ORDER BY lower(t.tag)`,
+      ).map((r) => r.tag),
+      matters: this.all(
+        `SELECT m.id, m.number, m.name, COUNT(d.id) AS documents FROM matters m
+         JOIN doc_documents d ON d.matter_id = m.id AND d.deleted_at IS NULL
+         GROUP BY m.id ORDER BY m.number, m.name`,
+      ).map((r) => ({ id: r.id, number: r.number, name: r.name, documents: r.documents })),
+    };
+  }
+
+  // ---------------------------------------------------------------- folders
+
+  private within(col: string): string {
+    return `(${col} = ? OR ${col} LIKE ? ESCAPE '\\')`;
+  }
+
+  private addFolderRows(matterId: number, path: string) {
+    const parts = path.split("/");
+    for (let i = 1; i <= parts.length; i++) {
+      this.run("INSERT OR IGNORE INTO doc_folders (matter_id, path) VALUES (?,?)", matterId, parts.slice(0, i).join("/"));
+    }
+  }
+
+  /** Make an empty folder (otherwise a folder exists only because documents are in it). */
+  createFolder(matterId: number, path: unknown, userId?: number | null) {
+    return tx(this.db, () => {
+      if (!this.one("SELECT 1 FROM matters WHERE id = ?", matterId)) throw new EngineError("Matter not found", 404);
+      const uid = this.checkUser(userId);
+      const f = checkFolder(path);
+      if (!f) throw new EngineError("Give the folder a name");
+      this.addFolderRows(matterId, f);
+      this.log("folder_created", { folder: f }, matterId, uid);
+      return this.list(matterId);
+    });
+  }
+
+  /** Rename or move a folder, with every document and folder inside it. */
+  renameFolder(matterId: number, from: unknown, to: unknown, userId?: number | null) {
+    return tx(this.db, () => {
+      if (!this.one("SELECT 1 FROM matters WHERE id = ?", matterId)) throw new EngineError("Matter not found", 404);
+      const uid = this.checkUser(userId);
+      const a = checkFolder(from);
+      const b = checkFolder(to);
+      if (!a || !b) throw new EngineError("Folder names can't be empty");
+      if (a === b) return this.list(matterId);
+      if (b.startsWith(a + "/")) throw new EngineError("A folder can't be moved inside itself");
+      const args = [a, likeEscape(a) + "/%"];
+      const docs = this.all(`SELECT * FROM doc_documents WHERE matter_id = ? AND ${this.within("folder")}`, matterId, ...args);
+      const known = this.all(`SELECT path FROM doc_folders WHERE matter_id = ? AND ${this.within("path")}`, matterId, ...args);
+      if (!docs.some((d) => !d.deleted_at) && !known.length) throw new EngineError("Folder not found", 404);
+      const moved = (p: string) => b + p.slice(a.length);
+      for (const d of docs) {
+        const dest = checkFolder(moved(d.folder));
+        if (!d.deleted_at && this.nameTaken(matterId, dest, d.name, d.id)) throw new EngineError(`"${d.name}" is already in ${dest}`, 409);
+        // Trashed documents move too, so restoring one puts it back in the right place.
+        this.run("UPDATE doc_documents SET folder = ? WHERE id = ?", dest, d.id);
+        if (!d.deleted_at) this.reindex(d.id);
+      }
+      for (const r of known) this.run("DELETE FROM doc_folders WHERE matter_id = ? AND path = ?", matterId, r.path);
+      for (const r of known) this.addFolderRows(matterId, moved(r.path));
+      this.addFolderRows(matterId, b);
+      this.log("folder_renamed", { from: a, to: b, documents: docs.filter((d) => !d.deleted_at).length }, matterId, uid);
+      return this.list(matterId);
+    });
+  }
+
+  /** Remove an empty folder. A folder with documents in it can't be removed. */
+  deleteFolder(matterId: number, path: unknown, userId?: number | null) {
+    return tx(this.db, () => {
+      const uid = this.checkUser(userId);
+      const f = checkFolder(path);
+      if (!f) throw new EngineError("Folder not found", 404);
+      const args = [f, likeEscape(f) + "/%"];
+      const n = this.one(`SELECT COUNT(*) AS n FROM doc_documents WHERE matter_id = ? AND deleted_at IS NULL AND ${this.within("folder")}`, matterId, ...args)!.n;
+      if (n) throw new EngineError(`That folder still has ${n === 1 ? "a document" : n + " documents"} in it; move or delete them first`, 409);
+      this.run(`DELETE FROM doc_folders WHERE matter_id = ? AND ${this.within("path")}`, matterId, ...args);
+      this.log("folder_deleted", { folder: f }, matterId, uid);
+      return this.list(matterId);
+    });
+  }
+
   /** Fill a template for a matter and save the result as a new document on the matter. */
   generate(input: GenerateInput) {
     const t = this.templateRow(input.templateId);
     const uid = this.checkUser(input.userId);
     const data = this.mergeData(input.matterId, uid, input.custom);
-    const src = this.store.get(t.sha256);
-    let out: Buffer;
-    let unknown: string[];
-    let empty: string[];
-    if (t.kind === "docx") ({ output: out, unknown, empty } = fillDocx(src, data));
-    else {
-      const r = fillText(src.toString("utf8"), data, { html: t.kind === "html" });
-      out = Buffer.from(r.output, "utf8");
-      ({ unknown, empty } = r);
-    }
+    const { out, unknown, empty } = this.fill(t, data);
     if (input.strict && unknown.length) throw new EngineError(`The template uses fields that do not exist: ${unknown.join(", ")}`);
     const ext = extensionOf(t.filename);
     const matter = data.matter as MergeData;
@@ -848,7 +1048,7 @@ export class Documents {
         templateId: t.id,
         note: `Generated from template "${t.name}"`,
       });
-      this.log("document_generated", { documentId: doc.id, templateId: t.id, template: t.name, unknown, empty }, input.matterId, uid);
+      this.log("document_generated", { documentId: doc.id, name: doc.name, templateId: t.id, template: t.name, unknown, empty }, input.matterId, uid);
       return { document: doc, unknown, empty };
     });
   }
@@ -871,4 +1071,116 @@ function checkCustom(custom: Record<string, unknown> | null | undefined): MergeD
     return out;
   };
   return walk(custom, 0);
+}
+
+// ------------------------------------------------------------------ search snippets
+
+// SQLite's snippet() marks matches with these. Extracted text never keeps control
+// characters as words, and snippetParts() turns them into structured parts.
+const MARK_ON = "\u0002";
+const MARK_OFF = "\u0003";
+
+/** Split marked snippet text into plain and matched parts. */
+function snippetParts(marked: string): { text: string; hit: boolean }[] {
+  const out: { text: string; hit: boolean }[] = [];
+  const clean = (t: string) => t.replace(/[\u0000-\u0001\u0004-\u001f]/g, " ").replace(/\s+/g, " ");
+  marked.split(MARK_ON).forEach((chunk, i) => {
+    if (i === 0) {
+      if (chunk) out.push({ text: clean(chunk), hit: false });
+      return;
+    }
+    const [hit, rest = ""] = chunk.split(MARK_OFF);
+    if (hit) out.push({ text: clean(hit), hit: true });
+    if (rest) out.push({ text: clean(rest), hit: false });
+  });
+  return out;
+}
+
+/** A short marked excerpt around the first matching word (used when FTS5 is missing). */
+function likeSnippet(body: string, words: string[]): string | null {
+  const lower = body.toLowerCase();
+  let at = -1;
+  for (const w of words) {
+    const i = lower.indexOf(w.toLowerCase());
+    if (i >= 0 && (at < 0 || i < at)) at = i;
+  }
+  if (at < 0) return null;
+  const start = Math.max(0, at - 60);
+  const end = Math.min(body.length, at + 120);
+  const text = (start > 0 ? "…" : "") + body.slice(start, end).replace(/[\u0002\u0003]/g, " ") + (end < body.length ? "…" : "");
+  const re = new RegExp(words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "giu");
+  return text.replace(re, (m) => MARK_ON + m + MARK_OFF);
+}
+
+/** The value at a dotted path, or undefined when there is no such field. */
+function resolvePath(data: MergeData, path: string): string | undefined {
+  let cur: unknown = data;
+  for (const part of path.split(".")) {
+    if (cur === null || cur === undefined || typeof cur !== "object" || !Object.hasOwn(cur, part)) return undefined;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  if (cur !== null && typeof cur === "object") return undefined;
+  return cur === null || cur === undefined ? "" : String(cur);
+}
+
+/** "custom.buyer_name" -> "Buyer name (typed in ...)" for fields not in the catalog. */
+function labelFor(field: string): string {
+  const parts = field.split(".");
+  const last = parts[parts.length - 1].replace(/_/g, " ");
+  const nice = last.charAt(0).toUpperCase() + last.slice(1);
+  return parts[0] === "custom" ? `${nice} (typed in when creating the document)` : nice;
+}
+
+// ------------------------------------------------------------------ activity wording
+
+const q = (s: unknown) => `“${s}”`;
+const where = (f: string) => (f ? f.split("/").join(" › ") : "the top level");
+const fieldList = (a: string[]) => a.join(", ");
+
+/** One plain-English line for the activity log. */
+export function describe(kind: string, d: Record<string, any>): string {
+  switch (kind) {
+    case "document_uploaded":
+      return `Uploaded ${q(d.name)}${d.folder ? ` to ${where(d.folder)}` : ""}`;
+    case "document_version_added":
+      return `Uploaded version ${d.version} of ${q(d.name)}`;
+    case "document_downloaded":
+      return `Downloaded ${q(d.name)}${d.current === false ? ` (version ${d.version})` : ""}`;
+    case "document_viewed":
+      return `Viewed ${q(d.name)}${d.current === false ? ` (version ${d.version})` : ""}`;
+    case "document_version_restored":
+      return `Made version ${d.from} of ${q(d.name)} current again (saved as version ${d.version})`;
+    case "document_updated": {
+      const parts: string[] = [];
+      if (d.name) parts.push(`Renamed ${q(d.name.from)} to ${q(d.name.to)}`);
+      if (d.folder) parts.push(`Moved ${q(d.current)} from ${where(d.folder.from)} to ${where(d.folder.to)}`);
+      if (d.category) parts.push(d.category.to ? `Set the category of ${q(d.current)} to ${d.category.to}` : `Cleared the category of ${q(d.current)}`);
+      if (d.tags) parts.push(d.tags.to.length ? `Tagged ${q(d.current)}: ${fieldList(d.tags.to)}` : `Removed the tags from ${q(d.current)}`);
+      return parts.join("; ") || `Changed ${q(d.current)}`;
+    }
+    case "document_deleted":
+      return `Deleted ${q(d.name)}`;
+    case "document_restored":
+      return d.renamedFrom ? `Restored ${q(d.renamedFrom)} as ${q(d.name)} (the old name was in use)` : `Restored ${q(d.name)} from deleted documents`;
+    case "document_generated": {
+      const blanks = [...(d.empty ?? []), ...(d.unknown ?? [])];
+      return `Created ${q(d.name)} from the template ${q(d.template)}${blanks.length ? `; left blank: ${fieldList(blanks)}` : ""}`;
+    }
+    case "template_created":
+      return `Added the document template ${q(d.name)}`;
+    case "template_updated":
+      return `Changed the document template ${q(d.name)} (${fieldList(d.changed ?? [])})`;
+    case "template_deleted":
+      return `Deleted the document template ${q(d.name)}`;
+    case "template_restored":
+      return `Restored the document template ${q(d.name)}`;
+    case "folder_created":
+      return `Made the folder ${where(d.folder)}`;
+    case "folder_renamed":
+      return `Renamed the folder ${where(d.from)} to ${where(d.to)}`;
+    case "folder_deleted":
+      return `Removed the empty folder ${where(d.folder)}`;
+    default:
+      return kind.replace(/_/g, " ");
+  }
 }
