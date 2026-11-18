@@ -37,7 +37,7 @@ export async function settingsView() {
       ["s-areas", "Practice areas"],
       ["s-dates", "Matter dates"],
       ["s-closed", "Closed days"],
-      ["s-auto", "Automations"],
+      ["s-auto", "Automatic steps"],
     ].map(([id, label]) => h("a", { href: `#${id}`, onclick: (e) => (e.preventDefault(), document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })) }, label)),
   );
   const body = h("div.settings-body");
@@ -235,7 +235,7 @@ export async function settingsView() {
     const s2 = select(stageOpts, "", { "aria-label": "Stage to move to" });
     return h(
       "section.card#s-auto",
-      h("h2", "Automations"),
+      h("h2", "Automatic steps"),
       s.automations.length
         ? h(
             "ul.plain.auto-list",
@@ -247,14 +247,14 @@ export async function settingsView() {
                   h("input", { type: "checkbox", checked: !!a.enabled, "aria-label": "On", onchange: (e) => act(() => patch(`/automations/${a.id}`, { enabled: e.target.checked }), e.target.checked ? "Turned on" : "Turned off") }),
                   h("span", sentence(a)),
                 ),
-                h("button.icon-btn.danger", { type: "button", "aria-label": "Delete automation", onclick: () => confirm("Delete this automation?") && act(() => del(`/automations/${a.id}`), "Deleted") }, "×"),
+                h("button.icon-btn.danger", { type: "button", "aria-label": "Delete this automatic step", onclick: () => confirm("Delete this automatic step?") && act(() => del(`/automations/${a.id}`), "Deleted") }, "×"),
               ),
             ),
           )
-        : h("p.muted", "No automations yet."),
+        : h("p.muted", "No automatic steps yet."),
       h(
         "form.auto-form",
-        { onsubmit: (e) => (e.preventDefault(), act(() => post("/automations", { trigger: "stage_entered", triggerRef: Number(s1.value), action: "apply_list", actionRef: Number(l1.value) }), "Automation added")) },
+        { onsubmit: (e) => (e.preventDefault(), act(() => post("/automations", { trigger: "stage_entered", triggerRef: Number(s1.value), action: "apply_list", actionRef: Number(l1.value) }), "Automatic step added")) },
         h("span", "When a matter enters"),
         s1,
         h("span", "add checklist"),
@@ -263,7 +263,7 @@ export async function settingsView() {
       ),
       h(
         "form.auto-form",
-        { onsubmit: (e) => (e.preventDefault(), act(() => post("/automations", { trigger: "list_completed", triggerRef: Number(l2.value), action: "set_stage", actionRef: Number(s2.value) }), "Automation added")) },
+        { onsubmit: (e) => (e.preventDefault(), act(() => post("/automations", { trigger: "list_completed", triggerRef: Number(l2.value), action: "set_stage", actionRef: Number(s2.value) }), "Automatic step added")) },
         h("span", "When checklist"),
         l2,
         h("span", "is finished, move the matter to"),

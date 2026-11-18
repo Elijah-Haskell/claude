@@ -34,8 +34,8 @@ export function ruleText(t, depTitles = []) {
 /** Why a task has the date it has (or has none). */
 export function dueExplain(t, depTitles = []) {
   const rule = ruleText(t, depTitles);
-  if (t.due_locked) return rule ? `Date typed in by hand. The checklist rule would be: ${rule}.` : "Date typed in by hand.";
-  if (!rule) return t.due_date ? "Date typed in by hand." : "No due date.";
+  if (t.due_locked) return rule ? `Date typed in by hand. The checklist rule would be: ${rule}.` : "Date set manually.";
+  if (!rule) return t.due_date ? "Date set manually." : "No due date.";
   if (t.due_date) return `Due ${rule}.`;
   if (t.anchor === "after_deps") return `No date yet. It will be due ${rule}.`;
   if (String(t.anchor).startsWith("field:")) return `No date yet: set the ${dateFieldLabel(t.anchor.slice(6))} on the matter. Rule: ${rule}.`;
@@ -224,7 +224,7 @@ export function editDue(t, anchor, refresh, depTitles = []) {
         "div.pop-actions",
         h("button.btn.primary.small", { type: "submit" }, "Save"),
         t.due_locked && rule
-          ? h("button.btn.small", { type: "button", onclick: () => save(null, "Due date follows the checklist rule again") }, "Use checklist rule")
+          ? h("button.btn.small", { type: "button", onclick: () => save(null, "Due date follows the checklist schedule again") }, "Use checklist schedule")
           : !rule && t.due_date
             ? h("button.btn.small", { type: "button", onclick: () => save(null, "Due date cleared") }, "No date")
             : null,
@@ -323,7 +323,7 @@ export function taskRow(t, opts) {
     {
       type: "button",
       "aria-label": finished ? `Reopen: ${t.title}` : waiting ? `Waiting: ${t.title}` : `Mark done: ${t.title}`,
-      title: finished ? "Reopen" : waiting ? "Waiting on other tasks" : "Mark done (x)",
+      title: finished ? "Reopen" : waiting ? "Waiting on other tasks" : "Mark done",
       "aria-pressed": finished ? "true" : "false",
       onclick: () => {
         if (waiting) {
@@ -355,7 +355,7 @@ export function taskRow(t, opts) {
     "button.chip.who" + (t.assignee_id ? "" : ".none"),
     {
       type: "button",
-      title: t.assignee_name ? `Assigned to ${t.assignee_name}. Click to change (a).` : "Unassigned. Click to assign (a).",
+      title: t.assignee_name ? `Assigned to ${t.assignee_name}. Click to change (a).` : "Unassigned. Click to assign.",
       "aria-label": `Assigned to ${t.assignee_name || "nobody"}. Change`,
       disabled: finished,
       onclick: (e) => editAssignee(t, e.currentTarget, refresh),
@@ -480,7 +480,7 @@ export function quickAdd(opts) {
     autocomplete: "off",
     "aria-label": "Quick add a task",
     "aria-describedby": "quick-preview",
-    placeholder: opts.matter ? "Add a task to this matter: “Send draft to client fri @sam !high”" : "Add a task: “Call client re lease fri @sam #d-1004 !high”",
+    placeholder: opts.matter ? "Add a task to this matter, e.g. “Send draft to client by Friday”" : "Add a task, e.g. “Call client about the lease on Friday”",
     maxlength: 400,
   });
   const preview = h("div.quick-preview", { id: "quick-preview", "aria-live": "polite" });
@@ -497,7 +497,7 @@ export function quickAdd(opts) {
   const draw = () => {
     clear(preview);
     if (!input.value.trim()) {
-      append(preview, h("span.muted", "Type a date (fri, tomorrow, 11/20, in 3 days), @person, #matter, !high. Press Enter to add."));
+      append(preview, h("span.muted", "Type the task and press Enter. Include a date such as “Friday” or “11/20” to set when it is due."));
       return;
     }
     const p = parse();

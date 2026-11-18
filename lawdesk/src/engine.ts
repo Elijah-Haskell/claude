@@ -451,7 +451,7 @@ export class Engine {
     }
     const rules = this.all("SELECT * FROM automations WHERE enabled = 1 AND trigger = ? AND trigger_ref = ? ORDER BY id", trigger, ref);
     for (const r of rules) {
-      this.log("automation", `Automation "${r.name}" ran`, { matterId });
+      this.log("automation", `Automatic step "${r.name}" ran`, { matterId });
       if (r.action === "apply_list") this.applyList(matterId, r.action_ref, userId, depth + 1);
       else if (r.action === "set_stage") this.setStage(matterId, r.action_ref, userId, depth + 1);
     }

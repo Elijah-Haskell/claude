@@ -134,7 +134,7 @@ export async function firmTasksView() {
   );
   const search = h("input.search", {
     type: "search",
-    placeholder: "Filter by task, matter or person  ( / )",
+    placeholder: "Search tasks, matters or people",
     "aria-label": "Filter tasks",
     "data-search": "",
     oninput: (e) => {

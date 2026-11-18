@@ -363,7 +363,7 @@ export async function matterView([idStr]) {
       h("h2", "Activity"),
       h(
         "ol.activity-list",
-        items.map((a) => h("li", h("span.act-time", fmtTime(a.at)), h("span.act-who", a.user_name || "Lawdesk"), h("span.act-what", a.detail))),
+        items.map((a) => h("li", h("span.act-time", fmtTime(a.at)), h("span.act-who", a.user_name || "Automatic"), h("span.act-what", a.detail))),
       ),
       d.activity.length > items.length
         ? h("button.btn.small", { type: "button", onclick: () => ((showAllActivity = true), drawActivity()) }, `Show all ${d.activity.length}`)

@@ -36,7 +36,7 @@ function drawNav() {
   const cur = location.hash.split("/").slice(0, 2).join("/");
   replace(
     nav,
-    NAV.map((n) => h("a.nav-link", { href: n.href, "aria-current": cur === n.href ? "page" : null, title: `g then ${n.key}` }, n.label)),
+    NAV.map((n) => h("a.nav-link", { href: n.href, "aria-current": cur === n.href ? "page" : null, title: null }, n.label)),
   );
 }
 
@@ -47,14 +47,14 @@ function drawWho() {
     state.me,
     {
       id: "working-as",
-      "aria-label": "Working as",
+      "aria-label": "User",
       onchange: (e) => {
         setMe(Number(e.target.value));
         route();
       },
     },
   );
-  replace(whoBox, h("label.who-label", { for: "working-as" }, "Working as"), sel);
+  replace(whoBox, h("label.who-label", { for: "working-as" }, "User"), sel);
 }
 
 let renderSeq = 0;
@@ -102,7 +102,7 @@ function showHelp() {
     h(
       "div.modal-body",
       h("table.shortcuts", h("tbody", rows.map(([k, v]) => h("tr", h("td", h("kbd", k)), h("td", v))))),
-      h("p.muted", "Quick-add understands: fri, tomorrow, next mon, in 3 days, +5bd, 11/20, @person, #matter-number, !high."),
+      h("p.muted", "When adding a task you can type a date such as Friday, tomorrow or 11/20."),
     ),
   );
 }

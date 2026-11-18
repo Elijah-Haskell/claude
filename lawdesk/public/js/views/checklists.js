@@ -175,12 +175,12 @@ export async function checklistEditView([idStr]) {
       },
     });
     const role = h("input", { value: s.role, list: "role-list", "aria-label": `Step ${i + 1} role`, placeholder: "anyone", maxlength: 60, oninput: (e) => (s.role = e.target.value.trim()) });
-    const prio = select(["normal", "high", "low"].map((p) => ({ value: p, label: p })), s.priority, { "aria-label": `Step ${i + 1} priority`, onchange: (e) => (s.priority = e.target.value) });
+    const prio = select(["normal", "high", "low"].map((p) => ({ value: p, label: p[0].toUpperCase() + p.slice(1) + " priority" })), s.priority, { "aria-label": `Step ${i + 1} priority`, onchange: (e) => (s.priority = e.target.value) });
 
     const mode = select(
       [
         { value: "added", label: "after it's added to the matter" },
-        { value: "deps", label: "after the steps it depends on" },
+        { value: "deps", label: "after the steps it waits for" },
         { value: "date", label: "relative to a matter date" },
         { value: "none", label: "no due date" },
       ],

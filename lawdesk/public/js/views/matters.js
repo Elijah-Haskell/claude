@@ -76,7 +76,7 @@ export async function mattersView() {
       seg,
       h("input.search", {
         type: "search",
-        placeholder: "Search matters  ( / )",
+        placeholder: "Search matters",
         "aria-label": "Search matters",
         "data-search": "",
         oninput: (e) => ((q = e.target.value), draw()),
