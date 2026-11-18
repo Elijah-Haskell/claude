@@ -1,0 +1,25 @@
+# Render Blueprint for the Lawdesk online demo (fictional demo data only).
+# Render's free web services have no persistent disk, so the demo reloads its made-up data on every start.
+# Never put real client information in this deployment.
+services:
+  - type: web
+    name: lawdesk-demo
+    runtime: node
+    plan: free
+    rootDir: lawdesk
+    buildCommand: "true"
+    startCommand: npm run seed -- --reset && npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 22.23.0
+      - key: HOST
+        value: 0.0.0.0
+      - key: LAWDESK_DB
+        value: /tmp/lawdesk-demo.db
+      - key: LAWDESK_SECURE_COOKIES
+        value: "1"
+      - key: LAWDESK_TRUST_PROXY
+        value: "1"
+      - key: LAWDESK_EMAIL_WORKER
+        value: "0"
