@@ -1967,4 +1967,5 @@ kbd, code { font-family: var(--font); }
 table.matters th, .settings-table th { font-weight: 600; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; color: var(--muted); }
 .group-title { text-transform: none; letter-spacing: 0; }
 .group-title .count, .group-title .muted, .group-title small, .group-note, .check-prog, .group-title > span + span { font-family: var(--font); font-weight: 400; }
-@media (max-width: 640px) { .nav { flex-wrap: wrap; } .nav-link { padding-left: 9px; padding-right: 9px; } }
+.nav { flex-wrap: wrap; }
+@media (max-width: 640px) { .nav-link { padding-left: 9px; padding-right: 9px; } }

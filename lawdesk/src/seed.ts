@@ -17,6 +17,11 @@ import { addDays, rollForward, today as todayIn, type ISODate } from "./dates.ts
 import { seedCalendar } from "./calendar/seed.ts";
 import { Billing } from "./billing/billing.ts";
 import { SCHEMA as BILLING_SCHEMA } from "./billing/schema.ts";
+import { SCHEMA as CONFLICTS_SCHEMA } from "./conflicts/schema.ts";
+import { SCHEMA as CONTACTS_SCHEMA } from "./contacts/schema.ts";
+import { addAlias, addParty, addRelationship } from "./conflicts/store.ts";
+import { decideCheck, runCheck } from "./conflicts/search.ts";
+import { addDetail } from "./contacts/contacts.ts";
 
 export const DEMO_NOTE = "Fictional demo data. Not a real client.";
 
@@ -70,6 +75,8 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
   };
 
   db.exec(BILLING_SCHEMA);
+  db.exec(CONFLICTS_SCHEMA);
+  db.exec(CONTACTS_SCHEMA);
   db.exec("BEGIN");
   try {
     // ---------------------------------------------------------------- people
@@ -331,6 +338,89 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
       jordan,
     );
     e.addTask({ title: "Renew the firm's online research subscription", assigneeId: casey, priority: "low" }, casey);
+
+    // ------------------------------------------------- contacts and conflicts
+    // Owners, the other side, their lawyers, other names and how they connect.
+    // Phone numbers use the 555-01xx range set aside for fiction; emails use example domains.
+    const peggy = client("Margaret Ellison (demo)", "person");
+    const daniel = client("Daniel Ortiz (demo)", "person");
+    const sellerLp = client("Riverside Plaza Partners LP (demo)", "company");
+    const dana = client("Dana Whitfield (demo)", "person");
+    const heartland = client("Heartland Equipment Leasing Inc. (demo)", "company");
+    const kline = client("Robert Kline (demo)", "person");
+    const kestrel = client("Kestrel Panel Manufacturing Co. (demo)", "company");
+    const cottonwood = client("Cottonwood Office Park LLC (demo)", "company");
+    const bluestemRetail = client("Bluestem Retail LLC (demo)", "company");
+    const brooksLlc = client("Brooks Consulting LLC (demo)", "company");
+
+    const contactInfo: [number, string | null, string | null][] = [
+      [sunflower, "hello@sunflower-coffee.example", "316-555-0142"],
+      [peggy, "peggy@sunflower-coffee.example", "316-555-0143"],
+      [prairieWind, "legal@prairiewind.example", "785-555-0110"],
+      [taylor, "taylor@brooks-consulting.example", "913-555-0177"],
+      [dana, "dwhitfield@whitfield-law.example", "316-555-0198"],
+      [bluestem, "office@bluestem-holdings.example", "316-555-0120"],
+    ];
+    for (const [id, email, phone] of contactInfo) db.prepare("UPDATE contacts SET email = ?, phone = ? WHERE id = ?").run(email, phone, id);
+    addDetail(db, sunflower, { kind: "address", label: "Business", line1: "100 Example Street", city: "Wichita", region: "KS", postalCode: "67202" }, casey);
+    addDetail(db, sunflower, { kind: "website", label: "Website", value: "sunflower-coffee.example" }, casey);
+    addDetail(db, peggy, { kind: "phone", label: "Cell", value: "316-555-0144" }, casey);
+    addDetail(db, peggy, { kind: "address", label: "Home", line1: "22 Sample Lane", city: "Wichita", region: "KS", postalCode: "67206" }, casey);
+    addDetail(db, prairieWind, { kind: "address", label: "Mailing", line1: "PO Box 0000", city: "Salina", region: "KS", postalCode: "67401" }, casey);
+    addDetail(db, prairieWind, { kind: "email", label: "Billing", value: "ap@prairiewind.example" }, casey);
+    addDetail(db, taylor, { kind: "address", label: "Home", line1: "45 Placeholder Court", line2: "Unit 3", city: "Overland Park", region: "KS", postalCode: "66210" }, casey);
+    addDetail(db, dana, { kind: "address", label: "Office", line1: "300 Demo Avenue, Suite 400", city: "Wichita", region: "KS", postalCode: "67202" }, casey);
+    addDetail(db, bluestem, { kind: "address", label: "Office", line1: "8 Fictional Plaza", city: "Wichita", region: "KS", postalCode: "67226" }, casey);
+
+    addAlias(db, sunflower, { name: "Sunflower Coffee (demo)", kind: "dba" }, casey);
+    addAlias(db, peggy, { name: "Peggy Ellison (demo)", kind: "nickname" }, casey);
+    addAlias(db, peggy, { name: "Margaret Haynes (demo)", kind: "maiden_name" }, casey);
+    addAlias(db, taylor, { name: "Taylor Hale (demo)", kind: "former_name" }, casey);
+    addAlias(db, heartland, { name: "Heartland Leasing (demo)", kind: "trade_name" }, casey);
+    addAlias(db, meadowlark, { name: "Meadowlark Farm Company (demo)", kind: "former_name" }, casey);
+
+    addRelationship(db, { fromContactId: peggy, toContactId: sunflower, kind: "owner" }, casey);
+    addRelationship(db, { fromContactId: daniel, toContactId: sunflower, kind: "owner" }, casey);
+    addRelationship(db, { fromContactId: kline, toContactId: heartland, kind: "officer", note: "President" }, casey);
+    addRelationship(db, { fromContactId: bluestem, toContactId: bluestemRetail, kind: "parent" }, casey);
+    addRelationship(db, { fromContactId: taylor, toContactId: brooksLlc, kind: "owner", note: "Sole member once formed" }, casey);
+
+    addParty(db, m6, { contactId: heartland, role: "adverse_party", note: "Lessor" }, jordan);
+    addParty(db, m4, { contactId: sellerLp, role: "adverse_party", note: "Seller" }, riley);
+    addParty(db, m4, { contactId: dana, role: "opposing_counsel", note: "Seller's counsel" }, riley);
+    addParty(db, m2, { contactId: kestrel, role: "adverse_party", note: "Manufacturer" }, jordan);
+    addParty(db, m3, { contactId: cottonwood, role: "adverse_party", note: "Landlord" }, riley);
+    addParty(db, m1, { contactId: peggy, role: "related_party", note: "Owner" }, jordan);
+    addParty(db, m1, { contactId: daniel, role: "related_party", note: "Owner" }, jordan);
+    addParty(db, m5, { contactId: brooksLlc, role: "related_party", note: "Company being formed" }, jordan);
+
+    // Parties were recorded when each matter was opened.
+    db.exec("UPDATE conflicts_matter_parties SET created_at = (SELECT opened_on FROM matters m WHERE m.id = matter_id) || 'T15:30:00.000Z'");
+
+    /** Back-date a saved check (and its decisions) to the demo clock. */
+    const stampCheck = (checkId: number, hour: number) => {
+      const at = `${now}T${String(hour).padStart(2, "0")}:12:00.000Z`;
+      db.prepare("UPDATE conflicts_checks SET run_at = ?, decided_at = CASE WHEN decided_at IS NULL THEN NULL ELSE ? END WHERE id = ?").run(at, at.replace(":12:", ":40:"), checkId);
+      db.prepare("UPDATE conflicts_decisions SET decided_at = ? WHERE check_id = ?").run(at.replace(":12:", ":40:"), checkId);
+    };
+    // The office lease matter's check, cleared.
+    day(-1);
+    const leaseCheck = runCheck(db, { matterId: m3 }, sam).checkId;
+    decideCheck(db, leaseCheck, "cleared", "No other matters involve the landlord or its owners.", riley);
+    stampCheck(leaseCheck, 15);
+    // A prospective client at intake, still waiting for a lawyer's decision.
+    day(0);
+    const intakeCheck = runCheck(
+      db,
+      {
+        terms: [
+          { name: "Bob Klein (demo)", kind: "person", role: "prospective_client" },
+          { name: "Prairie Wind Solar Inc. (demo)", kind: "company", role: "adverse_party" },
+        ],
+      },
+      casey,
+    ).checkId;
+    stampCheck(intakeCheck, 16);
     e.addTask({ title: "Review the month's open matters with Riley", assigneeId: jordan, dueDate: addDays(realToday, 3) }, jordan);
     seedCalendar(db, { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 } }, realToday, closed);
 
@@ -410,6 +500,8 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
       matters: { m1, m2, m3, m4, m5, m6 },
       lists: { intake, llc, review, closing },
       invoices: { pastDue: inv1.id, open: inv2.id },
+      contacts: { sunflower, peggy, heartland, kline, prairieWind, taylor },
+      checks: { leaseCheck, intakeCheck },
     };
   } catch (err) {
     db.exec("ROLLBACK");

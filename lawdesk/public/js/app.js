@@ -16,6 +16,8 @@ import { timerBox } from "./billing/timer.js";
 import { overviewView } from "./views/overview.js";
 import { reportsListView, reportView } from "./views/reports.js";
 import { trustView, trustAccountView, trustLedgerView, trustReconcileView, trustReportsView } from "./views/trust.js";
+import { contactsView, contactView } from "./views/contacts.js";
+import { conflictsView, checkView, checkHistoryView } from "./views/conflicts.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
@@ -27,6 +29,8 @@ const NAV = [
   { href: "#/billing", label: "Billing", key: "b", section: "Finance", icon: "billing" },
   // Trust: limit to admins and attorneys once sign-in lands.
   { href: "#/trust", label: "Trust", key: "t", section: "Finance", icon: "trust" },
+  { href: "#/contacts", label: "Contacts", key: "p", section: "Practice", icon: "contacts" },
+  { href: "#/conflicts", label: "Conflict check", key: "k", section: "Practice", icon: "intake" },
   { href: "#/settings", label: "Settings", key: "s" },
   // Firm-wide figures: shown to attorneys and administrators (a convenience, not a permission).
   { href: "#/overview", label: "Firm overview", key: "o", section: "Admin", icon: "overview", audience: "firm" },
@@ -60,6 +64,11 @@ const ROUTES = [
   [/^#\/trust\/accounts\/(\d+)\/reconcile(?:\/(\d{4}-\d{2}))?$/, () => trustReconcileView],
   [/^#\/trust\/accounts\/(\d+)\/reports$/, () => trustReportsView],
   [/^#\/trust\/ledgers\/(\d+)$/, () => trustLedgerView],
+  [/^#\/contacts$/, () => contactsView],
+  [/^#\/contacts\/(\d+)$/, () => contactView],
+  [/^#\/conflicts(?:\?.*)?$/, () => conflictsView],
+  [/^#\/conflicts\/history$/, () => checkHistoryView],
+  [/^#\/conflicts\/(\d+)$/, () => checkView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });

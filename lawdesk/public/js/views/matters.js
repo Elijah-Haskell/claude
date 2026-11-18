@@ -3,6 +3,7 @@
 import { h, select, relDate, modal, toast, plural } from "../dom.js";
 import { get, post } from "../api.js";
 import { state, today, users, prefs, loadMatters, loadSetup } from "../state.js";
+import { intakeConflicts } from "./intake.js";
 
 export async function mattersView() {
   let status = prefs.get("matters.status", "open");
@@ -123,12 +124,29 @@ export function newMatterDialog() {
   area.addEventListener("change", updateHint);
   updateHint();
 
+  const submitBtn = h("button.btn.primary", { type: "submit" }, "Open matter");
+  const conflicts = intakeConflicts({
+    contacts: s.contacts,
+    submit: submitBtn,
+    onDeclined: () => dlg.close(),
+    client: () => {
+      if (clientSel.value === "new") return { name: form.newClientName.value.trim(), kind: form.newClientKind.value };
+      const c = s.contacts.find((x) => String(x.id) === clientSel.value);
+      return c ? { name: c.name, kind: c.kind, contactId: c.id } : null;
+    },
+  });
   const form = h(
     "form.modal-body.form-grid",
     {
       onsubmit: async (e) => {
         e.preventDefault();
         err.textContent = "";
+        try {
+          if (!(await conflicts.beforeOpen())) return;
+        } catch (ex) {
+          err.textContent = ex.message;
+          return;
+        }
         const roles = {};
         for (const [r, sel] of roleSels) if (sel.value) roles[r] = Number(sel.value);
         const dates = {};
@@ -144,6 +162,7 @@ export function newMatterDialog() {
             roles,
             dates,
           });
+          await conflicts.afterOpen(m);
           dlg.close();
           toast(`Opened “${m.name}”`);
           await Promise.all([loadMatters(), loadSetup()]);
@@ -159,11 +178,14 @@ export function newMatterDialog() {
     newClient,
     h("label", "Practice area", area),
     areaHint,
+    conflicts.partiesField,
     h("fieldset", h("legend", "People"), roleSels.map(([r, sel]) => h("label.inline", h("span.cap", r), sel))),
     dateInputs.length ? h("fieldset", h("legend", "Key dates (optional)"), dateInputs.map(([, inp, label]) => h("label.inline", h("span", label), inp))) : null,
+    conflicts.panel,
     err,
-    h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Open matter")),
+    h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), submitBtn),
   );
+  conflicts.bind(form);
   const dlg = modal("New matter", form, { wide: true });
   name.focus();
 }

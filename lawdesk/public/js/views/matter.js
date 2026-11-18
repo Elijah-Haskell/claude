@@ -1,13 +1,14 @@
 // One matter: stage bar, people in roles, key dates, checklists and every task,
 // with dependencies shown and the activity log.
 
-import { h, select, fmtDate, fmtTime, modal, toast, plural } from "../dom.js";
+import { h, select, fmtDate, fmtTime, modal, toast, plural, replace } from "../dom.js";
 import { get, post, put, patch } from "../api.js";
 import { state, today, users, prefs, loadMatters, loadSetup } from "../state.js";
 import { quickAdd, taskRow, effectLines, redraw } from "../tasks.js";
 import { upcomingCard } from "../cal.js";
 import { billingCard } from "../billing/matter-card.js";
 import { communicationsCard } from "./communications.js";
+import { matterConflictCards } from "./parties.js";
 
 export async function matterView([idStr]) {
   const id = Number(idStr);
@@ -23,6 +24,7 @@ export async function matterView([idStr]) {
   const tasksBox = h("div.matter-tasks");
   const aside = h("aside.matter-aside");
   const activityBox = h("section.card.activity");
+  const [partiesCard, conflictCard] = matterConflictCards(id, { onChange: () => refresh() });
 
   const refresh = async () => {
     d = await get(`/matters/${id}`);
@@ -358,12 +360,12 @@ export async function matterView([idStr]) {
         : null,
     );
 
-    aside.replaceChildren(upcomingCard(id), people, billingCard(id), dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
+    replace(aside, upcomingCard(id), people, partiesCard, conflictCard, billingCard(id), dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
   }
 
   function drawActivity() {
     const items = showAllActivity ? d.activity : d.activity.slice(0, 12);
-    activityBox.replaceChildren(
+    replace(activityBox, 
       h("h2", "Activity"),
       h(
         "ol.activity-list",
