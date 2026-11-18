@@ -275,6 +275,11 @@ export async function settingsView() {
 
   lists = await get("/checklists");
   draw();
-  page.append(h("div.page-head", h("h1", "Settings")), nav, body);
+  page.append(
+    h("div.page-head", h("h1", "Settings")),
+    nav,
+    h("p.settings-import", h("a.btn#settings-import-clio", { href: "#/settings/import-clio" }, "Import from Clio"), h("span.muted", " Bring contacts, matters, tasks, calendar, time and expenses over from Clio Manage.")),
+    body,
+  );
   return page;
 }

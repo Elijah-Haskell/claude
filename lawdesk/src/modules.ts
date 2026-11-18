@@ -13,6 +13,8 @@ import { routes as documentsRoutes } from "./documents/routes.ts";
 import { SCHEMA as DOCUMENTS_SCHEMA } from "./documents/schema.ts";
 import { routes as calendarRoutes } from "./calendar/routes.ts";
 import { SCHEMA as CALENDAR_SCHEMA } from "./calendar/schema.ts";
+import { routes as clioImportRoutes } from "./clio_import/routes.ts";
+import { SCHEMA as CLIO_IMPORT_SCHEMA } from "./clio_import/schema.ts";
 
 export interface Module {
   name: string;
@@ -28,4 +30,5 @@ export const modules: Module[] = [
   { name: "billing", routes: billingRoutes, schema: BILLING_SCHEMA },
   { name: "documents", routes: documentsRoutes, schema: DOCUMENTS_SCHEMA },
   { name: "calendar", routes: calendarRoutes, schema: CALENDAR_SCHEMA },
+  { name: "clio_import", routes: clioImportRoutes, schema: CLIO_IMPORT_SCHEMA },
 ];

@@ -9,6 +9,7 @@ import { mattersView } from "./views/matters.js";
 import { matterView } from "./views/matter.js";
 import { checklistsView, checklistEditView } from "./views/checklists.js";
 import { settingsView } from "./views/settings.js";
+import { clioImportView } from "./views/clio_import.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
@@ -26,6 +27,7 @@ const ROUTES = [
   [/^#\/checklists$/, () => checklistsView],
   [/^#\/checklists\/(new|\d+)$/, () => checklistEditView],
   [/^#\/settings$/, () => settingsView],
+  [/^#\/settings\/import-clio(?:\?.*)?$/, () => clioImportView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });

@@ -1,0 +1,4 @@
+Id,Date,Matter,User,Description,Hours,Rate,Total,Billed,Bill Number,Non-billable
+9001,2026-03-10,2026-0001,Jordan Reyes,Prepared estoppel certificate,2.0,$250.00,$500.00,Unbilled,,No
+9002,2026-02-10,2026-0001,Jordan Reyes,Initial consultation,1.0,$250.00,$250.00,Billed,1042,No
+9003,2026-02-11,2025-0042,Riley Chen,Draft revisions,0.5,$300.00,$150.00,Draft,,No
