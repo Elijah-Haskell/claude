@@ -13,6 +13,8 @@ import { calendarView } from "./views/calendar.js";
 import { deadlinesView } from "./views/deadlines.js";
 import { BILLING_ROUTES } from "./billing/routes.js";
 import { timerBox } from "./billing/timer.js";
+import { overviewView } from "./views/overview.js";
+import { reportsListView, reportView } from "./views/reports.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
@@ -23,7 +25,18 @@ const NAV = [
   { href: "#/checklists", label: "Checklists", key: "c" },
   { href: "#/billing", label: "Billing", key: "b", section: "Finance", icon: "billing" },
   { href: "#/settings", label: "Settings", key: "s" },
+  // Firm-wide figures: shown to attorneys and administrators (a convenience, not a permission).
+  { href: "#/overview", label: "Firm overview", key: "o", section: "Admin", icon: "overview", audience: "firm" },
+  { href: "#/reports", label: "Reports", key: "r", section: "Finance", icon: "reports", audience: "firm" },
 ];
+
+const FIRM_ROLES = /^(attorney|lawyer|partner|admin|administrator|owner|office manager)$/i;
+
+function canSee(n) {
+  if (n.audience !== "firm") return true;
+  const me = state.setup?.users?.find((u) => u.id === state.me);
+  return !me || !me.default_role || FIRM_ROLES.test(me.default_role);
+}
 
 const ROUTES = [
   [/^#\/my$/, () => myTasksView],
@@ -36,6 +49,9 @@ const ROUTES = [
   [/^#\/calendar$/, () => calendarView],
   [/^#\/deadlines(?:\/(\d+))?$/, () => deadlinesView],
   ...BILLING_ROUTES,
+  [/^#\/overview$/, () => overviewView],
+  [/^#\/reports$/, () => reportsListView],
+  [/^#\/reports\/([a-z-]+)(?:\?(.*))?$/, () => reportView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });
@@ -43,10 +59,10 @@ const nav = h("nav.nav", { "aria-label": "Main" });
 const whoBox = h("div.who-box");
 
 function drawNav() {
-  const cur = location.hash.split("/").slice(0, 2).join("/");
+  const cur = location.hash.split("?")[0].split("/").slice(0, 2).join("/");
   replace(
     nav,
-    NAV.map((n) => h("a.nav-link", { href: n.href, "aria-current": cur === n.href ? "page" : null, title: null }, n.label)),
+    NAV.filter(canSee).map((n) => h("a.nav-link", { href: n.href, "aria-current": cur === n.href ? "page" : null, title: null }, n.label)),
   );
 }
 
@@ -105,7 +121,7 @@ function showHelp() {
     ["e", "Rename it"],
     ["m", "More actions"],
     ["Enter", "Open the task's matter"],
-    ["g then m / f / a / l / d / c / s", "Go to My tasks, Firm tasks, Matters, Calendar, Deadlines, Checklists, Settings"],
+    ["g then m / f / a / l / d / c / s / o / r", "Go to My tasks, Firm tasks, Matters, Calendar, Deadlines, Checklists, Settings, Firm overview, Reports"],
     ["?", "This list"],
   ];
   modal(
