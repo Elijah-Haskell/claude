@@ -4,6 +4,15 @@
 import { h, select, toast, fmtDate, slug } from "../dom.js";
 import { get, post, patch, put, del } from "../api.js";
 import { state, loadSetup, today } from "../state.js";
+import { pageHeader, avatar } from "../ui/components.js";
+import { icon } from "../ui/icons.js";
+
+function sectionHead(ic, title, desc = null) {
+  return h(
+    "header.card-header",
+    h("div.card-heading", h("span.card-icon", icon(ic, { size: 16 })), h("div", h("h2.card-title", title), desc ? h("p.card-subtitle", desc) : null)),
+  );
+}
 
 export async function settingsView() {
   const page = h("div.page.settings");
@@ -38,7 +47,22 @@ export async function settingsView() {
       ["s-dates", "Matter dates"],
       ["s-closed", "Closed days"],
       ["s-auto", "Automatic steps"],
-    ].map(([id, label]) => h("a", { href: `#${id}`, onclick: (e) => (e.preventDefault(), document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })) }, label)),
+    ].map(([id, label]) =>
+      h(
+        "a",
+        {
+          href: `#${id}`,
+          onclick: (e) => {
+            e.preventDefault();
+            nav.querySelectorAll("a").forEach((a) => a.removeAttribute("aria-current"));
+            e.currentTarget.setAttribute("aria-current", "true");
+            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+          },
+        },
+        icon({ "s-people": "users", "s-clients": "contact", "s-areas": "scale", "s-dates": "calendar-days", "s-closed": "calendar-clock", "s-auto": "zap" }[id], { size: 16 }),
+        label,
+      ),
+    ),
   );
   const body = h("div.settings-body");
 
@@ -53,7 +77,7 @@ export async function settingsView() {
     const row = (u) =>
       h(
         "tr" + (u.active ? "" : ".inactive"),
-        h("td", { "data-label": "Name" }, h("input", { value: u.name, "aria-label": "Name", maxlength: 200, onchange: (e) => edit(() => patch(`/users/${u.id}`, { name: e.target.value })) })),
+        h("td.person-cell", { "data-label": "Name" }, avatar(u.name, { size: "sm" }), h("input", { value: u.name, "aria-label": "Name", maxlength: 200, onchange: (e) => edit(() => patch(`/users/${u.id}`, { name: e.target.value })) })),
         h("td", { "data-label": "Role" }, h("input", { value: u.default_role || "", list: "user-roles", "aria-label": "Usual role", maxlength: 60, onchange: (e) => edit(() => patch(`/users/${u.id}`, { defaultRole: e.target.value || null })) })),
         h("td", { "data-label": "Email" }, h("input", { type: "email", value: u.email || "", "aria-label": "Email", maxlength: 200, onchange: (e) => edit(() => patch(`/users/${u.id}`, { email: e.target.value || null })) })),
         h(
@@ -69,9 +93,8 @@ export async function settingsView() {
     const role = h("input", { placeholder: "Role, e.g. paralegal", list: "user-roles", "aria-label": "New person's role", maxlength: 60 });
     const email = h("input", { type: "email", placeholder: "Email (optional)", "aria-label": "New person's email", maxlength: 200 });
     return h(
-      "section.card#s-people",
-      h("h2", "People"),
-      h("p.muted", "The role is used to assign checklist steps (a step for the paralegal goes to the matter's paralegal, or to the only paralegal at the firm)."),
+      "section.card.settings-section#s-people",
+      sectionHead("users", "People", "The role is used to assign checklist steps (a step for the paralegal goes to the matter's paralegal, or to the only paralegal at the firm)."),
       roleList,
       h("table.settings-table", h("thead", h("tr", h("th", "Name"), h("th", "Usual role"), h("th", "Email"), h("th", ""))), h("tbody", s.allUsers.map(row))),
       h(
@@ -92,10 +115,21 @@ export async function settingsView() {
     const email = h("input", { type: "email", placeholder: "Email", "aria-label": "Client email", maxlength: 200 });
     const phone = h("input", { placeholder: "Phone", "aria-label": "Client phone", maxlength: 60 });
     return h(
-      "section.card#s-clients",
-      h("h2", "Clients"),
+      "section.card.settings-section#s-clients",
+      sectionHead("contact", "Clients"),
       s.contacts.length
-        ? h("ul.plain.client-list", s.contacts.map((c) => h("li", h("span", c.name), h("span.muted.small", [c.kind, c.email, c.phone].filter(Boolean).join(" · ")))))
+        ? h(
+            "ul.plain.client-list",
+            s.contacts.map((c) =>
+              h(
+                "li",
+                h("span.client-icon", icon(c.kind === "company" ? "building-2" : "user", { size: 15 })),
+                h("span.client-name", c.name),
+                h("span.muted.small.cap", c.kind),
+                h("span.muted.small.client-contact", [c.email, c.phone].filter(Boolean).join(" · ")),
+              ),
+            ),
+          )
         : h("p.muted", "No clients yet."),
       h(
         "form.add-row",
@@ -130,9 +164,9 @@ export async function settingsView() {
               "li",
               h("span.stage-n", String(i + 1)),
               h("input", { value: st.name, "aria-label": `Stage ${i + 1} name`, maxlength: 100, onchange: (e) => edit(() => patch(`/stages/${st.id}`, { name: e.target.value })) }),
-              h("button.icon-btn", { type: "button", "aria-label": `Move ${st.name} up`, disabled: i === 0, onclick: () => move(i, -1) }, "↑"),
-              h("button.icon-btn", { type: "button", "aria-label": `Move ${st.name} down`, disabled: i === a.stages.length - 1, onclick: () => move(i, 1) }, "↓"),
-              h("button.icon-btn.danger", { type: "button", "aria-label": `Delete stage ${st.name}`, onclick: () => confirm(`Delete the stage “${st.name}”?`) && act(() => del(`/stages/${st.id}`), "Stage deleted") }, "×"),
+              h("button.icon-btn", { type: "button", "aria-label": `Move ${st.name} up`, disabled: i === 0, onclick: () => move(i, -1) }, icon("arrow-up", { size: 15 })),
+              h("button.icon-btn", { type: "button", "aria-label": `Move ${st.name} down`, disabled: i === a.stages.length - 1, onclick: () => move(i, 1) }, icon("arrow-down", { size: 15 })),
+              h("button.icon-btn.danger", { type: "button", "aria-label": `Delete stage ${st.name}`, onclick: () => confirm(`Delete the stage “${st.name}”?`) && act(() => del(`/stages/${st.id}`), "Stage deleted") }, icon("x", { size: 16 })),
             ),
           ),
         ),
@@ -142,9 +176,8 @@ export async function settingsView() {
     const name = h("input", { placeholder: "Practice area", "aria-label": "New practice area", required: true, maxlength: 200 });
     const stages = h("input", { placeholder: "Stages, separated by commas", "aria-label": "Stages", maxlength: 1000 });
     return h(
-      "section.card#s-areas",
-      h("h2", "Practice areas and stages"),
-      h("p.muted", "A new matter starts in the first stage. Matters move through stages from the stage bar on the matter page."),
+      "section.card.settings-section#s-areas",
+      sectionHead("scale", "Practice areas and stages", "A new matter starts in the first stage. Matters move through stages from the stage bar on the matter page."),
       h("div.area-grid", s.practiceAreas.map(areaCard)),
       h(
         "form.add-row",
@@ -166,9 +199,8 @@ export async function settingsView() {
   function dateFields(s) {
     const label = h("input", { placeholder: "Label, e.g. Closing date", "aria-label": "New date field label", required: true, maxlength: 100 });
     return h(
-      "section.card#s-dates",
-      h("h2", "Matter dates"),
-      h("p.muted", "Dates every matter can have (closing date, filing date). Checklist steps can be due a number of days before or after them, and move when the date changes."),
+      "section.card.settings-section#s-dates",
+      sectionHead("calendar-days", "Matter dates", "Dates every matter can have (closing date, filing date). Checklist steps can be due a number of days before or after them, and move when the date changes."),
       h(
         "ul.plain",
         s.dateFields.map((f) =>
@@ -176,7 +208,7 @@ export async function settingsView() {
             "li.date-field",
             h("input", { value: f.label, "aria-label": `Label for ${f.key}`, maxlength: 100, onchange: (e) => edit(() => patch(`/date-fields/${encodeURIComponent(f.key)}`, { label: e.target.value })) }),
             h("code", f.key),
-            h("button.icon-btn.danger", { type: "button", "aria-label": `Delete ${f.label}`, onclick: () => confirm(`Delete the date field “${f.label}”?`) && act(() => del(`/date-fields/${encodeURIComponent(f.key)}`), "Deleted") }, "×"),
+            h("button.icon-btn.danger", { type: "button", "aria-label": `Delete ${f.label}`, onclick: () => confirm(`Delete the date field “${f.label}”?`) && act(() => del(`/date-fields/${encodeURIComponent(f.key)}`), "Deleted") }, icon("x", { size: 16 })),
           ),
         ),
       ),
@@ -192,9 +224,8 @@ export async function settingsView() {
     const date = h("input", { type: "date", "aria-label": "Date the firm is closed", required: true });
     const name = h("input", { placeholder: "Name (optional)", "aria-label": "Name", maxlength: 100 });
     return h(
-      "section.card#s-closed",
-      h("h2", "Days the firm is closed"),
-      h("p.muted", "Business-day due dates skip weekends and these days. Adding or removing one re-dates open tasks that count business days."),
+      "section.card.settings-section#s-closed",
+      sectionHead("calendar-clock", "Days the firm is closed", "Business-day due dates skip weekends and these days. Adding or removing one re-dates open tasks that count business days."),
       upcoming.length
         ? h(
             "ul.plain.closed-list",
@@ -203,7 +234,7 @@ export async function settingsView() {
                 "li",
                 h("span", fmtDate(d.date, now)),
                 h("span.muted", d.name || ""),
-                h("button.icon-btn.danger", { type: "button", "aria-label": `Remove ${d.date}`, onclick: () => act(() => del(`/holidays/${d.date}`), "Removed") }, "×"),
+                h("button.icon-btn.danger", { type: "button", "aria-label": `Remove ${d.date}`, onclick: () => act(() => del(`/holidays/${d.date}`), "Removed") }, icon("x", { size: 16 })),
               ),
             ),
           )
@@ -234,8 +265,8 @@ export async function settingsView() {
     const l2 = select(listOpts, "", { "aria-label": "Checklist" });
     const s2 = select(stageOpts, "", { "aria-label": "Stage to move to" });
     return h(
-      "section.card#s-auto",
-      h("h2", "Automatic steps"),
+      "section.card.settings-section#s-auto",
+      sectionHead("zap", "Automatic steps"),
       s.automations.length
         ? h(
             "ul.plain.auto-list",
@@ -247,7 +278,7 @@ export async function settingsView() {
                   h("input", { type: "checkbox", checked: !!a.enabled, "aria-label": "On", onchange: (e) => act(() => patch(`/automations/${a.id}`, { enabled: e.target.checked }), e.target.checked ? "Turned on" : "Turned off") }),
                   h("span", sentence(a)),
                 ),
-                h("button.icon-btn.danger", { type: "button", "aria-label": "Delete this automatic step", onclick: () => confirm("Delete this automatic step?") && act(() => del(`/automations/${a.id}`), "Deleted") }, "×"),
+                h("button.icon-btn.danger", { type: "button", "aria-label": "Delete this automatic step", onclick: () => confirm("Delete this automatic step?") && act(() => del(`/automations/${a.id}`), "Deleted") }, icon("x", { size: 16 })),
               ),
             ),
           )
@@ -275,6 +306,6 @@ export async function settingsView() {
 
   lists = await get("/checklists");
   draw();
-  page.append(h("div.page-head", h("h1", "Settings")), nav, body);
+  page.append(pageHeader({ title: "Settings", subtitle: "Your firm's people, clients, practice areas and the rules that drive tasks." }), h("div.settings-layout", nav, body));
   return page;
 }

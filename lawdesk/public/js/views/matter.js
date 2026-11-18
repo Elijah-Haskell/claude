@@ -1,12 +1,25 @@
-// One matter: stage bar, people in roles, key dates, checklists and every task,
-// with dependencies shown and the activity log.
+// One matter, laid out as a case file: header with the key facts, the stage bar, then
+// tabs (Overview, Tasks, Activity, plus any a module registers) beside a right rail with
+// people, key dates and checklists. Modules add Overview cards and tabs through
+// ui/matter-slots.js.
 
-import { h, select, fmtDate, fmtTime, modal, toast, plural } from "../dom.js";
+import { h, select, fmtDate, fmtTime, modal, toast, plural, relDate, daysBetween } from "../dom.js";
 import { get, post, put, patch } from "../api.js";
 import { state, today, users, prefs, loadMatters, loadSetup } from "../state.js";
 import { quickAdd, taskRow, effectLines, redraw } from "../tasks.js";
+import { icon } from "../ui/icons.js";
+import { breadcrumbs, button, card, pill, person, avatar, emptyState, tabs as tabBar, progressBar, field, activityText } from "../ui/components.js";
+import { menu } from "../ui/popover.js";
+import { matterTabs, matterCards } from "../ui/matter-slots.js";
+import { ago } from "./home.js";
 
-export async function matterView([idStr]) {
+const BUILT_IN_TABS = [
+  { id: "overview", label: "Overview", icon: "layout-grid", order: 0 },
+  { id: "tasks", label: "Tasks", icon: "list-checks", order: 10 },
+  { id: "activity", label: "Activity", icon: "activity", order: 90 },
+];
+
+export async function matterView([idStr, tabArg]) {
   const id = Number(idStr);
   const page = h("div.page.matter-page");
   let d = null;
@@ -15,52 +28,115 @@ export async function matterView([idStr]) {
   let showAllActivity = false;
   const expanded = new Set(); // finished checklists the user has opened
 
-  const head = h("div");
-  const stageBar = h("div");
+  const allTabs = [...BUILT_IN_TABS, ...matterTabs].sort((a, b) => (a.order ?? 50) - (b.order ?? 50));
+  let current = allTabs.some((t) => t.id === tabArg) ? tabArg : "overview";
+
+  const head = h("div.matter-header");
+  const stageBar = h("div.stage-wrap");
+  const tabsSlot = h("div.tabs-slot");
+  const overviewBox = h("div.overview");
   const tasksBox = h("div.matter-tasks");
-  const aside = h("aside.matter-aside");
-  const activityBox = h("section.card.activity");
+  const activityBox = h("div.activity-panel");
+  const aside = h("aside.matter-aside", { "aria-label": "Matter details" });
+  const panels = new Map();
+
+  const ctx = () => ({ matterId: id, matter: d.matter, data: d, refresh, openTab });
 
   const refresh = async () => {
     d = await get(`/matters/${id}`);
-    drawHead();
-    drawStages();
-    drawAside();
-    drawActivity();
+    drawAll();
     await redraw(tasksBox, buildTasks);
     loadMatters().catch(() => {});
   };
 
   const fail = (err) => toast(err.message, { error: true });
   const report = (title, effects) => toast([title, ...effectLines(effects)]);
+  const finished = (t) => t.status === "done" || t.status === "skipped";
+
+  function drawAll() {
+    drawHead();
+    drawStages();
+    drawTabs();
+    drawAside();
+    drawOverview();
+    drawActivity();
+  }
 
   // ---------------------------------------------------------------- header
   function drawHead() {
     const m = d.matter;
+    const now = today();
+    const attorney = d.roles.find((r) => r.role === "attorney");
+    const nextDate = d.dates.filter((f) => f.value && f.value >= now).sort((a, b) => a.value.localeCompare(b.value))[0];
+    const open = d.tasks.filter((t) => !finished(t));
+    const late = open.filter((t) => t.status === "open" && t.due_date && t.due_date < now).length;
     head.replaceChildren(
-      h("a.back", { href: "#/matters" }, "← Matters"),
+      breadcrumbs([{ label: "Matters", href: "#/matters" }, { label: m.number || m.name }]),
       h(
-        "div.page-head",
+        "div.matter-title-row",
         h(
-          "div",
-          h("h1", m.number ? h("span.num", m.number) : null, m.name),
+          "div.matter-title-block",
+          h("div.matter-icon", { "aria-hidden": "true" }, icon("briefcase", { size: 22 })),
           h(
-            "p.sub",
-            [m.client_name || "No client", m.practice_area, `opened ${fmtDate(m.opened_on, today())}`, m.status === "closed" ? `closed ${fmtDate(m.closed_on, today())}` : null]
-              .filter(Boolean)
-              .join(" · "),
+            "div",
+            h(
+              "div.matter-eyebrow",
+              m.number ? h("span.matter-num", m.number) : null,
+              m.practice_area ? h("span", m.practice_area) : null,
+              m.status === "closed" ? pill("Closed", "neutral") : pill("Open", "success"),
+            ),
+            h("h1", m.name),
+            h(
+              "p.matter-client",
+              icon(clientKind(m) === "company" ? "building-2" : "user", { size: 15 }),
+              h("span", m.client_name || "No client"),
+            ),
           ),
         ),
         h(
           "div.head-actions",
-          m.status === "closed" ? h("span.tag", "Closed") : null,
-          h("button.btn", { type: "button", onclick: editDetails }, "Edit details"),
-          m.status === "open"
-            ? h("button.btn", { type: "button", onclick: () => closeMatter() }, "Close matter")
-            : h("button.btn", { type: "button", onclick: () => post(`/matters/${id}/reopen`).then(refresh, fail) }, "Reopen"),
+          m.status === "open" ? button("Add task", { icon: "plus", onclick: addTaskDialog }) : null,
+          button("Edit details", { icon: "pencil", onclick: editDetails }),
+          h(
+            "button.icon-btn.bordered",
+            {
+              type: "button",
+              "aria-label": "More matter actions",
+              title: "More",
+              "aria-haspopup": "menu",
+              onclick: (e) =>
+                menu(
+                  e.currentTarget,
+                  [
+                    m.status === "open"
+                      ? { label: "Close matter", icon: "archive", onSelect: () => closeMatter() }
+                      : { label: "Reopen matter", icon: "rotate-ccw", onSelect: () => post(`/matters/${id}/reopen`).then(refresh, fail) },
+                    { label: "Copy matter link", icon: "copy", onSelect: () => navigator.clipboard?.writeText(location.href).then(() => toast("Link copied"), () => {}) },
+                  ],
+                  "Matter actions",
+                ),
+            },
+            icon("ellipsis", { size: 18 }),
+          ),
         ),
       ),
+      h(
+        "dl.matter-facts",
+        fact("Client", m.client_name || "—"),
+        fact("Responsible attorney", attorney ? person(attorney.name, null, { size: "xs" }) : h("span.muted", "Not set")),
+        fact("Opened", fmtDate(m.opened_on, now), m.status === "closed" && m.closed_on ? `Closed ${fmtDate(m.closed_on, now)}` : `${plural(daysBetween(m.opened_on, now), "day")} ago`),
+        fact("Next key date", nextDate ? fmtDate(nextDate.value, now) : h("span.muted", "None set"), nextDate ? `${nextDate.label} · ${relDate(nextDate.value, now)}` : null),
+        fact("Open tasks", h("span.tnum", String(open.length)), late ? h("span.late-text", `${late} overdue`) : open.length ? "None overdue" : null),
+      ),
     );
+  }
+
+  function fact(label, value, sub = null) {
+    return h("div.fact", h("dt", label), h("dd", h("span.fact-value", value), sub ? h("span.fact-sub", sub) : null));
+  }
+
+  function clientKind(m) {
+    return state.setup.contacts.find((c) => c.id === m.client_id)?.kind || "company";
   }
 
   async function closeMatter() {
@@ -95,12 +171,11 @@ export async function matterView([idStr]) {
           }
         },
       },
-      h("label", "Matter name", name),
-      h("label", "Matter number", number),
-      h("label", "Client", client),
-      h("label", "Description", desc),
+      field("Matter name", name, { required: true }),
+      h("div.form-row", field("Matter number", number), field("Client", client)),
+      field("Description", desc, { optional: true }),
       err,
-      h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Save")),
+      h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Save changes")),
     );
     const dlg = modal("Edit matter", form);
   }
@@ -111,44 +186,143 @@ export async function matterView([idStr]) {
     const curIdx = d.stages.findIndex((s) => s.id === d.matter.stage_id);
     stageBar.replaceChildren(
       h(
-        "ol.stage-bar",
-        { "aria-label": "Stage" },
-        d.stages.map((s, i) => {
-          const autos = state.setup.automations.filter((a) => a.enabled && a.trigger === "stage_entered" && a.trigger_ref === s.id);
-          return h(
-            "li",
-            h(
-              "button.stage" + (i < curIdx ? ".past" : i === curIdx ? ".current" : ""),
-              {
-                type: "button",
-                "aria-current": i === curIdx ? "step" : null,
-                disabled: d.matter.status === "closed",
-                title: i === curIdx ? "Current stage" : `Move to ${s.name}${autos.length ? ` (adds ${autos.map((a) => a.action_name).join(", ")})` : ""}`,
-                onclick: async () => {
-                  if (i === curIdx) return;
-                  try {
-                    const r = await post(`/matters/${id}/stage`, { stageId: s.id });
-                    report(`Moved to “${s.name}”`, r);
-                    refresh();
-                  } catch (err) {
-                    fail(err);
-                  }
+        "div.stage-card",
+        h("div.stage-label", h("span", "Stage"), h("span.stage-count", curIdx >= 0 ? `${curIdx + 1} of ${d.stages.length}` : "")),
+        h(
+          "ol.stage-bar",
+          { "aria-label": "Stage" },
+          d.stages.map((s, i) => {
+            const autos = state.setup.automations.filter((a) => a.enabled && a.trigger === "stage_entered" && a.trigger_ref === s.id);
+            return h(
+              "li",
+              h(
+                "button.stage" + (i < curIdx ? ".past" : i === curIdx ? ".current" : ""),
+                {
+                  type: "button",
+                  "aria-current": i === curIdx ? "step" : null,
+                  disabled: d.matter.status === "closed",
+                  title: i === curIdx ? "Current stage" : `Move to ${s.name}${autos.length ? ` (adds ${autos.map((a) => a.action_name).join(", ")})` : ""}`,
+                  onclick: async () => {
+                    if (i === curIdx) return;
+                    try {
+                      const r = await post(`/matters/${id}/stage`, { stageId: s.id });
+                      report(`Moved to “${s.name}”`, r);
+                      refresh();
+                    } catch (err) {
+                      fail(err);
+                    }
+                  },
                 },
-              },
-              h("span.stage-n", String(i + 1)),
-              h("span.stage-name", s.name),
-            ),
-          );
-        }),
+                h("span.stage-n", i < curIdx ? icon("check", { size: 12, strokeWidth: 3 }) : String(i + 1)),
+                h("span.stage-name", s.name),
+              ),
+            );
+          }),
+        ),
       ),
     );
+  }
+
+  // ------------------------------------------------------------------ tabs
+  function counts(tid) {
+    if (tid === "tasks") return d.tasks.filter((t) => !finished(t)).length;
+    if (tid === "activity") return null;
+    const t = matterTabs.find((x) => x.id === tid);
+    try {
+      return t?.count ? t.count(ctx()) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function drawTabs() {
+    tabsSlot.replaceChildren(
+      tabBar(
+        allTabs.map((t) => ({ id: t.id, label: t.label, icon: t.icon, count: counts(t.id) })),
+        current,
+        (tid) => openTab(tid, false),
+        { label: "Matter sections" },
+      ),
+    );
+  }
+
+  function openTab(tid, redrawBar = true) {
+    current = tid;
+    history.replaceState(null, "", tid === "overview" ? `#/matters/${id}` : `#/matters/${id}/${tid}`);
+    for (const [pid, panel] of panels) panel.hidden = pid !== tid;
+    if (redrawBar) drawTabs();
+    const ext = matterTabs.find((t) => t.id === tid);
+    if (ext) renderExt(ext);
+  }
+
+  async function renderExt(t) {
+    const panel = panels.get(t.id);
+    if (!panel || panel.dataset.loaded === "1") return;
+    panel.dataset.loaded = "1";
+    panel.replaceChildren(h("div.card", h("p.muted", "Loading…")));
+    try {
+      panel.replaceChildren((await t.render(ctx())) || emptyState({ icon: t.icon || "inbox", title: `No ${t.label.toLowerCase()} yet`, compact: true }));
+    } catch (err) {
+      panel.replaceChildren(emptyState({ icon: "circle-alert", title: `Couldn't load ${t.label}`, body: err.message, compact: true }));
+    }
+  }
+
+  // -------------------------------------------------------------- overview
+  function drawOverview() {
+    const open = d.tasks
+      .filter((t) => !finished(t))
+      .sort((a, b) => (a.status === "waiting") - (b.status === "waiting") || String(a.due_date || "9999").localeCompare(String(b.due_date || "9999")) || a.id - b.id);
+    const next = open.slice(0, 5);
+    const nextCard = card({
+      title: "Next up",
+      subtitle: open.length ? `${plural(open.length, "open task")} on this matter` : null,
+      icon: "list-checks",
+      flush: true,
+      actions: button("All tasks", { variant: "ghost", size: "sm", iconRight: "arrow-right", onclick: () => openTab("tasks") }),
+      body: next.length
+        ? h(
+            "ul.task-list.flush-list",
+            next.map((t) => {
+              const row = taskRow(t, { refresh, showMatter: false, byId: new Map(d.tasks.map((x) => [x.id, x])) });
+              row.removeAttribute("id"); // the Tasks tab holds the canonical row
+              return row;
+            }),
+          )
+        : emptyState({ icon: "circle-check", title: "No open tasks", body: d.matter.status === "open" ? "Add a task or apply a checklist from the right." : "This matter is closed.", compact: true }),
+    });
+
+    const recent = d.activity.slice(0, 5);
+    const actCard = card({
+      title: "Recent activity",
+      icon: "activity",
+      actions: button("View all", { variant: "ghost", size: "sm", iconRight: "arrow-right", onclick: () => openTab("activity") }),
+      body: recent.length ? timeline(recent) : emptyState({ icon: "activity", title: "No activity yet", compact: true }),
+    });
+
+    const about = card({
+      title: "About this matter",
+      icon: "file-text",
+      actions: button("Edit", { variant: "ghost", size: "sm", onclick: editDetails }),
+      body: d.matter.description ? h("p.pre.about-text", d.matter.description) : h("p.muted", "No description yet."),
+    });
+
+    const extSlot = h("div.overview-cards");
+    overviewBox.replaceChildren(h("div.overview-grid", nextCard, about, actCard), extSlot);
+    // Module cards drop in below, two to a row on wide screens.
+    for (const c of matterCards) {
+      const holder = h("div.overview-card-slot");
+      extSlot.append(holder);
+      Promise.resolve()
+        .then(() => c.render(ctx()))
+        .then((node) => (node ? holder.replaceChildren(node) : holder.remove()))
+        .catch(() => holder.remove());
+    }
   }
 
   // ----------------------------------------------------------------- tasks
   function buildTasks() {
     const byId = new Map(d.tasks.map((t) => [t.id, t]));
     const opts = { refresh, showMatter: false, byId, showDeps: true, showRole: true, showDescription: true };
-    const finished = (t) => t.status === "done" || t.status === "skipped";
     const visible = d.tasks.filter((t) => !hideDone || !finished(t));
     const groups = d.checklists.map((a) => ({ app: a, tasks: visible.filter((t) => t.application_id === a.id).sort((x, y) => (x.template_position ?? 999) - (y.template_position ?? 999) || x.id - y.id) }));
     const other = visible.filter((t) => !t.application_id || !d.checklists.some((a) => a.id === t.application_id));
@@ -156,12 +330,12 @@ export async function matterView([idStr]) {
     return [
       h(
         "div.tasks-toolbar",
-        h("h2", "Tasks"),
-        h("span.muted", `${plural(d.tasks.length - doneCount, "open task")}, ${doneCount} finished`),
+        h("div.tasks-toolbar-text", h("h2", "Tasks"), h("span.muted", `${plural(d.tasks.length - doneCount, "open task")} · ${doneCount} finished`)),
         h(
           "label.toggle",
           h("input", {
             type: "checkbox",
+            role: "switch",
             checked: hideDone,
             onchange: (e) => {
               hideDone = e.target.checked;
@@ -169,16 +343,18 @@ export async function matterView([idStr]) {
               redraw(tasksBox, buildTasks);
             },
           }),
-          " Hide finished",
+          h("span.toggle-track", { "aria-hidden": "true" }),
+          "Hide finished",
         ),
-        h("button.btn.small", { type: "button", onclick: addTaskDialog }, "Add task with details…"),
+        d.matter.status === "open" ? button("Add task with details", { size: "sm", icon: "plus", onclick: addTaskDialog }) : null,
       ),
       groups.map(({ app, tasks }) => {
         const title = h(
           "h3.group-title",
+          icon("clipboard-list", { size: 15, class: "group-icon" }),
           h("span", app.name),
-          progress(app.finished, app.total),
-          h("span.muted.small", app.completed_on ? `finished ${fmtDate(app.completed_on, today())}` : `added ${fmtDate(app.applied_on, today())}`),
+          progressBar(app.finished, app.total),
+          h("span.muted.small.group-when", app.completed_on ? `finished ${fmtDate(app.completed_on, today())}` : `added ${fmtDate(app.applied_on, today())}`),
         );
         const list = tasks.length ? h("ul.task-list", tasks.map((t) => taskRow(t, opts))) : h("p.empty", "All finished.");
         if (!app.completed_on) return h("section.task-group.checklist-group", title, list);
@@ -190,28 +366,18 @@ export async function matterView([idStr]) {
       other.length || !groups.length
         ? h(
             "section.task-group",
-            h("h3.group-title", h("span", groups.length ? "Other tasks" : "Tasks"), h("span.count", String(other.length))),
-            other.length ? h("ul.task-list", other.map((t) => taskRow(t, opts))) : h("p.empty", "No tasks yet. Add one above or apply a checklist."),
+            h("h3.group-title", icon("list-todo", { size: 15, class: "group-icon" }), h("span", groups.length ? "Other tasks" : "Tasks"), h("span.count", String(other.length))),
+            other.length ? h("ul.task-list", other.map((t) => taskRow(t, opts))) : emptyState({ icon: "list-checks", title: "No tasks yet", body: "Add one above or apply a checklist.", compact: true }),
           )
         : null,
     ];
-  }
-
-  function progress(done, total) {
-    const pct = total ? Math.round((done / total) * 100) : 0;
-    return h(
-      "span.progress",
-      { role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(total), "aria-valuenow": String(done), "aria-label": `${done} of ${total} finished` },
-      h("span.progress-bar", h("span.progress-fill", { style: { width: pct + "%" } })),
-      h("span.progress-text", `${done}/${total}`),
-    );
   }
 
   function addTaskDialog() {
     const title = h("input", { required: true, maxlength: 300 });
     const who = select([{ value: "", label: "Unassigned" }, ...users().map((u) => ({ value: u.id, label: u.name }))], state.me ?? "");
     const due = h("input", { type: "date" });
-    const prio = select(["normal", "high", "low"].map((p) => ({ value: p, label: p })), "normal");
+    const prio = select(["normal", "high", "low"].map((p) => ({ value: p, label: p[0].toUpperCase() + p.slice(1) })), "normal");
     const desc = h("textarea", { rows: 3, maxlength: 5000 });
     const open = d.tasks.filter((t) => t.status === "open" || t.status === "waiting");
     const deps = open.map((t) => [t.id, h("input", { type: "checkbox", value: t.id })]);
@@ -239,20 +405,20 @@ export async function matterView([idStr]) {
           }
         },
       },
-      h("label", "What needs doing", title),
-      h("div.form-row", h("label", "Assigned to", who), h("label", "Due", due), h("label", "Priority", prio)),
-      h("label", "Notes", desc),
+      field("What needs doing", title, { required: true }),
+      h("div.form-row", field("Assigned to", who), field("Due", due), field("Priority", prio)),
+      field("Notes", desc, { optional: true }),
       open.length
         ? h(
             "fieldset.dep-pick",
-            h("legend", "Can't start until these are done (optional)"),
-            deps.map(([tid, c]) => h("label.check-line", c, " ", d.tasks.find((t) => t.id === tid).title)),
+            h("legend", "Can't start until these are done", h("span.field-optional", " (optional)")),
+            h("div.dep-pick-list", deps.map(([tid, c]) => h("label.check-line", c, h("span", d.tasks.find((t) => t.id === tid).title)))),
           )
         : null,
       err,
       h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Add task")),
     );
-    const dlg = modal("Add task", form, { wide: true });
+    const dlg = modal("Add task", form, { wide: true, subtitle: d.matter.number ? `${d.matter.number} · ${d.matter.name}` : d.matter.name });
     title.focus();
   }
 
@@ -260,35 +426,41 @@ export async function matterView([idStr]) {
   function drawAside() {
     const m = d.matter;
     const roleNames = [...new Set([...state.setup.roles, ...d.roles.map((r) => r.role)])];
-    const people = h(
-      "section.card",
-      h("h2", "People"),
-      roleNames.map((role) => {
-        const cur = d.roles.find((r) => r.role === role);
-        return h(
-          "label.field-line",
-          h("span.cap", role),
-          select([{ value: "", label: "—" }, ...users().map((u) => ({ value: u.id, label: u.name }))], cur?.user_id ?? "", {
-            onchange: async (e) => {
-              try {
-                const r = await put(`/matters/${id}/roles/${encodeURIComponent(role)}`, { userId: e.target.value ? Number(e.target.value) : null });
-                const ev = r.events.find((x) => x.kind === "role_changed");
-                toast(ev ? ev.detail : "Saved");
-                refresh();
-              } catch (err) {
-                fail(err);
-              }
-            },
-          }),
-        );
-      }),
-      h("p.muted.small", "Changing a person here moves their open tasks for that role."),
-    );
+    const people = card({
+      title: "People",
+      icon: "users",
+      className: "rail-card",
+      headingLevel: 2,
+      body: [
+        roleNames.map((role) => {
+          const cur = d.roles.find((r) => r.role === role);
+          return h(
+            "label.field-line",
+            h("span.field-line-label", cur ? avatar(cur.name, { size: "xs" }) : h("span.avatar.av-xs.empty", "–"), h("span.cap", role)),
+            select([{ value: "", label: "—" }, ...users().map((u) => ({ value: u.id, label: u.name }))], cur?.user_id ?? "", {
+              "aria-label": role,
+              onchange: async (e) => {
+                try {
+                  const r = await put(`/matters/${id}/roles/${encodeURIComponent(role)}`, { userId: e.target.value ? Number(e.target.value) : null });
+                  const ev = r.events.find((x) => x.kind === "role_changed");
+                  toast(ev ? ev.detail : "Saved");
+                  refresh();
+                } catch (err) {
+                  fail(err);
+                }
+              },
+            }),
+          );
+        }),
+        h("p.rail-note", "Changing a person here moves their open tasks for that role."),
+      ],
+    });
 
-    const dates = h(
-      "section.card",
-      h("h2", "Key dates"),
-      d.dates.length
+    const dates = card({
+      title: "Key dates",
+      icon: "calendar-days",
+      className: "rail-card",
+      body: d.dates.length
         ? d.dates.map((f) => {
             const hanging = d.tasks.filter((t) => t.anchor === `field:${f.key}` && (t.status === "open" || t.status === "waiting")).length;
             const inp = h("input", {
@@ -305,10 +477,10 @@ export async function matterView([idStr]) {
                 }
               },
             });
-            return h("label.field-line", h("span", f.label, hanging ? h("span.muted.small", ` · ${plural(hanging, "task")}`) : null), inp);
+            return h("label.field-line", h("span.field-line-label", h("span", f.label), hanging ? h("span.mini-count", { title: `${plural(hanging, "task")} follow this date` }, String(hanging)) : null), inp);
           })
         : h("p.muted", "No date fields yet. Add them in Settings."),
-    );
+    });
 
     const listSel = select(
       [
@@ -321,73 +493,111 @@ export async function matterView([idStr]) {
       "",
       { "aria-label": "Checklist to add" },
     );
-    const checklists = h(
-      "section.card",
-      h("h2", "Checklists"),
-      d.checklists.length
-        ? h(
-            "ul.plain",
-            d.checklists.map((a) => h("li.check-prog", h("span", a.name, a.completed_on ? h("span.tag.good", "Done") : null), progress(a.finished, a.total))),
-          )
-        : h("p.muted", "None yet."),
-      m.status === "open"
-        ? h(
-            "form.apply",
-            {
-              onsubmit: async (e) => {
-                e.preventDefault();
-                if (!listSel.value) return;
-                const l = lists.find((x) => String(x.id) === listSel.value);
-                if (d.checklists.some((a) => a.list_id === l.id && !a.completed_on) && !confirm(`“${l.name}” is already on this matter. Add it again?`)) return;
-                try {
-                  const r = await post(`/matters/${id}/checklists`, { listId: l.id });
-                  report(`Added “${l.name}” (${plural(r.added, "task")})`, r);
-                  refresh();
-                } catch (err) {
-                  fail(err);
-                }
+    const checklists = card({
+      title: "Checklists",
+      icon: "clipboard-list",
+      className: "rail-card",
+      body: [
+        d.checklists.length
+          ? h(
+              "ul.plain.check-progs",
+              d.checklists.map((a) =>
+                h(
+                  "li.check-prog",
+                  h("span.check-prog-name", a.name, a.completed_on ? h("span.tag.good", "Done") : null),
+                  progressBar(a.finished, a.total),
+                ),
+              ),
+            )
+          : h("p.muted", "None yet."),
+        m.status === "open"
+          ? h(
+              "form.apply",
+              {
+                onsubmit: async (e) => {
+                  e.preventDefault();
+                  if (!listSel.value) return;
+                  const l = lists.find((x) => String(x.id) === listSel.value);
+                  if (d.checklists.some((a) => a.list_id === l.id && !a.completed_on) && !confirm(`“${l.name}” is already on this matter. Add it again?`)) return;
+                  try {
+                    const r = await post(`/matters/${id}/checklists`, { listId: l.id });
+                    report(`Added “${l.name}” (${plural(r.added, "task")})`, r);
+                    refresh();
+                  } catch (err) {
+                    fail(err);
+                  }
+                },
               },
-            },
-            listSel,
-            h("button.btn", { type: "submit" }, "Add"),
-          )
-        : null,
-    );
+              listSel,
+              h("button.btn", { type: "submit" }, "Apply"),
+            )
+          : null,
+      ],
+    });
 
-    aside.replaceChildren(people, dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
+    aside.replaceChildren(people, dates, checklists);
+  }
+
+  // -------------------------------------------------------------- activity
+  function timeline(items) {
+    return h(
+      "ol.timeline",
+      items.map((a) =>
+        h(
+          "li.tl-item",
+          h("span.tl-dot" + (a.user_name ? "" : ".auto"), { "aria-hidden": "true" }, a.user_name ? null : icon("zap", { size: 10 })),
+          h(
+            "div.tl-body",
+            h("p.tl-text", h("strong", a.user_name || "Automatic"), " · ", activityText(a.detail, today())),
+            h("p.tl-time", { title: fmtTime(a.at) }, ago(a.at)),
+          ),
+        ),
+      ),
+    );
   }
 
   function drawActivity() {
-    const items = showAllActivity ? d.activity : d.activity.slice(0, 12);
+    const items = showAllActivity ? d.activity : d.activity.slice(0, 25);
     activityBox.replaceChildren(
-      h("h2", "Activity"),
-      h(
-        "ol.activity-list",
-        items.map((a) => h("li", h("span.act-time", fmtTime(a.at)), h("span.act-who", a.user_name || "Automatic"), h("span.act-what", a.detail))),
-      ),
-      d.activity.length > items.length
-        ? h("button.btn.small", { type: "button", onclick: () => ((showAllActivity = true), drawActivity()) }, `Show all ${d.activity.length}`)
-        : null,
+      card({
+        title: "Activity",
+        subtitle: "Every change on this matter, newest first",
+        icon: "activity",
+        className: "activity",
+        body: [
+          d.activity.length ? timeline(items) : emptyState({ icon: "activity", title: "No activity yet", compact: true }),
+          d.activity.length > items.length
+            ? h("div.more-row", button(`Show all ${d.activity.length}`, { size: "sm", variant: "ghost", onclick: () => ((showAllActivity = true), drawActivity()) }))
+            : null,
+        ],
+      }),
     );
   }
 
+  // ------------------------------------------------------------------ build
   [d, lists] = await Promise.all([get(`/matters/${id}`), get("/checklists")]);
   if (!state.setup.contacts.length) await loadSetup();
-  drawHead();
-  drawStages();
-  drawAside();
-  drawActivity();
-  await redraw(tasksBox, buildTasks);
   const matterRow = { id, name: d.matter.name, number: d.matter.number, client_name: d.matter.client_name };
-  page.append(
-    head,
-    stageBar,
+
+  panels.set("overview", h("div.tab-panel", { role: "tabpanel", id: "tab-panel-overview", "aria-labelledby": "tab-overview" }, overviewBox));
+  panels.set(
+    "tasks",
     h(
-      "div.matter-grid",
-      h("div.matter-main", d.matter.status === "open" ? quickAdd({ matter: matterRow, onAdded: refresh }) : null, tasksBox),
-      aside,
-      activityBox,
+      "div.tab-panel",
+      { role: "tabpanel", id: "tab-panel-tasks", "aria-labelledby": "tab-tasks" },
+      d.matter.status === "open" ? quickAdd({ matter: matterRow, onAdded: refresh }) : null,
+      h("div.card.tasks-card", tasksBox),
     ),
   );
+  panels.set("activity", h("div.tab-panel", { role: "tabpanel", id: "tab-panel-activity", "aria-labelledby": "tab-activity" }, activityBox));
+  for (const t of matterTabs) panels.set(t.id, h("div.tab-panel", { role: "tabpanel", id: `tab-panel-${t.id}`, "aria-labelledby": `tab-${t.id}` }));
+
+  drawAll();
+  await redraw(tasksBox, buildTasks);
+  for (const [pid, panel] of panels) panel.hidden = pid !== current;
+  const ext = matterTabs.find((t) => t.id === current);
+  if (ext) renderExt(ext);
+
+  page.append(head, stageBar, tabsSlot, h("div.matter-grid", h("div.matter-main", [...panels.values()]), aside));
   return page;
 }

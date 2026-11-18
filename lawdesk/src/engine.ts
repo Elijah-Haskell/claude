@@ -824,7 +824,8 @@ export class Engine {
       `SELECT m.*, c.name AS client_name, p.name AS practice_area, s.name AS stage_name,
          (SELECT COUNT(*) FROM tasks t WHERE t.matter_id = m.id AND t.status IN ('open','waiting')) AS open_tasks,
          (SELECT COUNT(*) FROM tasks t WHERE t.matter_id = m.id AND t.status = 'open' AND t.due_date < ?) AS overdue_tasks,
-         (SELECT MIN(t.due_date) FROM tasks t WHERE t.matter_id = m.id AND t.status = 'open') AS next_due
+         (SELECT MIN(t.due_date) FROM tasks t WHERE t.matter_id = m.id AND t.status = 'open') AS next_due,
+         (SELECT u.name FROM matter_roles r JOIN users u ON u.id = r.user_id WHERE r.matter_id = m.id AND r.role = 'attorney') AS attorney_name
        FROM matters m LEFT JOIN contacts c ON c.id = m.client_id LEFT JOIN practice_areas p ON p.id = m.practice_area_id
        LEFT JOIN stages s ON s.id = m.stage_id
        ${status === "all" ? "" : "WHERE m.status = ?"}

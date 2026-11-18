@@ -1,6 +1,7 @@
 // Headless browser smoke test: seeds the demo into an in-memory database, starts the
-// server on a free port, clicks through every screen at desktop and phone width and
-// saves screenshots to screenshots/. Needs Playwright + Chromium installed globally:
+// server on a free port, clicks through every screen at desktop (1440px) and phone (390px)
+// width and saves screenshots to screenshots/ (plus 2x "final-*.png" shots of Home,
+// Matters and a matter for review). Needs Playwright + Chromium installed globally:
 //
 //   npm run test:browser
 //
@@ -44,8 +45,10 @@ async function check(name: string, fn: () => Promise<void>) {
   console.log(results[results.length - 1]);
 }
 
+const openMatters = (await (await fetch(base + "/api/matters")).json()).length;
+
 for (const [label, viewport] of [
-  ["desktop", { width: 1280, height: 860 }],
+  ["desktop", { width: 1440, height: 900 }],
   ["phone", { width: 390, height: 844 }],
 ] as const) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1 });
@@ -68,14 +71,61 @@ for (const [label, viewport] of [
     assert.ok(over.extra <= 1, `page scrolls sideways by ${over.extra}px (${over.wide.join(", ")})`);
   };
 
+  const shot = async (name: string) => {
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.mouse.move(0, 0);
+    await page.screenshot({ path: shots + `${name}-${label}.png`, fullPage: true });
+  };
+
+  await check(`${label}: opens on Home with the shell`, async () => {
+    await page.goto(base + "/");
+    await page.waitForSelector(".home-page .stat");
+    assert.match(page.url(), /#\/home$/);
+    assert.equal(await page.locator(".home-stats .stat").count(), 4);
+    assert.ok(await page.locator(".home-page .task").count() > 0, "my next tasks");
+    assert.ok(await page.locator(".side-link").count() >= 6, "sidebar links");
+    assert.equal(await page.locator(".side-link[aria-current=page]").innerText(), "Home");
+    await page.waitForSelector(".agenda-item, .home-side .empty-state");
+    await page.waitForFunction(() => (document.querySelector(".side-firm-name")?.textContent || "").length > 0);
+    await noHorizontalScroll();
+    await shot("home");
+  });
+
+  await check(`${label}: global search finds a matter`, async () => {
+    if (label === "phone") await page.locator(".search-trigger").click();
+    else await page.keyboard.press("Control+k");
+    await page.waitForSelector("dialog.palette[open]");
+    await page.keyboard.type("riverside");
+    await page.waitForSelector(".palette-item:has-text('Riverside Plaza')");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(".matter-header:has-text('Riverside Plaza')");
+  });
+
+  await check(`${label}: notifications and user menu`, async () => {
+    await page.goto(base + "/#/home");
+    await page.waitForSelector(".home-page");
+    await page.locator(".bell").click();
+    await page.waitForSelector(".notif-pop .notif-item");
+    await page.keyboard.press("Escape");
+    await page.locator(".user-btn").click();
+    await page.waitForSelector(".popover [role=menu] .pop-item:has-text('Sign out')");
+    await page.keyboard.press("Escape");
+    if (label === "phone") {
+      await page.locator(".menu-btn").click();
+      await page.waitForSelector("body.drawer-open .side-link");
+      await page.locator(".side-link", { hasText: "Matters" }).click();
+      await page.waitForSelector(".matters-page");
+      assert.equal(await page.evaluate(() => document.body.classList.contains("drawer-open")), false);
+    }
+  });
+
   await check(`${label}: My tasks shows buckets and waiting reasons`, async () => {
     await page.goto(base + "/#/my");
     await page.waitForSelector(".task");
     assert.ok(await page.locator("#g-overdue .task").count() > 0, "overdue bucket");
     assert.ok(await page.locator("#g-waiting .waiting-on").count() > 0, "waiting reasons");
     await noHorizontalScroll();
-    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
-    await page.screenshot({ path: shots + `my-tasks-${label}.png`, fullPage: true });
+    await shot("my-tasks");
   });
 
   await check(`${label}: quick-add parses and adds a task`, async () => {
@@ -124,21 +174,39 @@ for (const [label, viewport] of [
     await page.locator(".load-card", { hasText: "Sam Patel" }).click();
     await page.waitForFunction(() => document.querySelectorAll(".task").length > 0 && [...document.querySelectorAll(".task .who-name")].every((e) => e.textContent === "Sam Patel"));
     await page.locator(".load-card", { hasText: "Sam Patel" }).click();
+    await page.waitForFunction(() => !document.querySelector(".load-card.on"));
+    if (label === "desktop") {
+      // Sort by a column header; the header says which way it is sorted.
+      await page.locator("th .th-sort", { hasText: "Task" }).click();
+      assert.equal(await page.locator("th[aria-sort=ascending]", { hasText: "Task" }).count(), 1);
+      await page.locator("th .th-sort", { hasText: "Due" }).click();
+    }
     await noHorizontalScroll();
+    await shot("firm-tasks");
   });
 
   await check(`${label}: Matters list and matter detail`, async () => {
     await page.goto(base + "/#/matters");
     await page.waitForSelector(".matter-row");
-    assert.equal(await page.locator(".matter-row").count(), 5);
+    assert.equal(await page.locator(".matter-row").count(), openMatters);
+    await page.fill(".dt-search-input", "riverside");
+    await page.waitForFunction(() => document.querySelectorAll(".matter-row").length === 1);
+    await page.fill(".dt-search-input", "");
+    await page.waitForFunction((n: number) => document.querySelectorAll(".matter-row").length === n, openMatters);
     await noHorizontalScroll();
+    await shot("matters");
     await page.locator(".matter-row", { hasText: "Riverside Plaza" }).locator("a").first().click();
     await page.waitForSelector(".stage-bar");
-    assert.ok(await page.locator(".checklist-group").count() >= 2);
-    assert.ok(await page.locator(".waiting-on").count() > 0);
+    assert.ok(await page.locator(".matter-facts .fact").count() >= 4, "key facts in the header");
     await noHorizontalScroll();
-    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
-    await page.screenshot({ path: shots + `matter-${label}.png`, fullPage: true });
+    await shot("matter");
+    await page.locator(".tab", { hasText: "Tasks" }).click();
+    await page.waitForSelector("#tab-panel-tasks:not([hidden]) .checklist-group");
+    assert.match(page.url(), /\/tasks$/);
+    assert.ok(await page.locator("#tab-panel-tasks .checklist-group").count() >= 2);
+    assert.ok(await page.locator("#tab-panel-tasks .waiting-on").count() > 0);
+    await noHorizontalScroll();
+    await shot("matter-tasks");
   });
 
   await check(`${label}: changing a key date re-dates tasks`, async () => {
@@ -150,10 +218,18 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: moving the stage runs the automation`, async () => {
-    await page.goto(base + `/#/matters/${demo.matters.m3}`);
+    await page.goto(base + `/#/matters/${demo.matters.m3}/tasks`);
     await page.waitForSelector(".stage-bar");
     await page.locator(".stage", { hasText: "Review" }).click();
-    await page.waitForSelector(".checklist-group:has-text('Contract review')");
+    await page.waitForSelector("#tab-panel-tasks .checklist-group:has-text('Contract review')");
+  });
+
+  await check(`${label}: checklists list`, async () => {
+    await page.goto(base + "/#/checklists");
+    await page.waitForSelector(".list-card");
+    assert.ok(await page.locator(".list-card").count() >= 6);
+    await noHorizontalScroll();
+    await shot("checklists");
   });
 
   await check(`${label}: checklist editor loads, edits and saves`, async () => {
@@ -178,10 +254,31 @@ for (const [label, viewport] of [
     await page.waitForSelector("#s-auto");
     for (const id of ["s-people", "s-clients", "s-areas", "s-dates", "s-closed", "s-auto"]) assert.equal(await page.locator("#" + id).count(), 1, id);
     await noHorizontalScroll();
+    await shot("settings");
   });
 
   await check(`${label}: no script errors`, async () => {
-    assert.deepEqual(errors, []);
+    assert.equal(errors.length, 0, errors.join(" | "));
+  });
+  await ctx.close();
+}
+
+// Sharp 2x screenshots for review.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  await page.addInitScript((id: number) => localStorage.setItem("lawdesk.me", String(id)), demo.users.jordan);
+  await check("final 2x screenshots", async () => {
+    for (const [name, url, sel] of [
+      ["home", "/#/home", ".home-page .agenda-item, .home-side .empty-state"],
+      ["matters", "/#/matters", ".matter-row"],
+      ["matter", `/#/matters/${demo.matters.m17}`, ".stage-bar"],
+    ]) {
+      await page.goto(base + url);
+      await page.waitForSelector(sel);
+      await page.waitForTimeout(150);
+      await page.screenshot({ path: shots + `final-${name}.png`, fullPage: true });
+    }
   });
   await ctx.close();
 }

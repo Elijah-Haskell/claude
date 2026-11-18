@@ -1,6 +1,8 @@
 // Tiny DOM helpers. All text goes in through textContent or attributes, never innerHTML,
 // so names and titles typed by users can't inject markup.
 
+import { icon } from "./ui/icons.js";
+
 /**
  * h("button.primary", { onclick, type: "button" }, "Save")
  * The tag may carry .classes and a #id. Attributes starting with "on" become listeners;
@@ -143,11 +145,12 @@ export function toast(message, opts = {}) {
   const lines = Array.isArray(message) ? message : [message];
   const t = h(
     "div.toast" + (opts.error ? ".error" : ""),
+    h("span.toast-icon", icon(opts.error ? "circle-alert" : opts.icon || "circle-check", { size: 16 })),
     h("div.toast-body", lines.map((l, i) => h(i === 0 ? "div.toast-main" : "div.toast-sub", l))),
     opts.action
       ? h("button.toast-action", { type: "button", onclick: () => (opts.action.run(), close()) }, opts.action.label)
       : null,
-    h("button.toast-close", { type: "button", "aria-label": "Dismiss", onclick: () => close() }, "×"),
+    h("button.toast-close", { type: "button", "aria-label": "Dismiss", onclick: () => close() }, icon("x", { size: 14 })),
   );
   const close = () => t.remove();
   toastBox.append(t);
@@ -156,14 +159,27 @@ export function toast(message, opts = {}) {
   return t;
 }
 
-/** Simple modal dialog built on <dialog>. Resolves when closed. */
-export function modal(title, body, { wide = false } = {}) {
+/**
+ * Modal dialog built on <dialog>. Returns the dialog; it removes itself when closed.
+ * opts: { wide, drawer (slides in from the right), subtitle }
+ */
+export function modal(title, body, { wide = false, drawer = false, subtitle = null } = {}) {
   const dlg = h(
-    "dialog.modal" + (wide ? ".wide" : ""),
+    "dialog.modal" + (wide ? ".wide" : "") + (drawer ? ".drawer" : ""),
     { "aria-label": title },
-    h("div.modal-head", h("h2", title), h("button.icon-btn", { type: "button", "aria-label": "Close", onclick: () => dlg.close() }, "×")),
+    h(
+      "div.modal-head",
+      h("div", h("h2", title), subtitle ? h("p.modal-sub", subtitle) : null),
+      h("button.icon-btn", { type: "button", "aria-label": "Close", onclick: () => dlg.close() }, icon("x", { size: 18 })),
+    ),
     body,
   );
+  dlg.addEventListener("click", (e) => {
+    // A click on the backdrop (outside the box) closes it.
+    if (e.target !== dlg) return;
+    const r = dlg.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dlg.close();
+  });
   document.body.append(dlg);
   dlg.addEventListener("close", () => dlg.remove());
   dlg.showModal();

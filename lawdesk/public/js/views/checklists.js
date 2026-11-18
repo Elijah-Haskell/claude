@@ -3,33 +3,61 @@
 import { h, select, toast, plural, slug } from "../dom.js";
 import { get, post, put, del } from "../api.js";
 import { state } from "../state.js";
+import { pageHeader, button, emptyState, breadcrumbs } from "../ui/components.js";
+import { icon } from "../ui/icons.js";
 
 const ruleDays = (n, business) => `${n} ${business ? "business " : ""}day${n === 1 ? "" : "s"}`;
 
 export async function checklistsView() {
   const lists = await get("/checklists");
+  const used = lists.reduce((n, l) => n + l.times_used, 0);
   return h(
-    "div.page",
-    h("div.page-head", h("h1", "Checklists"), h("a.btn.primary", { href: "#/checklists/new" }, "New checklist")),
-    h("p.muted", "A checklist is a set of tasks you add to a matter in one go: who does each step, when it's due, and what has to happen first."),
+    "div.page.checklists-page",
+    pageHeader({
+      title: "Checklists",
+      subtitle: "Reusable task lists you add to a matter in one go: who does each step, when it's due, and what has to happen first.",
+      actions: [button("New checklist", { href: "#/checklists/new", variant: "primary", icon: "plus" })],
+    }),
     lists.length
-      ? h(
-          "ul.card-list",
-          lists.map((l) =>
-            h(
-              "li",
+      ? [
+          h("p.result-count", `${plural(lists.length, "checklist")} · used ${plural(used, "time")} on matters`),
+          h(
+            "ul.card-list",
+            lists.map((l) =>
               h(
-                "a.card.list-card",
-                { href: `#/checklists/${l.id}` },
-                h("h2", l.name),
-                h("p.muted", [l.practice_area || "Any practice area", plural(l.items.length, "step"), l.times_used ? `used ${plural(l.times_used, "time")}` : "not used yet"].join(" · ")),
-                l.open_tasks ? h("p.small", `${plural(l.open_tasks, "open task")} on matters`) : null,
-                h("ol.mini-steps", l.items.slice(0, 5).map((i) => h("li", i.title)), l.items.length > 5 ? h("li.muted", `and ${l.items.length - 5} more`) : null),
+                "li",
+                h(
+                  "a.card.list-card",
+                  { href: `#/checklists/${l.id}` },
+                  h(
+                    "div.list-card-head",
+                    h("span.list-card-icon", icon("clipboard-list", { size: 18 })),
+                    h("div.list-card-titles", h("h2", l.name), h("p.list-card-area", l.practice_area || "Any practice area")),
+                    icon("chevron-right", { size: 16, class: "list-card-chev" }),
+                  ),
+                  l.description ? h("p.list-card-desc", l.description) : null,
+                  h(
+                    "ol.mini-steps",
+                    l.items.slice(0, 4).map((i) => h("li", h("span.mini-step-text", i.title), i.role ? h("span.mini-step-role.cap", i.role) : null)),
+                    l.items.length > 4 ? h("li.more-steps", `+ ${l.items.length - 4} more`) : null,
+                  ),
+                  h(
+                    "div.list-card-foot",
+                    h("span", icon("list-checks", { size: 14 }), plural(l.items.length, "step")),
+                    h("span", icon("briefcase", { size: 14 }), l.times_used ? `Used ${plural(l.times_used, "time")}` : "Not used yet"),
+                    l.open_tasks ? h("span.list-card-open", `${plural(l.open_tasks, "open task")}`) : null,
+                  ),
+                ),
               ),
             ),
           ),
-        )
-      : h("p.empty", "No checklists yet."),
+        ]
+      : emptyState({
+          icon: "clipboard-list",
+          title: "No checklists yet",
+          body: "Build a checklist once, then add it to any matter. Steps get people and due dates automatically.",
+          action: button("New checklist", { href: "#/checklists/new", variant: "primary", icon: "plus" }),
+        }),
   );
 }
 
@@ -137,7 +165,8 @@ export async function checklistEditView([idStr]) {
 
   function stepCard(s, i) {
     const ruleLine = h("p.rule-line", stepRule(s, steps));
-    const updateRule = () => (ruleLine.textContent = stepRule(s, steps));
+    ruleLine.prepend(icon("info", { size: 13 }));
+    const updateRule = () => ruleLine.replaceChildren(icon("info", { size: 13 }), stepRule(s, steps));
     const title = h("input.step-title", {
       value: s.title,
       placeholder: "What needs doing",
@@ -244,8 +273,8 @@ export async function checklistEditView([idStr]) {
         title,
         h(
           "div.step-tools",
-          h("button.icon-btn.up", { type: "button", "aria-label": `Move step ${i + 1} up`, disabled: i === 0, onclick: () => move(-1) }, "↑"),
-          h("button.icon-btn.down", { type: "button", "aria-label": `Move step ${i + 1} down`, disabled: i === steps.length - 1, onclick: () => move(1) }, "↓"),
+          h("button.icon-btn.up", { type: "button", "aria-label": `Move step ${i + 1} up`, title: "Move up", disabled: i === 0, onclick: () => move(-1) }, icon("arrow-up", { size: 16 })),
+          h("button.icon-btn.down", { type: "button", "aria-label": `Move step ${i + 1} down`, title: "Move down", disabled: i === steps.length - 1, onclick: () => move(1) }, icon("arrow-down", { size: 16 })),
           h(
             "button.icon-btn.danger",
             {
@@ -258,7 +287,7 @@ export async function checklistEditView([idStr]) {
                 draw();
               },
             },
-            "×",
+            icon("trash-2", { size: 16 }),
           ),
         ),
       ),
@@ -342,9 +371,10 @@ export async function checklistEditView([idStr]) {
       },
     },
     roleList,
-    h("a.back", { href: "#/checklists" }, "← Checklists"),
-    h("div.page-head", name),
-    h("div.filters", area, desc),
+    breadcrumbs([{ label: "Checklists", href: "#/checklists" }, { label: isNew ? "New checklist" : list.name }]),
+    h("div.page-head.editor-head", name),
+    h("div.card.editor-meta", h("label.field", h("span.field-label", "Practice area"), area), h("label.field.grow", h("span.field-label", "Description"), desc)),
+    h("div.section-title", h("h2", "Steps"), h("span.muted.small", "Each step becomes a task on the matter.")),
     err,
     stepsBox,
     h(
@@ -357,7 +387,8 @@ export async function checklistEditView([idStr]) {
           draw(ns.uid);
         },
       },
-      "+ Add step",
+      icon("plus", { size: 16 }),
+      "Add step",
     ),
     h(
       "div.save-bar",
