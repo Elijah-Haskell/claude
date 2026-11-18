@@ -7,6 +7,7 @@ import { state, today, users, prefs, loadMatters, loadSetup } from "../state.js"
 import { quickAdd, taskRow, effectLines, redraw } from "../tasks.js";
 import { upcomingCard } from "../cal.js";
 import { billingCard } from "../billing/matter-card.js";
+import { communicationsCard } from "./communications.js";
 
 export async function matterView([idStr]) {
   const id = Number(idStr);
@@ -389,6 +390,7 @@ export async function matterView([idStr]) {
       "div.matter-grid",
       h("div.matter-main", d.matter.status === "open" ? quickAdd({ matter: matterRow, onAdded: refresh }) : null, tasksBox),
       aside,
+      communicationsCard(id, { onChange: () => refresh().catch(() => {}) }),
       activityBox,
     ),
   );

@@ -14,6 +14,8 @@ import { SCHEMA as DOCUMENTS_SCHEMA } from "./documents/schema.ts";
 import { routes as calendarRoutes } from "./calendar/routes.ts";
 import { SCHEMA as CALENDAR_SCHEMA } from "./calendar/schema.ts";
 import { routes as reportsRoutes } from "./reports/routes.ts";
+import { routes as emailRoutes } from "./email/routes.ts";
+import { SCHEMA as EMAIL_SCHEMA } from "./email/schema.ts";
 
 export interface Module {
   name: string;
@@ -30,4 +32,5 @@ export const modules: Module[] = [
   { name: "documents", routes: documentsRoutes, schema: DOCUMENTS_SCHEMA },
   { name: "calendar", routes: calendarRoutes, schema: CALENDAR_SCHEMA },
   { name: "reports", routes: reportsRoutes },
+  { name: "email", routes: emailRoutes, schema: EMAIL_SCHEMA },
 ];

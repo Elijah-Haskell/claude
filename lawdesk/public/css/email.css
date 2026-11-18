@@ -1,0 +1,361 @@
+/* Email: the matter page's Communications card and Settings > Email.
+   Uses the app's tokens only (no colours of its own). */
+
+/* ----------------------------------------------------- matter: communications */
+
+.matter-grid > .comms {
+  grid-column: 1;
+  margin-top: 0;
+  min-width: 0;
+}
+.comms.dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: -6px;
+  background: var(--accent-soft);
+}
+.comms-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.comms-toolbar h2 {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.comms-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.comms-actions select {
+  width: auto;
+  max-width: 100%;
+}
+.comms-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.comms-entry {
+  border-top: 1px solid var(--border);
+}
+.comms-entry:first-child {
+  border-top: 0;
+}
+.comms-head {
+  display: grid;
+  grid-template-columns: 120px 130px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "kind when subject status"
+    "kind when who status";
+  gap: 2px 12px;
+  width: 100%;
+  padding: 9px 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.comms-head:hover {
+  background: var(--surface-2);
+}
+.comms-head:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.comms-kind {
+  grid-area: kind;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.comms-entry[data-kind="phone"] .comms-kind,
+.comms-entry[data-kind="meeting"] .comms-kind,
+.comms-entry[data-kind="note"] .comms-kind {
+  color: var(--gold);
+}
+.comms-when {
+  grid-area: when;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.comms-subject {
+  grid-area: subject;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comms-who {
+  grid-area: who;
+  font-size: 0.85rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comms-status {
+  grid-area: status;
+  align-self: center;
+}
+.tag.comms-status.bad,
+.tag.email-bad {
+  background: var(--late-soft);
+  color: var(--late);
+}
+.comms-body {
+  padding: 4px 4px 14px;
+}
+.comms-meta {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+}
+.comms-meta dt {
+  color: var(--muted);
+}
+.comms-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.comms-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--serif);
+  font-size: 0.98rem;
+  line-height: 1.55;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  max-height: 420px;
+  overflow: auto;
+}
+.comms-attach {
+  font-size: 0.88rem;
+}
+.comms-drop {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-align: center;
+}
+.comms-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.comms-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Compose */
+.comms-compose textarea,
+.comms-compose input[type="text"] {
+  width: 100%;
+}
+.comms-compose-body {
+  font-family: var(--serif);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.comms-to {
+  max-height: 220px;
+  overflow: auto;
+}
+.comms-attach-pick {
+  font-size: 0.9rem;
+}
+.comms-attach-pick summary {
+  cursor: pointer;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.form-row.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.form-row > label[hidden] {
+  display: none;
+}
+
+/* ----------------------------------------------------- settings: email */
+
+.email-settings h3 {
+  margin: 0 0 10px;
+}
+.email-block {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+.email-block:first-of-type {
+  border-top: 0;
+  padding-top: 4px;
+}
+.email-smtp {
+  display: grid;
+  gap: 12px;
+}
+.email-smtp[hidden] {
+  display: none;
+}
+.email-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.email-test-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.email-test {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+.email-test label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  flex: 1 1 240px;
+}
+.email-test-result {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.email-test-result:empty {
+  display: none;
+}
+.email-test-result.ok {
+  color: var(--good);
+}
+.email-test-result.bad {
+  color: var(--late);
+}
+.email-notices {
+  display: grid;
+  gap: 8px;
+}
+.email-digest-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+}
+.email-digest-line input[type="time"] {
+  width: auto;
+}
+.email-indent {
+  padding-left: 26px;
+}
+.email-templates li {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+.email-templates li:first-child {
+  border-top: 0;
+}
+.email-tpl-name {
+  font-weight: 500;
+}
+.email-tpl-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.email-tpl-actions {
+  display: flex;
+  gap: 6px;
+}
+.email-templates + .btn {
+  margin-top: 8px;
+}
+.email-outbox-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.email-outbox-head h3 {
+  margin: 0;
+}
+.email-outbox td {
+  overflow-wrap: anywhere;
+}
+.email-error {
+  margin-top: 2px;
+  max-width: 280px;
+}
+
+@media (max-width: 860px) {
+  .comms-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "kind status"
+      "subject subject"
+      "who who"
+      "when when";
+  }
+}
+@media (max-width: 640px) {
+  .form-row.two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .email-templates li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .email-outbox thead {
+    display: none;
+  }
+  .email-outbox tr {
+    display: grid;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+  }
+  .email-outbox td {
+    border: 0;
+    padding: 2px 0;
+  }
+}
+.tag.comms-status,
+.email-outbox .tag {
+  text-transform: none;
+}

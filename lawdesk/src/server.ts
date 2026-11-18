@@ -16,6 +16,7 @@ import { Engine, EngineError } from "./engine.ts";
 import { matchPath, type Ctx, type Route } from "./http.ts";
 import type { ISODate } from "./dates.ts";
 import { modules, type Module } from "./modules.ts";
+import { startEmailWorker } from "./email/worker.ts";
 
 const PUBLIC_DIR = resolve(fileURLToPath(new URL("../public", import.meta.url)));
 // Document uploads arrive as base64 JSON (25 MiB decoded), so the limit is about 34 MiB.
@@ -229,7 +230,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   server.listen(port, host, () => {
     console.log(`Lawdesk on http://localhost:${port}  (database: ${dbPath})`);
   });
-  const stop = () => server.close(() => process.exit(0));
+  // Sends queued email and notices once a minute. Not started by createServer, so tests drive it themselves.
+  const email = process.env.LAWDESK_EMAIL_WORKER === "0" ? null : startEmailWorker(db);
+  const stop = () => {
+    email?.stop();
+    server.close(() => process.exit(0));
+  };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 }
