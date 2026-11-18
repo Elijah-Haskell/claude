@@ -701,7 +701,10 @@ for (const [label, viewport] of [
     assert.ok(details.length > 0 && details.every((d) => /finished/i.test(d)), details.join(" / ").slice(0, 300));
     await page.goto(base + "/#/reports/matters");
     await page.waitForSelector(".report-page[data-report=matters] #rp-table tbody tr");
-    assert.equal(await page.locator("#rp-table tbody tr").count(), 5, "open matters");
+    // Earlier checks (and the desktop run, for the phone run) add matters, so count the open ones now.
+    const open = await page.evaluate(async () => (await fetch("/api/matters").then((x) => x.json())).length);
+    assert.ok(open > 0, "the demo has open matters");
+    assert.equal(await page.locator("#rp-table tbody tr").count(), open, "one row per open matter");
     await page.locator("#rp-table tbody tr a").first().click();
     await page.waitForSelector(".stage-bar");
     await noHorizontalScroll();

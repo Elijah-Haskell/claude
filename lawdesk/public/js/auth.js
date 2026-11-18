@@ -1,11 +1,10 @@
-// Who is signed in, the user menu in the header, and signing out.
+// Who is signed in, and signing out. (The user menu itself lives in ui/shell.js.)
 //
 // The app shell calls:
 //   checkSignIn()      -> the signed-in person, or null (and shows the sign-in screens)
-//   renderUserMenu()   -> the header's name button with "My account" and "Sign out"
 //   signOut()
 
-import { h, replace } from "./dom.js";
+import { replace } from "./dom.js";
 import { get, post } from "./api.js";
 import { state } from "./state.js";
 import { authScreen } from "./views/signin.js";
@@ -43,58 +42,5 @@ window.addEventListener("lawdesk:signed-out", () => {
   state.account = null;
   location.reload();
 });
-
-let openMenu = null;
-
-function closeMenu() {
-  if (!openMenu) return;
-  openMenu.menu.hidden = true;
-  openMenu.button.setAttribute("aria-expanded", "false");
-  openMenu = null;
-}
-
-document.addEventListener("click", (e) => {
-  if (openMenu && !openMenu.wrap.contains(e.target)) closeMenu();
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && openMenu) {
-    const b = openMenu.button;
-    closeMenu();
-    b.focus();
-  }
-});
-
-/** The signed-in person's name with a small menu. */
-export function renderUserMenu() {
-  const a = state.account;
-  if (!a) return h("span");
-  const menu = h(
-    "div.user-menu-list",
-    { role: "menu", hidden: true },
-    h("div.user-menu-who", h("strong", a.name), h("span.muted.small", a.email), h("span.muted.small", a.roleLabel)),
-    h("a.user-menu-item", { role: "menuitem", href: "#/account", onclick: () => closeMenu() }, "My account"),
-    h("button.user-menu-item", { type: "button", role: "menuitem", onclick: () => signOut() }, "Sign out"),
-  );
-  const button = h(
-    "button.user-menu-button",
-    {
-      type: "button",
-      "aria-haspopup": "menu",
-      "aria-expanded": "false",
-      onclick: (e) => {
-        e.stopPropagation();
-        if (openMenu) return closeMenu();
-        menu.hidden = false;
-        button.setAttribute("aria-expanded", "true");
-        openMenu = { wrap, menu, button };
-        menu.querySelector(".user-menu-item")?.focus();
-      },
-    },
-    h("span.user-menu-name", a.name),
-    h("span.user-menu-caret", { "aria-hidden": "true" }, "▾"),
-  );
-  const wrap = h("div.user-menu", button, menu);
-  return wrap;
-}
 
 export const isAdmin = () => state.account?.role === "admin";

@@ -21,7 +21,7 @@ export function addReportsDemo(db: DB, today: ISODate, demo: { users: Record<str
   let day = today;
   const b = new Billing(db, { today: () => day, now: () => new Date(day + "T16:00:00Z") });
   const { jordan, riley, sam } = demo.users;
-  const { m1, m2, m3 } = demo.matters; // m4 and m6 are left alone: the billing checks rely on their balances
+  const { m1, m2, m3, m15 } = demo.matters; // m4 and m6 are left alone: the billing checks rely on their balances
   // Billing settings and rates come from the seed; changing them here would break the billing checks.
 
   // Eleven months of monthly invoices on one hourly matter, mostly paid.
@@ -49,7 +49,8 @@ export function addReportsDemo(db: DB, today: ISODate, demo: { users: Record<str
 
   db.prepare(
     "INSERT INTO conflicts_checks (matter_id, run_by, run_at, terms, results, hit_count) VALUES (?,?,?,?,?,?)",
-  ).run(m2, sam, `${addDays(today, -4)}T15:00:00.000Z`, JSON.stringify([{ name: "Prairie Wind Holdings (demo)" }]), "[]", 1);
-  // A closed-out matter left untouched for six weeks, so the "quiet" list has an entry.
-  db.prepare("UPDATE activity SET at = ? WHERE matter_id = ?").run(`${addDays(today, -45)}T15:00:00.000Z`, m2);
+  ).run(m2, sam, `${addDays(today, -4)}T15:00:00.000Z`, JSON.stringify([{ name: "Prairie Wind Holdings" }]), "[]", 1);
+  // An open matter left untouched for six weeks, so the "quiet" list has an entry. It must be one the
+  // browser checks never change (they work on m1–m6 and m17), or its activity would become recent again.
+  db.prepare("UPDATE activity SET at = ? WHERE matter_id = ?").run(`${addDays(today, -45)}T15:00:00.000Z`, m15);
 }

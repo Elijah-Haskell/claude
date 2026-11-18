@@ -5,6 +5,10 @@
 import { h, replace, select, toast, modal, fmtDate, plural } from "../dom.js";
 import { get, post, put, patch } from "../api.js";
 import { state, today } from "../state.js";
+import { pageHeader, card, stat as kitStat, callout, button, emptyState, pill, segmented, field } from "../ui/components.js";
+import { dataTable } from "../ui/table.js";
+import { menu } from "../ui/popover.js";
+import { icon } from "../ui/icons.js";
 
 // ------------------------------------------------------------------ money
 
@@ -25,7 +29,23 @@ export function parseMoney(s) {
 
 const fail = (err) => toast(err.message, { error: true, ms: 12000 });
 const kindName = (a) => (a.kind === "iolta" ? "IOLTA" : "Non-IOLTA trust");
-const printLink = (path, label) => h("a.btn.small", { href: "/api" + path, target: "_blank", rel: "noopener" }, label);
+const printLink = (path, label, opts = {}) => button(label, { size: "sm", icon: "file-text", href: "/api" + path, target: "_blank", rel: "noopener", ...opts });
+const bankLine = (a) => `${a.bank_name}${a.account_last4 ? " ····" + a.account_last4 : ""}`;
+
+/** Page header with trust breadcrumbs; actions sit in div.trust-head-actions. */
+function trustHead({ crumbs = null, title, subtitle = null, actions = null, meta = null }) {
+  const el = pageHeader({
+    breadcrumbs: crumbs ? [{ label: "Trust accounts", href: "#/trust" }, ...crumbs] : null,
+    title,
+    subtitle,
+    meta,
+    actions: actions ? [h("div.trust-head-actions", actions)] : null,
+  });
+  el.querySelector(".breadcrumbs")?.classList.add("trust-crumb");
+  return el;
+}
+
+const moneyCol = (key, label, get, extra = {}) => ({ key, label, align: "right", className: "trust-n", sortable: false, render: (r) => (get(r) == null ? "" : money(get(r))), ...extra });
 const money = (c, cls = "") => h("span.trust-money" + cls, fmtMoney(c));
 
 function amountInput(label = "Amount") {
@@ -42,15 +62,20 @@ function dateInput(value = today()) {
   return h("input", { type: "date", value, required: true });
 }
 
+/** The "needs lawyer and accountant review" notice, with the rules it cites. */
 function reviewNotice() {
-  return h(
-    "div.trust-notice",
-    { role: "note" },
-    h("strong", "Review before real use. "),
-    "This trust ledger follows Kansas Rule of Professional Conduct 1.15 as read from the Kansas courts' published rule. It has not been checked against the Disciplinary Administrator's Trust Account Handbook. The responsible lawyer and an accountant must review it before it holds real client money. ",
-    h("a", { href: "/api/trust/rules/print", target: "_blank", rel: "noopener" }, "Rules this follows"),
-    ".",
-  );
+  const el = callout({
+    tone: "warning",
+    title: "Review before real use.",
+    body: [
+      " This trust ledger follows Kansas Rule of Professional Conduct 1.15 as read from the Kansas courts' published rule. It has not been checked against the Disciplinary Administrator's Trust Account Handbook. The responsible lawyer and an accountant must review it before it holds real client money. ",
+      h("a", { href: "/api/trust/rules/print", target: "_blank", rel: "noopener" }, "Rules this follows"),
+      ".",
+    ],
+  });
+  el.classList.add("trust-notice");
+  el.setAttribute("role", "note");
+  return el;
 }
 
 /** A form inside a modal: fields, an error line, Cancel / submit. */
@@ -92,22 +117,54 @@ function matterOptions(matters) {
 export async function trustView() {
   const accounts = await get("/trust/accounts");
   const page = h("div.page.trust");
-  const rows = accounts.map((a) =>
-    h(
-      "tr",
-      h("td", { "data-label": "Account" }, h("a", { href: `#/trust/accounts/${a.id}` }, a.name), h("div.muted.small", `${a.bank_name}${a.account_last4 ? " ····" + a.account_last4 : ""}`)),
-      h("td", { "data-label": "Type" }, kindName(a), a.closed_on ? h("span.tag", "Closed") : null),
-      h("td.n", { "data-label": "Balance" }, money(a.balance_cents)),
-      h("td.n", { "data-label": "Client ledgers" }, String(a.client_ledgers)),
-      h("td", { "data-label": "Last reconciled" }, a.last_reconciled ? `${a.last_reconciled.period} (signed ${fmtDate(a.last_reconciled.signed_on, today())})` : h("span.muted", "Not yet")),
-    ),
-  );
+  const newBtn = button("New trust account", { variant: "primary", icon: "plus", onclick: newAccountDialog });
+  const total = accounts.filter((a) => !a.closed_on).reduce((s, a) => s + a.balance_cents, 0);
   page.append(
-    h("div.page-head", h("h1", "Client trust accounts"), h("button.btn.primary", { type: "button", onclick: newAccountDialog }, "New trust account")),
+    pageHeader({
+      title: "Client trust accounts",
+      subtitle: "Money held for clients, kept apart from the firm's own, with a ledger for every client matter.",
+      actions: [newBtn],
+    }),
     reviewNotice(),
-    accounts.length
-      ? h("div.trust-scroll", h("table.trust-table", h("thead", h("tr", h("th", "Account"), h("th", "Type"), h("th.n", "Balance"), h("th.n", "Client ledgers"), h("th", "Last reconciled"))), h("tbody", rows)))
-      : h("div.empty-big", h("p", "No trust accounts yet."), h("p", "Set up the firm's IOLTA account to start recording client money.")),
+    accounts.length > 1 ? h("div.stats.trust-stats", kitStat({ label: "Held in all open accounts", value: fmtMoney(total), icon: "trust" })) : null,
+    card({
+      flush: true,
+      className: "table-card",
+      body: dataTable({
+        columns: [
+          {
+            key: "name",
+            label: "Account",
+            primary: true,
+            sort: (a) => a.name,
+            render: (a) => h("div.cell-stack", h("a.cell-title", { href: `#/trust/accounts/${a.id}` }, a.name), h("span.cell-sub", bankLine(a))),
+          },
+          { key: "kind", label: "Type", sort: (a) => a.kind, render: (a) => h("span.trust-type", kindName(a), a.closed_on ? pill("Closed", "neutral") : null) },
+          { key: "balance", label: "Balance", align: "right", className: "trust-n", sort: (a) => a.balance_cents, render: (a) => money(a.balance_cents) },
+          { key: "ledgers", label: "Client ledgers", align: "right", sort: (a) => a.client_ledgers, render: (a) => String(a.client_ledgers) },
+          {
+            key: "rec",
+            label: "Last reconciled",
+            sort: (a) => a.last_reconciled?.period || "",
+            render: (a) =>
+              a.last_reconciled
+                ? h("div.cell-stack", h("span", a.last_reconciled.period), h("span.cell-sub", `Signed ${fmtDate(a.last_reconciled.signed_on, today())}`))
+                : pill("Not yet", "warning"),
+          },
+        ],
+        rows: accounts,
+        rowHref: (a) => `#/trust/accounts/${a.id}`,
+        toolbar: false,
+        tableClass: "trust-table",
+        label: "Trust accounts",
+        noun: ["account", "accounts"],
+        empty: emptyState({
+          icon: "trust",
+          title: "No trust accounts yet",
+          body: "Set up the firm's IOLTA account with New trust account to start recording client money.",
+        }),
+      }),
+    }),
   );
   return page;
 }
@@ -175,43 +232,65 @@ export async function trustAccountView([id]) {
   function draw() {
     const { account: a } = data;
     const open = !a.closed_on;
-    const actions = open
+    const more = open
       ? [
-          ["Record deposit", () => depositDialog(data, reload)],
-          ["Record payment", () => paymentDialog(data, reload)],
-          ["Earned fees to operating", () => feeDialog(data, reload)],
-          ["Transfer between clients", () => transferDialog(data, reload)],
-          ["Bank charge", () => bankFeeDialog(data, reload)],
-          ["Firm funds", () => firmFundsDialog(data, reload)],
-          a.kind === "non_iolta" ? ["Interest", () => interestDialog(data, reload)] : null,
+          { label: "Earned fees to operating", icon: "arrow-right", onSelect: () => feeDialog(data, reload) },
+          { label: "Transfer between clients", icon: "arrow-up-down", onSelect: () => transferDialog(data, reload) },
+          "-",
+          { label: "Bank charge", icon: "receipt", onSelect: () => bankFeeDialog(data, reload) },
+          { label: "Firm funds for bank charges", icon: "wallet", onSelect: () => firmFundsDialog(data, reload) },
+          a.kind === "non_iolta" ? { label: "Interest", icon: "plus", onSelect: () => interestDialog(data, reload) } : null,
         ].filter(Boolean)
       : [];
-    replace(page,
-      h(
-        "div.page-head",
-        h("div", h("p.trust-crumb", h("a", { href: "#/trust" }, "Trust accounts")), h("h1", a.name), h("p.sub.muted", `${kindName(a)} · ${a.bank_name}${a.account_last4 ? " ····" + a.account_last4 : ""}${a.closed_on ? ` · closed ${a.closed_on}` : ""}`)),
-        h("div.trust-head-actions", h("a.btn", { href: `#/trust/accounts/${a.id}/reconcile` }, "Reconcile a month"), h("a.btn", { href: `#/trust/accounts/${a.id}/reports` }, "Reports"), h("button.btn", { type: "button", onclick: () => settingsDialog(a, reload) }, "Account settings")),
-      ),
+    const actions = open
+      ? h(
+          "div.trust-actions",
+          button("Record deposit", { variant: "primary", icon: "plus", onclick: () => depositDialog(data, reload) }),
+          button("Record payment", { icon: "arrow-right", onclick: () => paymentDialog(data, reload) }),
+          button("More entries", { iconRight: "chevron-down", "aria-haspopup": "menu", onclick: (e) => menu(e.currentTarget, more, "More trust entries") }),
+        )
+      : null;
+    const limitHint = a.firm_funds_limit_cents == null ? "No limit set" : `Limit ${fmtMoney(a.firm_funds_limit_cents)}`;
+    const uncleared = a.balance_cents - a.cleared_balance_cents;
+    replace(
+      page,
+      trustHead({
+        crumbs: [{ label: a.name }],
+        title: a.name,
+        meta: [h("span", kindName(a)), h("span", bankLine(a)), a.closed_on ? pill(`Closed ${fmtDate(a.closed_on, today())}`, "neutral") : pill("Open", "info")],
+        actions: [
+          button("Reconcile a month", { icon: "circle-check", href: `#/trust/accounts/${a.id}/reconcile` }),
+          button("Reports", { icon: "reports", href: `#/trust/accounts/${a.id}/reports` }),
+          button("Account settings", { icon: "settings", variant: "ghost", onclick: () => settingsDialog(a, reload) }),
+        ],
+      }),
       h(
         "div.stats.trust-stats",
-        stat("Balance per books", a.balance_cents),
-        stat("Cleared at the bank", a.cleared_balance_cents),
-        stat("Firm funds for bank charges", a.firm_balance_cents, a.firm_funds_limit_cents == null ? "No limit set" : `Limit ${fmtMoney(a.firm_funds_limit_cents)}`),
-        h("div.stat", h("span.stat-n", a.locked_through ? fmtDate(a.locked_through, today()) : "—"), h("span.stat-label", "Reconciled and locked through")),
+        kitStat({ label: "Balance per books", value: fmtMoney(a.balance_cents), icon: "trust" }),
+        kitStat({ label: "Cleared at the bank", value: fmtMoney(a.cleared_balance_cents), icon: "landmark", hint: uncleared ? `${fmtMoney(uncleared)} not cleared yet` : "Everything has cleared" }),
+        kitStat({ label: "Firm funds for bank charges", value: fmtMoney(a.firm_balance_cents), icon: "wallet", hint: limitHint }),
+        kitStat({
+          label: "Reconciled and locked through",
+          value: a.locked_through ? fmtDate(a.locked_through, today()) : "Not yet",
+          icon: "lock",
+          tone: a.locked_through ? null : "warning",
+          hint: a.locked_through ? null : "No month signed off yet",
+        }),
       ),
-      actions.length ? h("div.trust-actions", actions.map(([label, fn]) => h("button.btn" + (label === "Record deposit" ? ".primary" : ""), { type: "button", onclick: fn }, label))) : null,
       h(
-        "div.filters",
-        h(
-          "div.segmented",
-          { role: "group", "aria-label": "Show" },
+        "div.trust-toolbar",
+        segmented(
           [
-            ["register", "Register"],
-            ["ledgers", "Client ledgers"],
-          ].map(([k, label]) => h("button", { type: "button", "aria-pressed": String(tab === k), onclick: () => ((tab = k), draw()) }, label)),
+            { value: "register", label: "Register", count: data.journal.length },
+            { value: "ledgers", label: "Client ledgers", count: data.ledgers.length },
+          ],
+          tab,
+          (v) => ((tab = v), draw()),
+          { label: "Show" },
         ),
+        actions,
       ),
-      tab === "register" ? register(data, reload) : ledgerList(data),
+      card({ flush: true, className: "table-card", body: tab === "register" ? register(data, reload) : ledgerList(data) }),
     );
   }
 
@@ -219,37 +298,42 @@ export async function trustAccountView([id]) {
   return page;
 }
 
-function stat(label, cents, sub) {
-  return h("div.stat", h("span.stat-n", fmtMoney(cents)), h("span.stat-label", label), sub ? h("span.muted.small", sub) : null);
-}
+/** Date cell with the entry number underneath. */
+const dateCell = (r) => h("div.cell-stack", h("span.nowrap", fmtDate(r.date, today())), h("span.cell-sub", `Entry ${r.id}`));
 
 function register({ account: a, journal }, reload) {
-  if (!journal.length) return h("p.empty", "No entries yet. Record the first deposit to start the register.");
-  const rows = [...journal].reverse().map((r) => {
-    const reversed = r.reversed_by_id != null;
-    const locked = a.locked_through && r.date <= a.locked_through;
-    const who = r.lines.length === 1 ? r.lines[0].label : r.lines.map((l) => `${l.label} ${fmtMoney(l.amount_cents)}`).join("; ");
-    return h(
-      "tr" + (reversed || r.kind === "reversal" ? ".trust-reversed" : ""),
-      h("td", { "data-label": "Date" }, fmtDate(r.date, today()), h("div.muted.small", `Entry ${r.id}`)),
-      h("td", { "data-label": "Type" }, r.kind_label, reversed ? h("div.small.muted", `Reversed by entry ${r.reversed_by_id}`) : null),
-      h("td", { "data-label": "Ledger" }, who),
-      h("td", { "data-label": "Details" }, r.description || "—"),
-      h("td", { "data-label": "Bank" }, clearedCell(r, locked, reload)),
-      h("td.n", { "data-label": "In" }, r.amount_cents > 0 ? money(r.amount_cents) : ""),
-      h("td.n", { "data-label": "Out" }, r.amount_cents < 0 ? money(-r.amount_cents) : ""),
-      h("td.n", { "data-label": "Balance" }, money(r.balance_cents)),
-      h("td", r.kind !== "reversal" && !reversed && !a.closed_on ? h("button.btn.small", { type: "button", onclick: () => reverseDialog(r, reload) }, "Reverse") : null),
-    );
+  const who = (r) => (r.lines.length === 1 ? r.lines[0].label : r.lines.map((l) => `${l.label} ${fmtMoney(l.amount_cents)}`).join("; "));
+  return dataTable({
+    columns: [
+      { key: "date", label: "Date", className: "nowrap", render: dateCell },
+      {
+        key: "type",
+        label: "Type",
+        primary: true,
+        render: (r) => h("div.cell-stack", h("span.trust-kind", r.kind_label), r.reversed_by_id != null ? h("span.cell-sub", `Reversed by entry ${r.reversed_by_id}`) : null),
+      },
+      { key: "ledger", label: "Client ledger", render: who },
+      { key: "details", label: "Details", render: (r) => r.description || h("span.faint", "—") },
+      { key: "bank", label: "Bank", render: (r) => clearedCell(r, a.locked_through && r.date <= a.locked_through, reload) },
+      moneyCol("in", "In", (r) => (r.amount_cents > 0 ? r.amount_cents : null)),
+      moneyCol("out", "Out", (r) => (r.amount_cents < 0 ? -r.amount_cents : null)),
+      moneyCol("balance", "Balance", (r) => r.balance_cents, { className: "trust-n trust-bal" }),
+      {
+        key: "actions",
+        label: "",
+        phoneLabel: "",
+        render: (r) => (r.kind !== "reversal" && r.reversed_by_id == null && !a.closed_on ? button("Reverse", { size: "sm", variant: "ghost", icon: "rotate-ccw", onclick: () => reverseDialog(r, reload) }) : null),
+      },
+    ],
+    rows: [...journal].reverse(),
+    rowClass: (r) => (r.reversed_by_id != null || r.kind === "reversal" ? "trust-reversed" : ""),
+    sortable: false,
+    search: { placeholder: "Search entries", text: (r) => [r.kind_label, r.description, who(r), String(r.id), fmtMoney(Math.abs(r.amount_cents))] },
+    tableClass: "trust-table trust-register",
+    label: "Trust register",
+    noun: ["entry", "entries"],
+    empty: emptyState({ icon: "trust", title: "No entries yet", body: "Record the first deposit to start the register.", compact: true }),
   });
-  return h(
-    "div.trust-scroll",
-    h(
-      "table.trust-table.trust-register",
-      h("thead", h("tr", h("th", "Date"), h("th", "Type"), h("th", "Client ledger"), h("th", "Details"), h("th", "Bank"), h("th.n", "In"), h("th.n", "Out"), h("th.n", "Balance"), h("th", h("span.sr-only", "Actions")))),
-      h("tbody", rows),
-    ),
-  );
 }
 
 function clearedCell(r, locked, reload) {
@@ -257,11 +341,11 @@ function clearedCell(r, locked, reload) {
   if (r.cleared_on) {
     return h(
       "span.trust-cleared",
-      `Cleared ${fmtDate(r.cleared_on, today())}`,
-      locked || (r.kind === "bank_fee" || r.kind === "interest") ? null : h("button.link-btn", { type: "button", onclick: () => setCleared(r.id, null, reload) }, "Undo"),
+      pill(`Cleared ${fmtDate(r.cleared_on, today())}`, "success"),
+      locked || r.kind === "bank_fee" || r.kind === "interest" ? null : h("button.link-btn", { type: "button", onclick: () => setCleared(r.id, null, reload) }, "Undo"),
     );
   }
-  return h("span.trust-uncleared", "Not cleared ", h("button.btn.small", { type: "button", onclick: () => clearDialog(r, reload) }, "Mark cleared"));
+  return h("span.trust-uncleared", pill("Not cleared", "warning"), h("button.link-btn", { type: "button", onclick: () => clearDialog(r, reload) }, "Mark cleared"));
 }
 
 async function setCleared(id, clearedOn, reload) {
@@ -284,27 +368,29 @@ function clearDialog(r, reload) {
 }
 
 function ledgerList({ ledgers }) {
-  if (!ledgers.length) return h("p.empty", "No ledgers yet.");
-  return h(
-    "div.trust-scroll",
-    h(
-      "table.trust-table",
-      h("thead", h("tr", h("th", "Client and matter"), h("th.n", "Balance"), h("th.n", "On hold"), h("th.n", "Available to pay out"), h("th", "Last activity"))),
-      h(
-        "tbody",
-        ledgers.map((l) =>
-          h(
-            "tr",
-            h("td", { "data-label": "Ledger" }, h("a", { href: `#/trust/ledgers/${l.id}` }, l.label), l.matter_status === "closed" ? h("span.tag", "Matter closed") : null),
-            h("td.n", { "data-label": "Balance" }, money(l.balance_cents)),
-            h("td.n", { "data-label": "On hold" }, l.held_cents ? money(l.held_cents) : "—"),
-            h("td.n", { "data-label": "Available" }, money(l.available_cents)),
-            h("td", { "data-label": "Last activity" }, l.last_activity ? fmtDate(l.last_activity, today()) : "—"),
-          ),
-        ),
-      ),
-    ),
-  );
+  return dataTable({
+    columns: [
+      {
+        key: "label",
+        label: "Client and matter",
+        primary: true,
+        sort: (l) => l.label,
+        render: (l) => h("div.cell-stack", h("a.cell-title", { href: `#/trust/ledgers/${l.id}` }, l.label), l.matter_status === "closed" ? h("span.cell-sub", pill("Matter closed", "neutral")) : null),
+      },
+      moneyCol("balance", "Balance", (l) => l.balance_cents, { sortable: true, sort: (l) => l.balance_cents }),
+      { key: "held", label: "On hold", align: "right", className: "trust-n", sort: (l) => l.held_cents, render: (l) => (l.held_cents ? money(l.held_cents) : h("span.faint", "—")) },
+      moneyCol("available", "Available to pay out", (l) => l.available_cents, { sortable: true, sort: (l) => l.available_cents, phoneLabel: "Available" }),
+      { key: "last", label: "Last activity", className: "nowrap", sort: (l) => l.last_activity || "", render: (l) => (l.last_activity ? fmtDate(l.last_activity, today()) : h("span.faint", "—")) },
+    ],
+    rows: ledgers,
+    rowHref: (l) => `#/trust/ledgers/${l.id}`,
+    search: ledgers.length > 8 ? { placeholder: "Search clients and matters", text: (l) => [l.label] } : null,
+    toolbar: ledgers.length > 8,
+    tableClass: "trust-table",
+    label: "Client ledgers",
+    noun: ["ledger", "ledgers"],
+    empty: emptyState({ icon: "trust", title: "No ledgers yet", body: "A client ledger starts with the first deposit for that matter.", compact: true }),
+  });
 }
 
 // ------------------------------------------------------------------- forms
@@ -526,46 +612,67 @@ export async function trustLedgerView([id]) {
     const l = await get(`/trust/ledgers/${id}`);
     const holds = l.holds.map((x) =>
       h(
-        "li",
-        h("span", `${fmtMoney(x.amount_cents)} held since ${fmtDate(x.placed_on, today())}: ${x.reason}`),
-        x.released_on ? h("span.muted.small", ` Released ${fmtDate(x.released_on, today())}: ${x.release_reason}`) : h("button.btn.small", { type: "button", onclick: () => releaseDialog(x, reload) }, "Release"),
+        "li.trust-hold",
+        h(
+          "div.trust-hold-text",
+          h("div", h("strong", fmtMoney(x.amount_cents)), ` held since ${fmtDate(x.placed_on, today())}`),
+          h("div.trust-hold-why", x.reason),
+          x.released_on ? h("div.trust-hold-why", `Released ${fmtDate(x.released_on, today())}: ${x.release_reason}`) : null,
+        ),
+        x.released_on ? pill("Released", "neutral") : button("Release", { size: "sm", onclick: () => releaseDialog(x, reload) }),
       ),
     );
-    replace(page,
+    replace(
+      page,
+      trustHead({
+        crumbs: [{ label: l.account.name, href: `#/trust/accounts/${l.account.id}` }, { label: l.label }],
+        title: l.label,
+        subtitle: l.retention.note,
+        actions: [
+          printLink(`/trust/ledgers/${l.id}/print`, "Print ledger statement", { size: "md" }),
+          l.kind === "client" ? button("Hold disputed funds", { icon: "hourglass", onclick: () => holdDialog(l, reload) }) : null,
+        ],
+      }),
       h(
-        "div.page-head",
-        h("div", h("p.trust-crumb", h("a", { href: "#/trust" }, "Trust accounts"), " › ", h("a", { href: `#/trust/accounts/${l.account.id}` }, l.account.name)), h("h1", l.label), h("p.sub.muted", l.retention.note)),
-        h("div.trust-head-actions", printLink(`/trust/ledgers/${l.id}/print`, "Print ledger statement"), l.kind === "client" ? h("button.btn", { type: "button", onclick: () => holdDialog(l, reload) }, "Hold disputed funds") : null),
+        "div.stats.trust-stats",
+        kitStat({ label: "Balance", value: fmtMoney(l.balance_cents), icon: "trust" }),
+        kitStat({ label: "Cleared", value: fmtMoney(l.cleared_cents), icon: "circle-check" }),
+        kitStat({ label: "On hold as disputed", value: fmtMoney(l.held_cents), icon: "hourglass", tone: l.held_cents ? "warning" : null }),
+        kitStat({ label: "Available to pay out", value: fmtMoney(l.available_cents), icon: "wallet" }),
       ),
-      h("div.stats.trust-stats", stat("Balance", l.balance_cents), stat("Cleared", l.cleared_cents), stat("On hold as disputed", l.held_cents), stat("Available to pay out", l.available_cents)),
-      l.holds.length ? h("section.card", h("h2", "Holds on disputed funds"), h("ul.plain.trust-holds", holds), h("p.muted.small", "KRPC 1.15(d)(1)(ii): the disputed portion shall not be withdrawn until the dispute is finally resolved.")) : null,
-      h(
-        "section.card",
-        h("h2", "Ledger"),
-        l.entries.length
-          ? h(
-              "div.trust-scroll",
-              h(
-                "table.trust-table",
-                h("thead", h("tr", h("th", "Date"), h("th", "Type"), h("th", "Details"), h("th.n", "In"), h("th.n", "Out"), h("th.n", "Balance"))),
-                h(
-                  "tbody",
-                  [...l.entries].reverse().map((r) =>
-                    h(
-                      "tr" + (r.kind === "reversal" ? ".trust-reversed" : ""),
-                      h("td", { "data-label": "Date" }, fmtDate(r.date, today()), h("div.muted.small", `Entry ${r.id}`)),
-                      h("td", { "data-label": "Type" }, r.kind_label),
-                      h("td", { "data-label": "Details" }, r.description || "—"),
-                      h("td.n", { "data-label": "In" }, r.amount_cents > 0 ? money(r.amount_cents) : ""),
-                      h("td.n", { "data-label": "Out" }, r.amount_cents < 0 ? money(-r.amount_cents) : ""),
-                      h("td.n", { "data-label": "Balance" }, money(r.balance_cents)),
-                    ),
-                  ),
-                ),
-              ),
-            )
-          : h("p.empty", "No activity."),
-      ),
+      l.holds.length
+        ? card({
+            title: "Holds on disputed funds",
+            icon: "hourglass",
+            body: h("ul.plain.trust-holds", holds),
+            footer: "KRPC 1.15(d)(1)(ii): the disputed portion shall not be withdrawn until the dispute is finally resolved.",
+            className: "trust-gap",
+          })
+        : null,
+      card({
+        title: "Ledger",
+        icon: "list-checks",
+        flush: true,
+        className: "table-card",
+        body: dataTable({
+          columns: [
+            { key: "date", label: "Date", className: "nowrap", render: dateCell },
+            { key: "type", label: "Type", primary: true, render: (r) => r.kind_label },
+            { key: "details", label: "Details", render: (r) => r.description || h("span.faint", "—") },
+            moneyCol("in", "In", (r) => (r.amount_cents > 0 ? r.amount_cents : null)),
+            moneyCol("out", "Out", (r) => (r.amount_cents < 0 ? -r.amount_cents : null)),
+            moneyCol("balance", "Balance", (r) => r.balance_cents, { className: "trust-n trust-bal" }),
+          ],
+          rows: [...l.entries].reverse(),
+          rowClass: (r) => (r.kind === "reversal" ? "trust-reversed" : ""),
+          sortable: false,
+          toolbar: false,
+          tableClass: "trust-table",
+          label: "Ledger entries",
+          noun: ["entry", "entries"],
+          empty: emptyState({ icon: "trust", title: "No activity", body: "Deposits, payments and transfers for this matter appear here.", compact: true }),
+        }),
+      }),
     );
   }
   const reload = () => load().catch(fail);
@@ -593,6 +700,8 @@ function releaseDialog(x, reload) {
 }
 
 // ---------------------------------------------------- monthly reconciliation
+
+const stepTitle = (n, text) => [h("span.trust-step", { "aria-hidden": "true" }, String(n)), h("span.visually-hidden", `Step ${n}: `), text];
 
 function lastMonth(t) {
   const [y, m] = t.split("-").map(Number);
@@ -644,22 +753,14 @@ export async function trustReconcileView([id, periodArg]) {
           }
         },
       });
-      return h(
-        "tr",
-        h("td", cb),
-        h("td", { "data-label": "Date" }, fmtDate(t.date, today()), h("div.muted.small", `Entry ${t.id}`)),
-        h("td", { "data-label": "Type" }, t.kind_label),
-        h("td", { "data-label": "Details" }, t.description || "—"),
-        h("td.n", { "data-label": "Amount" }, money(t.amount_cents)),
-      );
+      return cb;
     };
-    const col = (title, cents, rows) => h("div.trust-col", h("h3", title), rows, h("div.trust-col-total", money(cents)));
+    const col = (ic, title, cents, rows) => h("div.trust-col", h("h3", icon(ic, { size: 16 }), title), h("div.trust-col-lines", rows), h("div.trust-col-total", h("span", "Total"), money(cents)));
     const line = (label, c) => h("div.trust-line", h("span", label), money(c));
     const diff = (label, c) => h("div.trust-line" + (c ? ".trust-bad" : ".trust-ok"), h("span", label), money(c));
-    const signBtn = h(
-      "button.btn.primary",
-      {
-        type: "button",
+    const signBtn = button("Sign off and lock", {
+        variant: "primary",
+        icon: "lock",
         disabled: !p.balanced || signed,
         onclick: async () => {
           const me = state.setup?.users.find((u) => u.id === state.me)?.name ?? "the selected user";
@@ -673,60 +774,91 @@ export async function trustReconcileView([id, periodArg]) {
             fail(err);
           }
         },
-      },
-      "Sign off and lock",
-    );
-    replace(body,
+      });
+    const verdict = callout({
+      tone: p.balanced ? "success" : "danger",
+      title: p.balanced ? "Balanced." : "Does not balance.",
+      body: p.balanced ? " All three agree to the cent." : " " + (p.problems.join(" ") || "Check the entries ticked above and the statement balance."),
+    });
+    verdict.classList.add("trust-verdict", p.balanced ? "trust-ok" : "trust-bad");
+    verdict.setAttribute("role", "status");
+    replace(
+      body,
       signed
-        ? h("div.trust-notice.trust-ok-box", `Signed by ${r.saved.signed_by_name} on ${fmtDate(r.saved.signed_on, today())}. This month is locked.`, " ", printLink(`/trust/accounts/${id}/reconciliations/${period}/print`, "Print report"))
+        ? callout({
+            tone: "success",
+            title: `Signed by ${r.saved.signed_by_name} on ${fmtDate(r.saved.signed_on, today())}.`,
+            body: " This month is locked.",
+            action: printLink(`/trust/accounts/${id}/reconciliations/${period}/print`, "Print report"),
+          })
         : r.unsignedBefore
-          ? h("div.trust-notice", `The ${r.unsignedBefore} reconciliation hasn't been signed yet. Months are signed in order.`, " ", h("button.link-btn", { type: "button", onclick: () => go(r.unsignedBefore) }, `Go to ${r.unsignedBefore}`))
+          ? callout({
+              tone: "warning",
+              title: `The ${r.unsignedBefore} reconciliation hasn't been signed yet.`,
+              body: " Months are signed in order.",
+              action: button(`Go to ${r.unsignedBefore}`, { size: "sm", onclick: () => go(r.unsignedBefore) }),
+            })
           : null,
-      h(
-        "section.card",
-        h("h2", "Step 2 · Tick what cleared the bank"),
-        h("p.muted.small", `Tick each entry that appears on the ${period} statement. Anything left unticked is listed as outstanding.`),
-        items.length
-          ? h("div.trust-scroll", h("table.trust-table", h("thead", h("tr", h("th", "Cleared"), h("th", "Date"), h("th", "Type"), h("th", "Details"), h("th.n", "Amount"))), h("tbody", items.map(tick))))
-          : h("p.empty", "No entries through this month."),
-      ),
-      h(
-        "section.card",
-        h("h2", "Step 3 · Compare the three balances"),
-        statementCents == null ? h("p.muted", "Enter the statement's ending balance in step 1 to compare.") : null,
-        h(
-          "div.trust-three",
-          col("Bank", p.adjusted_bank_cents, [line("Statement ending balance", p.statement_balance_cents), line("Plus deposits in transit", p.deposits_in_transit_cents), line("Less outstanding checks and payments", -p.outstanding_payments_cents)]),
-          col("Trust journal", p.journal_cents, [line(`Balance at ${fmtDate(end, today())}`, p.journal_cents)]),
-          col("Client ledgers", p.ledgers_cents, p.ledgers.map((g) => line(g.label, g.balance_cents))),
-        ),
-        h("div.trust-diffs", diff("Bank minus journal", p.bank_vs_journal_cents), diff("Journal minus ledgers", p.journal_vs_ledgers_cents)),
-        h("p.trust-verdict" + (p.balanced ? ".trust-ok" : ".trust-bad"), { role: "status" }, p.balanced ? "Balanced: all three agree to the cent." : p.problems.join(" ") || "Does not balance."),
-        signed ? null : h("label", "Notes (optional)", notes),
-        signed
+      card({
+        title: stepTitle(2, "Tick what cleared the bank"),
+        subtitle: `Tick each entry that appears on the ${period} statement. Anything left unticked is listed as outstanding.`,
+        flush: true,
+        className: "table-card",
+        body: dataTable({
+          columns: [
+            { key: "cleared", label: "Cleared", phoneLabel: "Cleared", render: tick, className: "trust-tick" },
+            { key: "date", label: "Date", className: "nowrap", render: dateCell },
+            { key: "type", label: "Type", primary: true, render: (t) => t.kind_label },
+            { key: "details", label: "Details", render: (t) => t.description || h("span.faint", "—") },
+            moneyCol("amount", "Amount", (t) => t.amount_cents),
+          ],
+          rows: items,
+          sortable: false,
+          toolbar: false,
+          pageSize: 500,
+          tableClass: "trust-table",
+          label: "Entries to tick",
+          noun: ["entry", "entries"],
+          empty: emptyState({ icon: "circle-check", title: "No entries through this month", compact: true }),
+        }),
+      }),
+      card({
+        title: stepTitle(3, "Compare the three balances"),
+        subtitle: statementCents == null ? "Enter the statement's ending balance in step 1 to compare." : `As of ${fmtDate(end, today())}.`,
+        body: [
+          h(
+            "div.trust-three",
+            col("landmark", "Bank", p.adjusted_bank_cents, [
+              line("Statement ending balance", p.statement_balance_cents),
+              line("Plus deposits in transit", p.deposits_in_transit_cents),
+              line("Less outstanding checks and payments", -p.outstanding_payments_cents),
+            ]),
+            col("file-text", "Trust journal", p.journal_cents, [line(`Balance at ${fmtDate(end, today())}`, p.journal_cents)]),
+            col("users", "Client ledgers", p.ledgers_cents, p.ledgers.length ? p.ledgers.map((g) => line(g.label, g.balance_cents)) : [h("div.trust-line.muted", "No client money held")]),
+          ),
+          h("div.trust-diffs", diff("Bank minus journal", p.bank_vs_journal_cents), diff("Journal minus ledgers", p.journal_vs_ledgers_cents)),
+          verdict,
+          signed ? null : h("div.form-grid.trust-notes", field("Notes", notes, { optional: true })),
+        ],
+        footer: signed
           ? null
           : h(
-              "div.form-actions",
-              h(
-                "button.btn",
-                {
-                  type: "button",
-                  disabled: statementCents == null,
-                  onclick: async () => {
-                    try {
-                      await put(`/trust/accounts/${id}/reconcile/${period}`, { statementBalanceCents: statementCents, notes: notes.value });
-                      toast("Draft saved");
-                      reload();
-                    } catch (err) {
-                      fail(err);
-                    }
-                  },
+              "div.trust-recon-actions",
+              button("Save draft", {
+                disabled: statementCents == null,
+                onclick: async () => {
+                  try {
+                    await put(`/trust/accounts/${id}/reconcile/${period}`, { statementBalanceCents: statementCents, notes: notes.value });
+                    toast("Draft saved");
+                    reload();
+                  } catch (err) {
+                    fail(err);
+                  }
                 },
-                "Save draft",
-              ),
+              }),
               signBtn,
             ),
-      ),
+      }),
     );
   }
 
@@ -749,8 +881,17 @@ export async function trustReconcileView([id, periodArg]) {
   });
 
   page.append(
-    h("div.page-head", h("div", h("p.trust-crumb", h("a", { href: "#/trust" }, "Trust accounts"), " › ", h("a", { href: `#/trust/accounts/${id}` }, account.name)), h("h1", "Monthly three-way reconciliation"), h("p.sub.muted", "The bank statement, the trust journal and the total of the client ledgers must agree to the cent."))),
-    h("section.card", h("h2", "Step 1 · Month and bank statement"), h("div.form-row.trust-step1", h("label", "Month", monthIn), h("label", "Statement ending balance", stmtIn), h("div.trust-history-link", printLink(`/trust/accounts/${id}/reconciliations/print`, "Reconciliation history")))),
+    trustHead({
+      crumbs: [{ label: account.name, href: `#/trust/accounts/${id}` }, { label: "Reconcile" }],
+      title: "Monthly three-way reconciliation",
+      subtitle: "The bank statement, the trust journal and the total of the client ledgers must agree to the cent.",
+      actions: [printLink(`/trust/accounts/${id}/reconciliations/print`, "Reconciliation history", { size: "md" })],
+    }),
+    card({
+      title: stepTitle(1, "Month and bank statement"),
+      subtitle: "Choose the month, then type the ending balance from that month's bank statement.",
+      body: h("div.form-row.trust-step1", field("Month", monthIn), field("Statement ending balance", stmtIn, { hint: "For example 12,345.67" })),
+    }),
     body,
   );
   await load();
@@ -767,36 +908,62 @@ function nextMonth(p) {
 export async function trustReportsView([id]) {
   const [a, recs, ledgers, rules] = await Promise.all([get(`/trust/accounts/${id}`), get(`/trust/accounts/${id}/reconciliations`), get(`/trust/accounts/${id}/ledgers?all=1`), get("/trust/rules")]);
   const t = today();
-  const from = h("input", { type: "date", value: `${t.slice(0, 7)}-01`, "aria-label": "From" });
-  const to = h("input", { type: "date", value: t, "aria-label": "To" });
-  const asOf = h("input", { type: "date", value: t, "aria-label": "As of" });
+  const monthStart = `${t.slice(0, 7)}-01`;
+  const date = (value, label) => h("input", { type: "date", value, "aria-label": label });
+  const lFrom = date(monthStart, "Ledger statement from");
+  const lTo = date(t, "Ledger statement to");
+  const jFrom = date(monthStart, "Journal from");
+  const jTo = date(t, "Journal to");
+  const asOf = date(t, "As of");
   const months = h("input", { type: "number", min: 1, max: 240, value: 12, "aria-label": "Months without activity" });
   const ledgerSel = select(ledgers.map((l) => ({ value: l.id, label: l.label })), ledgers[0]?.id ?? "", { "aria-label": "Client ledger" });
   const open = (path) => window.open("/api" + path, "_blank", "noopener");
-  const report = (title, text, controls, onclick) => h("div.trust-report", h("h3", title), h("p.muted.small", text), h("div.trust-report-row", controls, h("button.btn", { type: "button", onclick }, "Open printable report")));
+  const report = (ic, title, text, controls, onclick) =>
+    h(
+      "div.trust-report",
+      h("span.trust-report-icon", icon(ic, { size: 18 })),
+      h("div.trust-report-main", h("h3", title), h("p", text), controls.length ? h("div.trust-report-row", controls) : null),
+      h("div.trust-report-go", button("Open printable report", { size: "sm", iconRight: "external-link", onclick })),
+    );
+  const retention = rules.rules.find((r) => r.id === "retention");
   return h(
     "div.page.trust",
-    h("div.page-head", h("div", h("p.trust-crumb", h("a", { href: "#/trust" }, "Trust accounts"), " › ", h("a", { href: `#/trust/accounts/${id}` }, a.name)), h("h1", "Trust reports"))),
+    trustHead({
+      crumbs: [{ label: a.name, href: `#/trust/accounts/${id}` }, { label: "Reports" }],
+      title: "Trust reports",
+      subtitle: "Printable records for the client, the file, an accountant or the Disciplinary Administrator. Each opens in a new tab.",
+    }),
+    card({
+      title: "Reports",
+      icon: "reports",
+      flush: true,
+      body: h(
+        "div.trust-reports",
+        report("users", "Client ledger statement", "Every entry on one client matter's ledger with a running balance, for the client or the file.", [field("Client ledger", ledgerSel), field("From", lFrom), field("To", lTo)], () =>
+          open(`/trust/ledgers/${ledgerSel.value}/print?from=${lFrom.value}&to=${lTo.value}`),
+        ),
+        report("file-text", "Trust journal", "Every entry in the account for a period, with a running balance.", [field("From", jFrom), field("To", jTo)], () => open(`/trust/accounts/${id}/journal/print?from=${jFrom.value}&to=${jTo.value}`)),
+        report("landmark", "Client balances", "Every client ledger holding money on a date.", [field("As of", asOf)], () => open(`/trust/accounts/${id}/balances/print?asOf=${asOf.value}`)),
+        report("hourglass", "Inactive balances", "Ledgers holding money with no activity for a number of months.", [field("Months without activity", months)], () => open(`/trust/accounts/${id}/inactive/print?months=${months.value}`)),
+        report("circle-check", "Reconciliation history", `${plural(recs.length, "reconciliation")} on file.`, [], () => open(`/trust/accounts/${id}/reconciliations/print`)),
+      ),
+    }),
     h(
-      "section.card",
-      h("h2", "Reports"),
-      report("Client ledger statement", "Every entry on one client matter's ledger with a running balance, for the client or the file.", [ledgerSel, from], () => open(`/trust/ledgers/${ledgerSel.value}/print?from=${from.value}&to=${to.value}`)),
-      report("Trust journal", "Every entry in the account for a period, with a running balance.", [h("span.muted.small", "Uses the From date above and"), to], () => open(`/trust/accounts/${id}/journal/print?from=${from.value}&to=${to.value}`)),
-      report("Client balances", "Every client ledger holding money on a date.", [asOf], () => open(`/trust/accounts/${id}/balances/print?asOf=${asOf.value}`)),
-      report("Inactive balances", "Ledgers holding money with no activity for a number of months.", [months], () => open(`/trust/accounts/${id}/inactive/print?months=${months.value}`)),
-      report("Reconciliation history", `${plural(recs.length, "reconciliation")} on file.`, [], () => open(`/trust/accounts/${id}/reconciliations/print`)),
-    ),
-    h(
-      "section.card",
-      h("h2", "Record keeping"),
-      h("p", `Trust records are kept for ${rules.retentionYears} years after the representation ends, as KRPC 1.15(a) requires: “${rules.rules.find((r) => r.id === "retention").quote}”`),
-      h("p.muted.small", "Lawdesk never deletes a trust entry, ledger, account or signed reconciliation. Each ledger shows its keep-until date once its matter is closed."),
-    ),
-    h(
-      "section.card",
-      h("h2", "Rules this follows, and what has not been verified"),
-      reviewNotice(),
-      h("ul.trust-gaps", rules.gaps.map((g) => h("li", h("strong", g.id + ". "), g.what, " ", h("span.muted", g.whatTheAppDoes)))),
+      "div.grid-2.trust-gap",
+      card({
+        title: "Record keeping",
+        icon: "archive",
+        body: [
+          h("p.trust-first", `Trust records are kept for ${rules.retentionYears} years after the representation ends, as KRPC 1.15(a) requires:`),
+          h("blockquote.trust-quote", `“${retention.quote}”`),
+          h("p.trust-small", "Lawdesk never deletes a trust entry, ledger, account or signed reconciliation. Each ledger shows its keep-until date once its matter is closed."),
+        ],
+      }),
+      card({
+        title: "Rules this follows, and what has not been verified",
+        icon: "scale",
+        body: [reviewNotice(), h("ul.trust-gaps", rules.gaps.map((g) => h("li", h("strong", g.id + ". "), g.what, " ", h("span.muted", g.whatTheAppDoes))))],
+      }),
     ),
   );
 }

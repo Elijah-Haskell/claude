@@ -3,6 +3,7 @@
 
 import { h, replace, select, toast, plural } from "../dom.js";
 import { get, post } from "../api.js";
+import { pageHeader, pill, callout } from "../ui/components.js";
 
 const money = (c) => {
   const neg = c < 0;
@@ -13,6 +14,7 @@ const money = (c) => {
 const hours = (m) => `${((m || 0) / 60).toFixed(2)} h`;
 const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "");
 const STATUS_LABEL = { new: "New", update: "Already imported", problem: "Problem" };
+const STATUS_TONE = { new: "success", update: "info", problem: "danger" };
 
 export async function clioImportView(_params, ctx) {
   const page = h("div.page.clio-import");
@@ -110,7 +112,7 @@ export async function clioImportView(_params, ctx) {
         h("label", { for: "ci-order" }, "How dates are written", orderSel),
         h("label", { for: "ci-input" }, "The file (CSV)", fileInput),
       ),
-      h("p.ci-about", k.about),
+      callout({ tone: "info", body: k.about }),
     ];
     if (preview) parts.push(mappingStep(), rowsStep());
     replace(fileCard, parts);
@@ -174,7 +176,7 @@ export async function clioImportView(_params, ctx) {
                   h(
                     "tr.ci-row-" + r.status,
                     h("td", { "data-label": "Line" }, String(r.line)),
-                    h("td", { "data-label": "Status" }, h("span.tag.ci-" + r.status, STATUS_LABEL[r.status])),
+                    h("td", { "data-label": "Status" }, pill(STATUS_LABEL[r.status], STATUS_TONE[r.status])),
                     h("td", { "data-label": "Record" }, r.summary),
                     h("td", { "data-label": "Notes" }, [...r.errors, ...r.warnings].map((m, i) => h(i < r.errors.length ? "div.ci-problem" : "div.muted", m))),
                   ),
@@ -353,7 +355,11 @@ export async function clioImportView(_params, ctx) {
 
   drawFile();
   page.append(
-    h("div.page-head", h("p.ci-crumb", h("a", { href: "#/settings" }, "Settings")), h("h1", "Import from Clio")),
+    pageHeader({
+      breadcrumbs: [{ label: "Settings", href: "#/settings" }, { label: "Import from Clio" }],
+      title: "Import from Clio",
+      subtitle: "Bring contacts, matters, tasks, calendar, time and expenses over from Clio. A trial run shows what would happen before anything is saved.",
+    }),
     fileCard,
     reportCard,
     apiCard,
