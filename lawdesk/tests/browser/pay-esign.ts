@@ -71,7 +71,7 @@ export async function onlinePaymentAndSignatureChecks(o: Opts): Promise<void> {
     await client.waitForSelector(".test-actions");
     await client.screenshot({ path: shots + `pay-test-processor-${label}.png`, fullPage: true });
     await client.getByRole("button", { name: "Pay (simulate success)" }).click();
-    await client.waitForFunction(() => !/being confirmed|Test payment page/.test(document.body.innerText), null, { timeout: 25_000 }).catch(() => {});
+    await client.waitForFunction(() => !/being confirmed|Test payment page|Loading…/.test(document.body.innerText), null, { timeout: 25_000 }).catch(() => {});
     const shown: string = await client.evaluate(() => location.href + " | " + document.body.innerText);
     assert.match(shown, /Payment received/, shown);
     await client.screenshot({ path: shots + `pay-done-${label}.png`, fullPage: true });
