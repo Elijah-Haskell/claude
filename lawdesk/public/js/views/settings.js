@@ -40,6 +40,8 @@ export async function settingsView() {
       ["s-auto", "Automatic steps"],
     ].map(([id, label]) => h("a", { href: `#${id}`, onclick: (e) => (e.preventDefault(), document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })) }, label)),
   );
+  // Intake has its own settings pages.
+  nav.append(h("a", { href: "#/settings/intake-forms" }, "Intake forms"), h("a", { href: "#/settings/booking" }, "Booking availability"));
   const body = h("div.settings-body");
 
   function draw() {

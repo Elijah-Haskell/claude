@@ -9,11 +9,14 @@ import { mattersView } from "./views/matters.js";
 import { matterView } from "./views/matter.js";
 import { checklistsView, checklistEditView } from "./views/checklists.js";
 import { settingsView } from "./views/settings.js";
+import { intakeBoardView, intakeListView, intakeReportsView, leadView } from "./views/intake.js";
+import { intakeFormsView, intakeFormEditView, bookingSettingsView } from "./views/intake-settings.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
   { href: "#/firm", label: "Firm tasks", key: "f" },
   { href: "#/matters", label: "Matters", key: "a" },
+  { href: "#/intake", label: "Intake", key: "i", section: "Work", icon: "intake" },
   { href: "#/checklists", label: "Checklists", key: "c" },
   { href: "#/settings", label: "Settings", key: "s" },
 ];
@@ -26,6 +29,13 @@ const ROUTES = [
   [/^#\/checklists$/, () => checklistsView],
   [/^#\/checklists\/(new|\d+)$/, () => checklistEditView],
   [/^#\/settings$/, () => settingsView],
+  [/^#\/intake$/, () => intakeBoardView],
+  [/^#\/intake\/list$/, () => intakeListView],
+  [/^#\/intake\/reports$/, () => intakeReportsView],
+  [/^#\/intake\/leads\/(\d+)$/, () => leadView],
+  [/^#\/settings\/intake-forms$/, () => intakeFormsView],
+  [/^#\/settings\/intake-forms\/(new|\d+)$/, () => intakeFormEditView],
+  [/^#\/settings\/booking$/, () => bookingSettingsView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });
@@ -94,7 +104,7 @@ function showHelp() {
     ["e", "Rename it"],
     ["m", "More actions"],
     ["Enter", "Open the task's matter"],
-    ["g then m / f / a / c / s", "Go to My tasks, Firm tasks, Matters, Checklists, Settings"],
+    ["g then m / f / a / i / c / s", "Go to My tasks, Firm tasks, Matters, Intake, Checklists, Settings"],
     ["?", "This list"],
   ];
   modal(

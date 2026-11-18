@@ -14,6 +14,8 @@ export interface Ctx {
   body: any;
   /** The signed-in user's id, or null until sign-in exists. */
   userId: number | null;
+  /** The caller's network address (no proxy handling), for rate limits on public routes. */
+  ip?: string | null;
 }
 
 export interface Route {

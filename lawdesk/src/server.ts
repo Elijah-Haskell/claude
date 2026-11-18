@@ -88,6 +88,7 @@ export function createServer(
     if (!route) throw new HttpError(pathMatched ? 405 : 404, pathMatched ? "Method not allowed" : "No such API route");
     const body = req.method === "GET" || req.method === "DELETE" ? await readBody(req, true) : await readBody(req, false);
     const ctx: Ctx = { db, engine, params: params!, query: url.searchParams, body, userId: actingUser(db, req) };
+    ctx.ip = req.socket.remoteAddress ?? null; // for per-address limits on public routes (intake)
     const out: any = await route.handler(ctx);
     if (out && typeof out === "object" && out.__raw === true) return sendRaw(res, out);
     sendJson(res, 200, out === undefined ? { ok: true } : out);
