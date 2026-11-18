@@ -15,6 +15,7 @@ import { openDb } from "../../src/db.ts";
 import { createServer } from "../../src/server.ts";
 import { seed } from "../../src/seed.ts";
 import { today } from "../../src/dates.ts";
+import { addReportsDemo } from "./reports-demo.ts";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
@@ -25,6 +26,7 @@ mkdirSync(shots, { recursive: true });
 const now = today();
 const db = openDb();
 const demo = seed(db, now);
+addReportsDemo(db, now, demo);
 const server = createServer(db, { today: () => now });
 await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -178,6 +180,82 @@ for (const [label, viewport] of [
     await page.waitForSelector("#s-auto");
     for (const id of ["s-people", "s-clients", "s-areas", "s-dates", "s-closed", "s-auto"]) assert.equal(await page.locator("#" + id).count(), 1, id);
     await noHorizontalScroll();
+  });
+
+  await check(`${label}: firm overview shows figures, charts and lists that link to fixes`, async () => {
+    await page.goto(base + "/#/overview");
+    await page.waitForSelector(".ov-tile");
+    assert.equal(await page.locator(".ov-tile").count(), 5);
+    const firmOverdue = await page.evaluate(async () => {
+      const r = await fetch("/api/firm-tasks").then((x) => x.json());
+      return r.tasks.filter((x: any) => x.status === "open" && x.due_date && x.due_date < r.today).length;
+    });
+    assert.equal(await page.locator("#t-overdue .stat-n").innerText(), String(firmOverdue), "overdue tile matches Firm tasks");
+    await page.waitForFunction(() => document.querySelectorAll(".chart svg").length >= 4);
+    assert.ok(await page.locator(".ov-attn").count() === 4);
+    assert.ok(await page.locator(".ov-attn .ov-list li").count() >= 3, "attention lists have items");
+    assert.match(await page.locator(".ov-attn", { hasText: "Conflict checks" }).innerText(), /Prairie Wind/);
+    assert.match(await page.locator(".ov-attn", { hasText: "days past due" }).innerText(), /Invoice \d+/);
+    await noHorizontalScroll();
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.screenshot({ path: shots + `overview-${label}.png`, fullPage: true });
+    await page.locator("#t-owed").click();
+    await page.waitForSelector(".report-page[data-report=aging] #rp-table");
+    assert.match(await page.locator("#rp-table tfoot").innerText(), /\$/);
+  });
+
+  await check(`${label}: reports list, filters, table, CSV and print view`, async () => {
+    await page.goto(base + "/#/reports");
+    await page.waitForSelector(".rp-card");
+    assert.equal(await page.locator(".rp-card").count(), 8);
+    await page.locator(".rp-card[data-report=productivity]").click();
+    await page.waitForSelector(".report-page[data-report=productivity]");
+    await page.locator("#rp-preset").selectOption("year");
+    await page.locator(".rp-filters button[type=submit]").click();
+    await page.waitForFunction(() => location.hash.includes("from=") && document.querySelector("#rp-table tbody tr"));
+    assert.ok(await page.locator("#rp-table tfoot").count() === 1);
+    assert.ok(await page.locator(".rp-defs dt").count() >= 4, "definitions listed");
+    const href = await page.locator("#rp-csv").getAttribute("href");
+    assert.match(href!, /^\/api\/reports\/productivity\/csv\?from=/);
+    const csv = await page.evaluate(async (u: string) => {
+      const r = await fetch(u);
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      return { type: r.headers.get("content-type"), disp: r.headers.get("content-disposition"), bom: [...bytes.slice(0, 3)], head: new TextDecoder().decode(bytes.slice(3)).split("\r\n")[0] };
+    }, href!);
+    assert.deepEqual(csv.bom, [0xef, 0xbb, 0xbf]);
+    assert.match(csv.disp!, /attachment; filename="lawdesk-productivity-/);
+    assert.equal(csv.head, "Person,Hours worked,Billable hours,Billable share,Billed hours,Billed ÷ billable,Billed value");
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `report-${label}.png`, fullPage: true });
+    await page.emulateMedia({ media: "print" });
+    assert.equal(await page.locator("header.top").isVisible(), false, "app header hidden in print");
+    assert.equal(await page.locator(".rp-filters").isVisible(), false, "filters hidden in print");
+    assert.equal(await page.locator(".rp-print-head").isVisible(), true);
+    await page.screenshot({ path: shots + `report-print-${label}.png`, fullPage: true });
+    await page.emulateMedia({ media: "screen" });
+  });
+
+  await check(`${label}: activity log search and matter report`, async () => {
+    await page.goto(base + "/#/reports/activity?all=1&q=Finished");
+    await page.waitForSelector(".report-page[data-report=activity] #rp-table tbody tr");
+    const details = await page.locator("#rp-table tbody tr td:last-child").allInnerTexts();
+    assert.ok(details.length > 0 && details.every((d) => /finished/i.test(d)), details.join(" / ").slice(0, 300));
+    await page.goto(base + "/#/reports/matters");
+    await page.waitForSelector(".report-page[data-report=matters] #rp-table tbody tr");
+    assert.equal(await page.locator("#rp-table tbody tr").count(), 5, "open matters");
+    await page.locator("#rp-table tbody tr a").first().click();
+    await page.waitForSelector(".stage-bar");
+    await noHorizontalScroll();
+  });
+
+  await check(`${label}: firm figures are offered to attorneys, not paralegals`, async () => {
+    await page.goto(base + "/#/my");
+    await page.waitForSelector(".task");
+    assert.equal(await page.locator(".nav-link", { hasText: "Firm overview" }).count(), 1);
+    await page.locator("#working-as").selectOption(String(demo.users.sam));
+    await page.waitForFunction(() => ![...document.querySelectorAll(".nav-link")].some((a) => a.textContent === "Reports"));
+    await page.locator("#working-as").selectOption(String(demo.users.jordan));
+    await page.waitForFunction(() => [...document.querySelectorAll(".nav-link")].some((a) => a.textContent === "Reports"));
   });
 
   await check(`${label}: no script errors`, async () => {

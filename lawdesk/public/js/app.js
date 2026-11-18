@@ -9,6 +9,8 @@ import { mattersView } from "./views/matters.js";
 import { matterView } from "./views/matter.js";
 import { checklistsView, checklistEditView } from "./views/checklists.js";
 import { settingsView } from "./views/settings.js";
+import { overviewView } from "./views/overview.js";
+import { reportsListView, reportView } from "./views/reports.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
@@ -16,7 +18,18 @@ const NAV = [
   { href: "#/matters", label: "Matters", key: "a" },
   { href: "#/checklists", label: "Checklists", key: "c" },
   { href: "#/settings", label: "Settings", key: "s" },
+  // Firm-wide figures: shown to attorneys and administrators (a convenience, not a permission).
+  { href: "#/overview", label: "Firm overview", key: "o", section: "Admin", icon: "overview", audience: "firm" },
+  { href: "#/reports", label: "Reports", key: "r", section: "Finance", icon: "reports", audience: "firm" },
 ];
+
+const FIRM_ROLES = /^(attorney|lawyer|partner|admin|administrator|owner|office manager)$/i;
+
+function canSee(n) {
+  if (n.audience !== "firm") return true;
+  const me = state.setup?.users?.find((u) => u.id === state.me);
+  return !me || !me.default_role || FIRM_ROLES.test(me.default_role);
+}
 
 const ROUTES = [
   [/^#\/my$/, () => myTasksView],
@@ -26,6 +39,9 @@ const ROUTES = [
   [/^#\/checklists$/, () => checklistsView],
   [/^#\/checklists\/(new|\d+)$/, () => checklistEditView],
   [/^#\/settings$/, () => settingsView],
+  [/^#\/overview$/, () => overviewView],
+  [/^#\/reports$/, () => reportsListView],
+  [/^#\/reports\/([a-z-]+)(?:\?(.*))?$/, () => reportView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });
@@ -33,10 +49,10 @@ const nav = h("nav.nav", { "aria-label": "Main" });
 const whoBox = h("div.who-box");
 
 function drawNav() {
-  const cur = location.hash.split("/").slice(0, 2).join("/");
+  const cur = location.hash.split("?")[0].split("/").slice(0, 2).join("/");
   replace(
     nav,
-    NAV.map((n) => h("a.nav-link", { href: n.href, "aria-current": cur === n.href ? "page" : null, title: null }, n.label)),
+    NAV.filter(canSee).map((n) => h("a.nav-link", { href: n.href, "aria-current": cur === n.href ? "page" : null, title: null }, n.label)),
   );
 }
 
@@ -94,7 +110,7 @@ function showHelp() {
     ["e", "Rename it"],
     ["m", "More actions"],
     ["Enter", "Open the task's matter"],
-    ["g then m / f / a / c / s", "Go to My tasks, Firm tasks, Matters, Checklists, Settings"],
+    ["g then m / f / a / c / s / o / r", "Go to My tasks, Firm tasks, Matters, Checklists, Settings, Firm overview, Reports"],
     ["?", "This list"],
   ];
   modal(
