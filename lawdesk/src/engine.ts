@@ -107,7 +107,8 @@ export class Engine {
     return row;
   }
 
-  private log(kind: string, detail: string, ids: { userId?: number | null; matterId?: number | null; taskId?: number | null }) {
+  /** Write one row to the activity log. Modules should use this rather than inserting directly. */
+  log(kind: string, detail: string, ids: { userId?: number | null; matterId?: number | null; taskId?: number | null }) {
     this.run(
       "INSERT INTO activity (at, user_id, matter_id, task_id, kind, detail) VALUES (?,?,?,?,?,?)",
       new Date().toISOString(),
@@ -505,6 +506,7 @@ export class Engine {
   }
 
   reopenMatter(matterId: number, userId: number | null = null) {
+    this.must("SELECT id FROM matters WHERE id = ?", "Matter", matterId);
     this.run("UPDATE matters SET status = 'open', closed_on = NULL WHERE id = ?", matterId);
     this.log("matter_reopened", "Reopened the matter", { userId, matterId });
   }
