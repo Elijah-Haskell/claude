@@ -1,0 +1,11 @@
+{
+  "name": "lawdesk",
+  "private": true,
+  "type": "module",
+  "description": "Practice management for a Kansas law firm: matters, tasks and workflows first.",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.ts tests/**/*.test.ts"
+  }
+}
