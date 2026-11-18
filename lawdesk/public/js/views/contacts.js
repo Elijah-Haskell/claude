@@ -6,6 +6,9 @@ import { h, select, modal, toast, plural, replace } from "../dom.js";
 import { get, post, patch, del } from "../api.js";
 import { loadSetup, prefs } from "../state.js";
 import { roleLabel, statusPill, shortDate } from "./conflicts.js";
+import { pageHeader, card, button, iconButton, pill, emptyState, callout, segmented, field, avatar, useStyles } from "../ui/components.js";
+import { dataTable } from "../ui/table.js";
+import { icon } from "../ui/icons.js";
 
 // ------------------------------------------------------------ vocabulary
 
@@ -138,7 +141,14 @@ export function contactDialog(existing = null, { name: presetName = "" } = {}) {
           const hits = r.hits.filter((x) => x.contactId !== c.id);
           replace(similar, 
             hits.length
-              ? h("div.similar-box", h("strong", "Similar names already on file"), h("ul.plain", hits.map((x) => h("li", h("a", { href: `#/contacts/${x.contactId}`, onclick: () => dlg.close() }, x.name), h("span.muted.small", ` · ${kindLabel(x.kind)}`)))))
+              ? h(
+                  "div.similar-box",
+                  callout({
+                    tone: "warning",
+                    title: "Similar names already on file",
+                    body: h("ul.plain.ct-similar", hits.map((x) => h("li", h("a", { href: `#/contacts/${x.contactId}`, onclick: () => dlg.close() }, x.name), h("span.muted", ` · ${kindLabel(x.kind)}`)))),
+                  }),
+                )
               : null,
           );
         } catch {
@@ -169,12 +179,12 @@ export function contactDialog(existing = null, { name: presetName = "" } = {}) {
           }
         },
       },
-      h("div.form-row.two", h("label", "Name", name), h("label", "Type", kind)),
+      h("div.form-row.ct-two", field("Name", name, { required: true }), field("Type", kind)),
       similar,
-      h("div.form-row.two", h("label", "Email", email), h("label", "Phone", phone)),
-      h("label", "Notes", notes),
+      h("div.form-row", field("Email", email, { optional: true }), field("Phone", phone, { optional: true })),
+      field("Notes", notes, { optional: true }),
       err,
-      h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, existing ? "Save" : "Add contact")),
+      h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), button(existing ? "Save" : "Add contact", { variant: "primary", type: "submit" })),
     );
     const dlg = modal(existing ? "Edit contact" : "New contact", form, { wide: true });
     dlg.addEventListener("close", () => resolve(saved));
@@ -185,12 +195,19 @@ export function contactDialog(existing = null, { name: presetName = "" } = {}) {
 
 // ------------------------------------------------------------------ list
 
+function mattersText(c) {
+  if (!c.matters) return h("span.muted", "No matters");
+  if (c.openMatters === c.matters) return `${c.matters} open`;
+  if (!c.openMatters) return `${c.matters} closed`;
+  return `${c.openMatters} open, ${c.matters - c.openMatters} closed`;
+}
+
 export async function contactsView() {
+  useStyles("contacts");
   let kind = prefs.get("contacts.kind", "");
   let q = "";
-  const body = h("tbody");
-  const count = h("p.result-count.muted");
   let seq = 0;
+  const note = h("p.ct-more-note");
 
   async function load() {
     const my = ++seq;
@@ -199,107 +216,102 @@ export async function contactsView() {
     if (kind) qs.set("kind", kind);
     const r = await get(`/directory?${qs}`);
     if (my !== seq) return;
-    count.textContent = r.total > r.contacts.length ? `Showing ${r.contacts.length} of ${r.total} contacts. Search to narrow the list.` : plural(r.total, "contact");
-    body.replaceChildren(
-      ...(r.contacts.length
-        ? r.contacts.map((c) =>
-            h(
-              "tr.ct-row",
-              {
-                tabindex: "0",
-                onclick: (e) => !e.target.closest("a") && (location.hash = `#/contacts/${c.id}`),
-                onkeydown: (e) => {
-                  if (e.key === "Enter") location.hash = `#/contacts/${c.id}`;
-                  if (e.key === "ArrowDown") (e.preventDefault(), e.currentTarget.nextElementSibling?.focus());
-                  if (e.key === "ArrowUp") (e.preventDefault(), e.currentTarget.previousElementSibling?.focus());
-                },
-              },
-              h(
-                "td.ct-name",
-                { "data-label": "Name" },
-                h("a", { href: `#/contacts/${c.id}` }, c.name),
-                c.aliases.length ? h("div.muted.small", "Also known as " + c.aliases.join("; ")) : null,
-              ),
-              h("td", { "data-label": "Type" }, kindLabel(c.kind)),
-              h("td.ct-reach" + (!c.phone && !c.email ? ".is-empty" : ""), { "data-label": "Contact" }, c.phone ? h("div", c.phone) : null, c.email ? h("div.muted.small", c.email) : null, !c.phone && !c.email ? h("span.muted", "—") : null),
-              h("td" + (c.city ? "" : ".is-empty"), { "data-label": "City" }, c.city || h("span.muted", "—")),
-              h("td.num-cell", { "data-label": "Matters" }, c.matters ? (c.openMatters === c.matters ? `${c.matters} open` : c.openMatters ? `${c.matters}, ${c.openMatters} open` : `${c.matters} closed`) : h("span.muted", "No matters")),
-            ),
-          )
-        : [h("tr", h("td.empty", { colspan: "5" }, q ? "No contacts match that search." : "No contacts yet."))]),
-    );
+    note.textContent = r.total > r.contacts.length ? `Showing ${r.contacts.length} of ${r.total} contacts. Search to narrow the list.` : "";
+    table.setRows(r.contacts);
   }
 
-  const seg = h(
-    "div.segmented",
-    { role: "group", "aria-label": "Show" },
+  const seg = segmented(
     [
-      ["", "Everyone"],
-      ["person", "People"],
-      ["company", "Companies"],
-    ].map(([v, label]) =>
-      h(
-        "button",
-        {
-          type: "button",
-          "aria-pressed": v === kind ? "true" : "false",
-          onclick: (e) => {
-            kind = v;
-            prefs.set("contacts.kind", v || null);
-            seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b === e.currentTarget ? "true" : "false"));
-            load();
-          },
-        },
-        label,
-      ),
-    ),
+      { value: "", label: "Everyone" },
+      { value: "person", label: "People" },
+      { value: "company", label: "Companies" },
+    ],
+    kind,
+    (v) => {
+      kind = v;
+      prefs.set("contacts.kind", v || null);
+      load();
+    },
+    { label: "Show" },
   );
   let t;
+  // The directory search runs on the server so it also finds other names, phones and addresses.
+  const search = h(
+    "div.dt-search",
+    icon("search", { size: 16, class: "dt-search-icon" }),
+    h("input.search.dt-search-input", {
+      type: "search",
+      placeholder: "Search by name, other name, email, phone or address",
+      "aria-label": "Search contacts",
+      "data-search": "",
+      oninput: (e) => {
+        q = e.target.value;
+        clearTimeout(t);
+        t = setTimeout(load, 150);
+      },
+    }),
+  );
+  const newContact = async () => {
+    const c = await contactDialog();
+    if (c) location.hash = `#/contacts/${c.id}`;
+  };
+
+  const table = dataTable({
+    rows: [],
+    label: "Contacts",
+    noun: ["contact", "contacts"],
+    rowClass: () => "ct-row",
+    rowHref: (c) => `#/contacts/${c.id}`,
+    prefsKey: "contacts.table",
+    sort: { key: "name", dir: "asc" },
+    filters: [search, seg],
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        primary: true,
+        className: "ct-name",
+        sort: (c) => c.name.toLowerCase(),
+        render: (c) =>
+          h(
+            "div.ct-name-cell",
+            avatar(c.name, { size: "sm" }),
+            h("div.cell-stack", h("a.cell-title", { href: `#/contacts/${c.id}` }, c.name), c.aliases.length ? h("span.cell-sub", "Also known as " + c.aliases.join("; ")) : null),
+          ),
+      },
+      { key: "kind", label: "Type", sort: (c) => c.kind, render: (c) => h("span.ct-kind", icon(c.kind === "company" ? "building-2" : "user", { size: 14 }), kindLabel(c.kind)) },
+      {
+        key: "reach",
+        label: "Phone and email",
+        phoneLabel: "Contact",
+        sortable: false,
+        render: (c) => (c.phone || c.email ? h("div.cell-stack", c.phone ? h("span.tnum", c.phone) : null, c.email ? h("span.cell-sub.ct-email", c.email) : null) : h("span.muted", "—")),
+      },
+      { key: "city", label: "City", hideOnPhone: true, sort: (c) => c.city || null, render: (c) => c.city || h("span.muted", "—") },
+      { key: "matters", label: "Matters", align: "right", defaultDir: "desc", sort: (c) => c.openMatters * 1000 + c.matters, render: (c) => h("span.nowrap", mattersText(c)) },
+    ],
+    empty: ({ searching }) =>
+      q.trim() || searching
+        ? emptyState({ icon: "search", title: "No contacts match", body: "Try part of a name, an old name, a phone number or a street.", compact: true })
+        : emptyState({ icon: "contacts", title: "No contacts yet", body: "Clients, the other side and their lawyers appear here.", action: button("New contact", { variant: "primary", icon: "plus", onclick: newContact }), compact: true }),
+  });
+
   await load();
   return h(
     "div.page.ct-page",
-    h(
-      "div.page-head",
-      h("div", h("h1", "Contacts"), h("p.sub", "Clients, the other side, their lawyers, and everyone else on the firm’s matters.")),
-      h(
-        "div.head-actions",
-        h("a.btn", { href: "#/conflicts" }, "Conflict check"),
-        h(
-          "button.btn.primary",
-          {
-            type: "button",
-            onclick: async () => {
-              const c = await contactDialog();
-              if (c) location.hash = `#/contacts/${c.id}`;
-            },
-          },
-          "New contact",
-        ),
-      ),
-    ),
-    h(
-      "div.filters",
-      seg,
-      h("input.search", {
-        type: "search",
-        placeholder: "Search by name, other name, email, phone or address",
-        "aria-label": "Search contacts",
-        "data-search": "",
-        oninput: (e) => {
-          q = e.target.value;
-          clearTimeout(t);
-          t = setTimeout(load, 150);
-        },
-      }),
-    ),
-    count,
-    h("table.ld-table.ct-table", h("thead", h("tr", h("th", "Name"), h("th", "Type"), h("th", "Phone and email"), h("th", "City"), h("th.num-cell", "Matters"))), body),
+    pageHeader({
+      title: "Contacts",
+      subtitle: "Clients, the other side, their lawyers, and everyone else on the firm’s matters.",
+      actions: [button("Conflict check", { icon: "conflicts", href: "#/conflicts" }), button("New contact", { variant: "primary", icon: "plus", onclick: newContact })],
+    }),
+    card({ flush: true, className: "table-card", body: [table, note] }),
   );
 }
 
 // ---------------------------------------------------------- one contact
 
 export async function contactView([idStr]) {
+  useStyles("contacts");
   const id = Number(idStr);
   const page = h("div.page.ct-page");
   let p = await get(`/contacts/${id}/profile`);
@@ -317,6 +329,7 @@ export async function contactView([idStr]) {
       fail(err);
     }
   };
+  const removeBtn = (label, onclick) => iconButton("x", label, { size: "sm", variant: "danger", class: "ct-x", onclick });
 
   // ------------------------------------------------------------- details
   function detailsCard() {
@@ -327,6 +340,7 @@ export async function contactView([idStr]) {
     for (const d of p.details) rows.push({ id: d.id, kind: d.kind, label: d.label || DETAIL_KINDS.find(([k]) => k === d.kind)[1], text: d.kind === "address" ? addressLines(d) : [d.value] });
     const order = { phone: 0, email: 1, address: 2, website: 3 };
     rows.sort((a, b) => order[a.kind] - order[b.kind]);
+    const kindIcon = { phone: "phone", email: "mail", address: "building-2", website: "external-link" };
 
     const kindSel = select(DETAIL_KINDS.map(([v, l]) => ({ value: v, label: l })), "phone", { "aria-label": "Kind of detail" });
     const labelIn = h("input", { list: "detail-labels", placeholder: "Label, e.g. Work", maxlength: 60, "aria-label": "Label" });
@@ -364,58 +378,57 @@ export async function contactView([idStr]) {
       value,
       addr,
       h("datalist#detail-labels", LABEL_SUGGESTIONS.map((l) => h("option", { value: l }))),
-      h("div.form-actions", h("button.btn.small", { type: "button", onclick: () => ((form.hidden = true), (addBtn.hidden = false)) }, "Cancel"), h("button.btn.small.primary", { type: "submit" }, "Add")),
+      h("div.form-actions", button("Cancel", { size: "sm", onclick: () => ((form.hidden = true), (addBtn.hidden = false)) }), button("Add", { size: "sm", variant: "primary", type: "submit" })),
     );
-    const addBtn = h("button.btn.small", { type: "button", onclick: () => ((form.hidden = false), (addBtn.hidden = true), value.focus()) }, "Add phone, email or address");
-    return h(
-      "section.card.ct-details",
-      h("h2", "Contact details"),
-      rows.length
-        ? h(
-            "dl.ct-dl",
-            rows.map((r) =>
-              h(
-                "div.ct-dl-row",
-                h("dt", r.label),
+    const addBtn = button("Add phone, email or address", { size: "sm", variant: "ghost", icon: "plus", class: "ct-add-btn", onclick: () => ((form.hidden = false), (addBtn.hidden = true), value.focus()) });
+    return card({
+      title: "Contact details",
+      icon: "phone",
+      className: "ct-details",
+      body: [
+        rows.length
+          ? h(
+              "dl.ct-dl",
+              rows.map((r) =>
                 h(
-                  "dd",
-                  r.kind === "email" ? h("a", { href: `mailto:${r.text[0]}` }, r.text[0]) : r.kind === "phone" ? h("a", { href: `tel:${r.text[0].replace(/[^\d+]/g, "")}` }, r.text[0]) : r.text.map((l) => h("div", l)),
-                  r.id
-                    ? h("button.icon-btn.danger.ct-x", { type: "button", "aria-label": `Remove ${r.label}`, title: "Remove", onclick: () => confirm("Remove this from the contact?") && act(() => del(`/contact-details/${r.id}`), "Removed") }, "×")
-                    : null,
+                  "div.ct-dl-row",
+                  h("dt", icon(kindIcon[r.kind] || "info", { size: 14 }), h("span", r.label)),
+                  h(
+                    "dd",
+                    h(
+                      "div.ct-dd-text",
+                      r.kind === "email" ? h("a", { href: `mailto:${r.text[0]}` }, r.text[0]) : r.kind === "phone" ? h("a.tnum", { href: `tel:${r.text[0].replace(/[^\d+]/g, "")}` }, r.text[0]) : r.text.map((l) => h("div", l)),
+                    ),
+                    r.id ? removeBtn(`Remove ${r.label}`, () => confirm("Remove this from the contact?") && act(() => del(`/contact-details/${r.id}`), "Removed")) : null,
+                  ),
                 ),
               ),
-            ),
-          )
-        : h("p.muted", "No phone, email or address on file."),
-      addBtn,
-      form,
-    );
+            )
+          : h("p.ct-empty-line", "No phone, email or address on file."),
+        addBtn,
+        form,
+      ],
+    });
   }
 
   // ------------------------------------------------------- other names
   function aliasesCard() {
     const name = h("input", { placeholder: "Other name", maxlength: 200, required: true, "aria-label": "Other name" });
     const kind = select(ALIAS_KINDS.map(([v, l]) => ({ value: v, label: l })), p.contact.kind === "company" ? "dba" : "former_name", { "aria-label": "Kind of name" });
-    return h(
-      "section.card",
-      h("h2", "Other names"),
-      h("p.muted.small", "Former and maiden names, nicknames and trade names. Conflict checks search these too."),
-      p.aliases.length
-        ? h(
-            "ul.plain.ct-list",
-            p.aliases.map((a) =>
-              h(
-                "li",
-                h("span", a.name),
-                h("span.muted.small", aliasLabel(a.kind)),
-                h("button.icon-btn.danger", { type: "button", "aria-label": `Remove ${a.name}`, title: "Remove", onclick: () => act(() => del(`/conflicts/aliases/${a.id}`), "Removed") }, "×"),
-              ),
-            ),
-          )
-        : h("p.muted", "None recorded."),
-      h("form.ct-inline-form", { onsubmit: (e) => (e.preventDefault(), act(() => post(`/conflicts/contacts/${id}/aliases`, { name: name.value, kind: kind.value }), `Added “${name.value}”`)) }, name, kind, h("button.btn", { type: "submit" }, "Add")),
-    );
+    return card({
+      title: "Other names",
+      subtitle: "Former and maiden names, nicknames and trade names. Conflict checks search these too.",
+      icon: "user-round",
+      body: [
+        p.aliases.length
+          ? h(
+              "ul.plain.ct-list",
+              p.aliases.map((a) => h("li", h("span.ct-alias", a.name), pill(aliasLabel(a.kind), "neutral", { dot: false }), removeBtn(`Remove ${a.name}`, () => act(() => del(`/conflicts/aliases/${a.id}`), "Removed")))),
+            )
+          : h("p.ct-empty-line", "None recorded."),
+        h("form.ct-inline-form", { onsubmit: (e) => (e.preventDefault(), act(() => post(`/conflicts/contacts/${id}/aliases`, { name: name.value, kind: kind.value }), `Added “${name.value}”`)) }, name, kind, button("Add", { type: "submit" })),
+      ],
+    });
   }
 
   // ------------------------------------------------------ relationships
@@ -439,92 +452,98 @@ export async function contactView([idStr]) {
           }, "Relationship added");
         },
       },
+      h("p.ct-rel-label", "Add a relationship"),
       sentence,
       h(
-        "div.form-actions",
-        h("button.btn.small", { type: "button", title: "Turn the sentence round", onclick: () => ((reversed = !reversed), drawSentence()) }, "Swap sides"),
-        h("button.btn.small.primary", { type: "submit" }, "Add relationship"),
+        "div.ct-rel-actions",
+        button("Swap sides", { size: "sm", variant: "ghost", icon: "arrow-up-down", title: "Turn the sentence round", onclick: () => ((reversed = !reversed), drawSentence()) }),
+        button("Add relationship", { size: "sm", variant: "primary", type: "submit" }),
       ),
     );
-    return h(
-      "section.card",
-      h("h2", "Relationships"),
-      p.relationships.length
-        ? h(
-            "ul.plain.ct-list.ct-rels",
-            p.relationships.map((r) =>
-              h(
-                "li",
+    return card({
+      title: "Relationships",
+      icon: "users",
+      body: [
+        p.relationships.length
+          ? h(
+              "ul.plain.ct-list.ct-rels",
+              p.relationships.map((r) =>
                 h(
-                  "span.ct-rel-text",
-                  r.direction === "from" ? h("span", me) : h("a", { href: `#/contacts/${r.other_id}` }, r.other_name),
-                  ` is ${relPhrase(r.kind)} `,
-                  r.direction === "from" ? h("a", { href: `#/contacts/${r.other_id}` }, r.other_name) : h("span", me),
-                  r.note ? h("span.muted.small", ` (${r.note})`) : null,
+                  "li",
+                  h(
+                    "span.ct-rel-text",
+                    r.direction === "from" ? h("span", me) : h("a", { href: `#/contacts/${r.other_id}` }, r.other_name),
+                    ` is ${relPhrase(r.kind)} `,
+                    r.direction === "from" ? h("a", { href: `#/contacts/${r.other_id}` }, r.other_name) : h("span", me),
+                    r.note ? h("span.muted", ` (${r.note})`) : null,
+                  ),
+                  removeBtn("Remove relationship", () => confirm("Remove this relationship?") && act(() => del(`/conflicts/relationships/${r.id}`), "Removed")),
                 ),
-                h("button.icon-btn.danger", { type: "button", "aria-label": "Remove relationship", title: "Remove", onclick: () => confirm("Remove this relationship?") && act(() => del(`/conflicts/relationships/${r.id}`), "Removed") }, "×"),
               ),
-            ),
-          )
-        : h("p.muted", "None recorded. Owners, officers, parent companies and family members belong here, so conflict checks can follow them."),
-      form,
-    );
+            )
+          : h("p.ct-empty-line", "None recorded. Owners, officers, parent companies and family members belong here, so conflict checks can follow them."),
+        form,
+      ],
+    });
   }
 
   // ------------------------------------------------------------ matters
   function mattersCard() {
-    return h(
-      "section.card",
-      h("h2", "Matters"),
-      p.matters.length
+    return card({
+      title: "Matters",
+      icon: "matters",
+      flush: true,
+      body: p.matters.length
         ? h(
-            "table.ld-table.ct-matters",
-            h("thead", h("tr", h("th", "Matter"), h("th", "Role"), h("th", "Status"))),
-            h(
-              "tbody",
-              p.matters.map((m) =>
+            "ul.plain.ct-matters",
+            p.matters.map((m) =>
+              h(
+                "li",
                 h(
-                  "tr",
-                  h("td", { "data-label": "Matter" }, h("a", { href: `#/matters/${m.id}` }, m.number ? h("span.num", m.number) : null, m.name)),
-                  h("td.cap-first", { "data-label": "Role" }, roleLabel(m.role), m.note ? h("div.muted.small", m.note) : null),
-                  h("td", { "data-label": "Status" }, m.status === "closed" ? `Closed ${m.closed_on ? m.closed_on.slice(0, 4) : ""}` : "Open"),
+                  "div.cell-stack",
+                  h("a.cell-title", { href: `#/matters/${m.id}` }, m.number ? h("span.matter-num", m.number) : null, " ", m.name),
+                  h("span.cell-sub.cap-first", roleLabel(m.role), m.note ? ` · ${m.note}` : ""),
                 ),
+                m.status === "closed" ? pill(`Closed${m.closed_on ? " " + m.closed_on.slice(0, 4) : ""}`, "neutral") : pill("Open", "info"),
               ),
             ),
           )
-        : h("p.muted", "Not on any matter."),
-    );
+        : emptyState({ icon: "matters", title: "Not on any matter", body: "Matters this contact is a client or party on appear here.", compact: true }),
+    });
   }
 
   function notesCard() {
-    const box = h("textarea", { rows: 5, maxlength: 5000, "aria-label": "Notes" }, p.contact.notes || "");
-    const save = h("button.btn.small", { type: "submit", disabled: true }, "Save notes");
+    const box = h("textarea", { rows: 4, maxlength: 5000, "aria-label": "Notes" }, p.contact.notes || "");
+    const save = button("Save notes", { size: "sm", type: "submit", disabled: true });
     box.addEventListener("input", () => (save.disabled = box.value === (p.contact.notes || "")));
-    return h(
-      "section.card",
-      h("h2", "Notes"),
-      h("form.ct-notes", { onsubmit: (e) => (e.preventDefault(), act(() => patch(`/contacts/${id}`, { notes: box.value || null }), "Notes saved")) }, box, h("div.form-actions", save)),
-    );
+    return card({
+      title: "Notes",
+      icon: "file-text",
+      body: h("form.ct-notes", { onsubmit: (e) => (e.preventDefault(), act(() => patch(`/contacts/${id}`, { notes: box.value || null }), "Notes saved")) }, box, h("div.ct-notes-actions", save)),
+    });
   }
 
   function checksCard() {
-    return h(
-      "section.card",
-      h("h2", "Conflict checks"),
-      p.checks.length
+    return card({
+      title: "Conflict checks",
+      icon: "conflicts",
+      body: p.checks.length
         ? h(
-            "ul.plain.ct-list",
+            "ul.plain.ct-list.ct-checks",
             p.checks.map((k) =>
               h(
                 "li",
-                h("a", { href: `#/conflicts/${k.id}` }, `No. ${k.id}`),
-                h("span.muted.small", [shortDate(k.run_at), k.band ? `${k.band} match` : null, k.matter_name ? [k.matter_number, k.matter_name].filter(Boolean).join(" ") : null].filter(Boolean).join(" · ")),
+                h(
+                  "div.cell-stack",
+                  h("a.cell-title", { href: `#/conflicts/${k.id}` }, `Check no. ${k.id}`),
+                  h("span.cell-sub", [shortDate(k.run_at), k.band ? `${k.band} match` : null, k.matter_name ? [k.matter_number, k.matter_name].filter(Boolean).join(" ") : null].filter(Boolean).join(" · ")),
+                ),
                 statusPill(k.decision),
               ),
             ),
           )
-        : h("p.muted", "No saved check has found this contact."),
-    );
+        : h("p.ct-empty-line", "No saved check has found this contact."),
+    });
   }
 
   async function draw() {
@@ -532,25 +551,24 @@ export async function contactView([idStr]) {
     const open = p.matters.filter((m) => m.status === "open").length;
     const rels = await relationshipsCard();
     page.replaceChildren(
-      h("a.back", { href: "#/contacts" }, "← Contacts"),
-      h(
-        "div.page-head",
-        h("div", h("h1", c.name), h("p.sub", [kindLabel(c.kind), p.matters.length ? `${plural(p.matters.length, "matter")}${open ? `, ${open} open` : ""}` : "No matters"].join(" · "))),
-        h(
-          "div.head-actions",
-          h("a.btn", { href: `#/conflicts?name=${encodeURIComponent(c.name)}&kind=${c.kind}` }, "Run conflict check"),
-          h(
-            "button.btn",
-            {
-              type: "button",
-              onclick: async () => {
-                if (await contactDialog(c)) (toast("Saved"), refresh());
-              },
+      pageHeader({
+        title: c.name,
+        breadcrumbs: [{ label: "Contacts", href: "#/contacts" }, { label: c.name }],
+        meta: [
+          h("span.ct-kind", icon(c.kind === "company" ? "building-2" : "user", { size: 14 }), kindLabel(c.kind)),
+          h("span.ct-meta-sep", "·"),
+          h("span", p.matters.length ? `${plural(p.matters.length, "matter")}${open ? `, ${open} open` : ""}` : "No matters"),
+        ],
+        actions: [
+          button("Run conflict check", { icon: "conflicts", href: `#/conflicts?name=${encodeURIComponent(c.name)}&kind=${c.kind}` }),
+          button("Edit", {
+            icon: "pencil",
+            onclick: async () => {
+              if (await contactDialog(c)) (toast("Saved"), refresh());
             },
-            "Edit",
-          ),
-        ),
-      ),
+          }),
+        ],
+      }),
       h("div.ct-grid", h("div.ct-main", mattersCard(), rels, notesCard()), h("aside.ct-aside", detailsCard(), aliasesCard(), checksCard())),
     );
   }

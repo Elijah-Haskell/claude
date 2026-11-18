@@ -8,7 +8,21 @@
 
 import { h, select, modal, toast, fmtDate, fmtTime, plural, relDate } from "../dom.js";
 import { get, post, patch, del } from "../api.js";
-import { state, today, users, initials, prefs, loadSetup } from "../state.js";
+import { state, today, users, prefs, loadSetup } from "../state.js";
+import { pageHeader, card as kitCard, button, iconButton, pill, avatar, person, stat, emptyState, callout, field, useStyles } from "../ui/components.js";
+import { dataTable } from "../ui/table.js";
+import { icon } from "../ui/icons.js";
+
+/** A titled card on the lead page: panel("Notes", "file-text", "notes-card", ...body). */
+function panel(title, ic, className, ...body) {
+  return kitCard({ title, icon: ic, className, body: body.flat().filter((x) => x != null && x !== false) });
+}
+
+/** Where a lead is, as a kit pill. */
+const LEAD_TONES = { new: "brand", contacted: "info", consult_scheduled: "info", engagement_sent: "warning", hired: "success", not_hired: "neutral" };
+function leadPill(l) {
+  return pill(l.statusLabel, LEAD_TONES[l.status] || "neutral");
+}
 
 let optionsCache = null;
 export async function intakeOptions(force = false) {
@@ -24,13 +38,13 @@ function areaName(id) {
 }
 
 function conflictTag(l) {
-  if (!l.conflictCheckId) return h("span.tag", "No conflict check");
-  if (l.conflictDecision === "cleared") return h("span.tag.good.intake-tag", "Conflicts cleared");
-  if (l.conflictDecision === "waived") return h("span.tag.good.intake-tag", "Conflict waived");
-  if (l.conflictDecision === "declined") return h("span.tag.high", "Conflict: declined");
+  if (!l.conflictCheckId) return pill("No conflict check", "neutral");
+  if (l.conflictDecision === "cleared") return pill("Conflicts cleared", "success");
+  if (l.conflictDecision === "waived") return pill("Conflict waived", "success");
+  if (l.conflictDecision === "declined") return pill("Conflict: declined", "danger");
   return l.conflictHits || l.earlierHits
-    ? h("span.tag.high", `Conflicts: ${plural((l.conflictHits || 0) + (l.earlierHits || 0), "possible match", "possible matches")}`)
-    : h("span.tag.blocks", "Conflicts: needs review");
+    ? pill(`${plural((l.conflictHits || 0) + (l.earlierHits || 0), "possible conflict", "possible conflicts")}`, "danger")
+    : pill("Conflicts to review", "warning");
 }
 
 function ageText(days) {
@@ -56,23 +70,24 @@ export function downloadFile(f) {
 
 function tabs(current) {
   const items = [
-    ["#/intake", "Pipeline", "board"],
-    ["#/intake/list", "List", "list"],
-    ["#/intake/reports", "Reports", "reports"],
+    ["#/intake", "Pipeline", "board", "layout-grid"],
+    ["#/intake/list", "List", "list", "list-checks"],
+    ["#/intake/reports", "Reports", "reports", "chart-column"],
   ];
   return h(
-    "div.segmented.intake-tabs",
-    { role: "group", "aria-label": "Intake view" },
-    items.map(([href, label, key]) => h("a.seg-link", { href, "aria-current": key === current ? "page" : null, "aria-pressed": key === current ? "true" : "false" }, label)),
+    "nav.segmented.intake-tabs",
+    { "aria-label": "Intake view" },
+    items.map(([href, label, key, ic]) => h("a.seg-link", { href, "aria-current": key === current ? "page" : null }, icon(ic, { size: 14 }), label)),
   );
 }
 
 function pageHead(current) {
-  return h(
-    "div.page-head",
-    h("div", h("h1", "Intake"), h("p.sub", "New inquiries, from first contact to signed client.")),
-    h("div.head-actions", tabs(current), h("button.btn.primary", { type: "button", onclick: () => newLeadDialog() }, "Add lead")),
-  );
+  useStyles("intake");
+  return pageHeader({
+    title: "Intake",
+    subtitle: "New inquiries, from first contact to signed client.",
+    actions: [tabs(current), button("Add lead", { variant: "primary", icon: "plus", onclick: () => newLeadDialog() })],
+  });
 }
 
 // -------------------------------------------------------------- pipeline
@@ -112,21 +127,20 @@ export async function intakeBoardView() {
       "article.lead-card",
       { draggable: l.status === "hired" ? null : "true", dataset: { id: String(l.id) } },
       h("a.lead-name", { href: `#/intake/leads/${l.id}` }, l.name),
-      h("div.lead-meta.muted.small", [l.practiceArea, l.source].filter(Boolean).join(" · ") || "No practice area yet"),
+      h("div.lead-meta", [l.practiceArea, l.source].filter(Boolean).join(" · ") || "No practice area yet"),
       h(
         "div.lead-foot",
         l.status === "not_hired" ? null : conflictTag(l),
-        l.consultAt && l.status === "consult_scheduled" ? h("span.small", "Consultation " + fmtInstant(l.consultAt)) : null,
-        l.nextFollowUp && OPEN_STATUSES.includes(l.status)
-          ? h("span.small" + (l.nextFollowUp < today() ? ".late-text" : ""), "Follow up " + relDate(l.nextFollowUp, today()))
-          : null,
       ),
+      l.consultAt && l.status === "consult_scheduled" ? h("div.lead-line", icon("calendar-clock", { size: 13 }), fmtInstant(l.consultAt)) : null,
+      l.nextFollowUp && OPEN_STATUSES.includes(l.status)
+        ? h("div.lead-line" + (l.nextFollowUp < today() ? ".late-text" : l.nextFollowUp === today() ? ".today-text" : ""), icon("clock", { size: 13 }), "Follow up " + relDate(l.nextFollowUp, today()).toLowerCase())
+        : null,
       h(
         "div.lead-foot",
-        h("span.avatar", { title: l.ownerName || "No one", "aria-label": `Owner: ${l.ownerName || "no one"}` }, l.ownerName ? initials(l.ownerName) : "–"),
-        h("span.muted.small", l.status === "not_hired" ? l.notHiredReason || "" : ageText(l.ageDays)),
-        l.status === "hired" ? (l.matterId ? h("a.small", { href: `#/matters/${l.matterId}` }, "Open matter") : null) : mover,
+        h("span.lead-owner", { title: `Owner: ${l.ownerName || "no one"}` }, avatar(l.ownerName, { size: "xs" }), h("span.lead-age", l.status === "not_hired" ? l.notHiredReason || "" : ageText(l.ageDays))),
       ),
+      l.status === "hired" ? (l.matterId ? h("a.lead-matter-link", { href: `#/matters/${l.matterId}` }, "Open matter", icon("arrow-right", { size: 13 })) : null) : mover,
     );
     el.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/plain", String(l.id));
@@ -138,11 +152,11 @@ export async function intakeBoardView() {
   }
 
   function column(s, list) {
-    const body = h("div.intake-col-body", list.length ? list.map(card) : h("p.empty.small", s.key === "new" ? "No new inquiries." : "None"));
+    const body = h("div.intake-col-body", list.length ? list.map(card) : h("p.intake-col-empty", s.key === "new" ? "No new inquiries." : "None"));
     const col = h(
       "section.intake-col",
       { dataset: { status: s.key }, "aria-label": s.label },
-      h("h2.intake-col-head", h("span", s.label), h("span.count.muted", String(list.length))),
+      h("h2.intake-col-head", h("span", s.label), h("span.intake-col-count", String(list.length))),
       body,
     );
     col.addEventListener("dragover", (e) => {
@@ -191,7 +205,7 @@ export async function intakeBoardView() {
   await load();
   page.append(
     pageHead("board"),
-    h("div.filters", ownerSel, h("p.muted.small.intake-hint", "Drag a lead to another column, or use its “Move to” menu. Hired and Not hired show the last 30 days.")),
+    h("div.filters.intake-board-bar", ownerSel, h("p.intake-hint", "Drag a lead to another column, or use its “Move to” menu. Hired and Not hired show the last 30 days.")),
     board,
   );
   return page;
@@ -205,45 +219,15 @@ function addDaysIso(iso, n) {
 
 export async function intakeListView() {
   const opts = await intakeOptions();
-  let leads = [];
-  let q = "";
   let status = prefs.get("intake.listStatus", "open");
   let owner = "";
-  const tbody = h("tbody");
-  const count = h("p.result-count.muted");
 
   async function load() {
     const params = new URLSearchParams();
     if (status === "open") params.set("open", "1");
     else if (status) params.set("status", status);
     if (owner) params.set("owner", owner);
-    leads = await get(`/intake/leads?${params}`);
-    draw();
-  }
-
-  function draw() {
-    const needle = q.trim().toLowerCase();
-    const list = leads.filter((l) => !needle || [l.name, l.email, l.phone, l.source, l.practiceArea, l.summary].some((x) => x && x.toLowerCase().includes(needle)));
-    count.textContent = plural(list.length, "lead");
-    tbody.replaceChildren(
-      ...list.map((l) =>
-        h(
-          "tr.matter-row",
-          {
-            tabindex: "0",
-            onclick: (e) => !e.target.closest("a") && (location.hash = `#/intake/leads/${l.id}`),
-            onkeydown: (e) => e.key === "Enter" && (location.hash = `#/intake/leads/${l.id}`),
-          },
-          h("td.m-name", { "data-label": "Lead" }, h("a", { href: `#/intake/leads/${l.id}` }, l.name), h("div.muted.small", [l.email, l.phone].filter(Boolean).join(" · ") || "No contact details")),
-          h("td", { "data-label": "Status" }, h("span.stage-pill", l.statusLabel), l.status === "not_hired" && l.notHiredReason ? h("div.muted.small", l.notHiredReason) : null),
-          h("td", { "data-label": "Area" }, l.practiceArea || h("span.muted", "—"), h("div.muted.small", l.source || "Source not given")),
-          h("td", { "data-label": "Owner" }, l.ownerName || h("span.muted", "No one")),
-          h("td", { "data-label": "Received" }, fmtDate(l.receivedOn, today())),
-          h("td", { "data-label": "Conflicts" }, conflictTag(l)),
-        ),
-      ),
-    );
-    if (!list.length) tbody.append(h("tr", h("td", { colspan: "6" }, h("p.empty", "No leads match."))));
+    table.setRows(await get(`/intake/leads?${params}`));
   }
 
   const statusSel = select(
@@ -255,23 +239,50 @@ export async function intakeListView() {
     "aria-label": "Owner",
     onchange: (e) => ((owner = e.target.value), load()),
   });
+  const now = today();
+  const table = dataTable({
+    rows: [],
+    label: "Leads",
+    noun: ["lead", "leads"],
+    tableClass: "leads-table",
+    rowClass: () => "matter-row",
+    rowHref: (l) => `#/intake/leads/${l.id}`,
+    prefsKey: "intake.list",
+    sort: { key: "received", dir: "desc" },
+    search: { placeholder: "Search leads", text: (l) => [l.name, l.email, l.phone, l.source, l.practiceArea, l.summary] },
+    filters: [statusSel, ownerSel],
+    columns: [
+      {
+        key: "name",
+        label: "Lead",
+        primary: true,
+        sort: (l) => l.name.toLowerCase(),
+        render: (l) => h("div.cell-stack", h("a.cell-title", { href: `#/intake/leads/${l.id}` }, l.name), h("span.cell-sub.lead-reach", [l.email, l.phone].filter(Boolean).join(" · ") || "No contact details")),
+      },
+      {
+        key: "status",
+        label: "Status",
+        sort: (l) => opts.statuses.findIndex((s) => s.key === l.status),
+        render: (l) => h("div.cell-stack", h("span", leadPill(l)), l.status === "not_hired" && l.notHiredReason ? h("span.cell-sub", l.notHiredReason) : null),
+      },
+      {
+        key: "area",
+        label: "Practice area and source",
+        hideOnPhone: true,
+        sort: (l) => l.practiceArea || null,
+        render: (l) => h("div.cell-stack", h("span", l.practiceArea || "Not sure yet"), h("span.cell-sub", l.source || "Source not given")),
+      },
+      { key: "owner", label: "Owner", className: "nowrap", hideOnPhone: true, sort: (l) => l.ownerName || null, render: (l) => (l.ownerName ? person(l.ownerName, null, { size: "xs" }) : h("span.muted", "No one")) },
+      { key: "received", label: "Received", className: "nowrap", defaultDir: "desc", sort: (l) => l.receivedOn, render: (l) => h("span", fmtDate(l.receivedOn, now)) },
+      { key: "conflicts", label: "Conflicts", sortable: false, render: (l) => conflictTag(l) },
+    ],
+    empty: ({ searching }) =>
+      searching
+        ? emptyState({ icon: "search", title: "No leads match", body: "Try another name, email or phone number.", compact: true })
+        : emptyState({ icon: "intake", title: "No leads here", body: "Inquiries from the website, the booking page and phone calls appear here.", action: button("Add lead", { variant: "primary", icon: "plus", onclick: () => newLeadDialog() }), compact: true }),
+  });
   await load();
-  return h(
-    "div.page.intake",
-    pageHead("list"),
-    h(
-      "div.filters",
-      statusSel,
-      ownerSel,
-      h("input.search", { type: "search", placeholder: "Search leads", "aria-label": "Search leads", "data-search": "", oninput: (e) => ((q = e.target.value), draw()) }),
-    ),
-    count,
-    h(
-      "table.matters.leads-table",
-      h("thead", h("tr", h("th", "Lead"), h("th", "Status"), h("th", "Practice area and source"), h("th", "Owner"), h("th", "Received"), h("th", "Conflicts"))),
-      tbody,
-    ),
-  );
+  return h("div.page.intake", pageHead("list"), kitCard({ flush: true, className: "table-card", body: table }));
 }
 
 // --------------------------------------------------------------- reports
@@ -291,42 +302,49 @@ export async function intakeReportsView() {
   const pct = (v) => (v == null ? "—" : `${v}%`);
   const days = (v) => (v == null ? "—" : `${v} ${v === 1 ? "day" : "days"}`);
 
-  function table(head, rows) {
-    return h("div.table-scroll", h("table.report-table", h("thead", h("tr", head.map((x, i) => h(i ? "th.num-cell" : "th", x)))), h("tbody", rows.length ? rows : h("tr", h("td", { colspan: String(head.length) }, h("p.empty", "Nothing in this period."))))));
+  function table(title, sub, head, rows, ic) {
+    return kitCard({
+      title,
+      subtitle: sub,
+      icon: ic,
+      flush: true,
+      className: "intake-report-card",
+      body: rows.length
+        ? h("div.intake-report-scroll", h("table.report-table", h("thead", h("tr", head.map((x, i) => h(i ? "th.num-cell" : "th", { scope: "col" }, x)))), h("tbody", rows)))
+        : emptyState({ icon: "chart-column", title: "Nothing in this period", body: "Choose a longer period to see more.", compact: true }),
+    });
   }
+  const row = (cells) => h("tr", cells.map((c, i) => h(i ? "td.num-cell" : "td", c)));
 
   function draw(r) {
     const t = r.totals;
     body.replaceChildren(
       h(
         "div.stats.report-stats",
-        h("div.stat", h("span.stat-n", String(t.leads)), h("span.stat-label", "Leads received")),
-        h("div.stat.good", h("span.stat-n", String(t.hired)), h("span.stat-label", "Became clients")),
-        h("div.stat", h("span.stat-n", pct(t.conversionPct)), h("span.stat-label", "Conversion rate")),
-        h("div.stat", h("span.stat-n", pct(t.decidedConversionPct)), h("span.stat-label", "Of decided leads")),
-        h("div.stat", h("span.stat-n", days(r.timeToHire.medianDays)), h("span.stat-label", "Typical time to hire")),
+        stat({ label: "Leads received", value: String(t.leads), icon: "inbox" }),
+        stat({ label: "Became clients", value: String(t.hired), icon: "user-plus", tone: t.hired ? "success" : null }),
+        stat({ label: "Conversion rate", value: pct(t.conversionPct), icon: "chart-column", hint: `Of decided leads: ${pct(t.decidedConversionPct)}` }),
+        stat({ label: "Typical time to hire", value: days(r.timeToHire.medianDays), icon: "clock", hint: r.timeToHire.count ? `Median of ${plural(r.timeToHire.count, "lead")} hired` : "No one hired in this period" }),
       ),
       h(
-        "dl.definitions.card",
-        h("h2", "What these numbers mean"),
-        ...["leads", "conversion", "decidedConversion", "timeToHire"].map((k) => h("p.small", r.definitions[k])),
-        r.timeToHire.count
-          ? h("p.small.muted", `Time to hire is based on ${plural(r.timeToHire.count, "lead")} hired in this period: average ${days(r.timeToHire.averageDays)}, fastest ${days(r.timeToHire.fastestDays)}, slowest ${days(r.timeToHire.slowestDays)}.`)
-          : null,
+        "div.intake-report-grid",
+        table("Leads by source", r.definitions.bySource, ["Source", "Leads", "Hired", "Not hired", "In progress", "Conversion"], r.bySource.map((s) => row([s.source, String(s.leads), String(s.hired), String(s.notHired), String(s.open), pct(s.conversionPct)])), "users"),
+        table("Pipeline today", "Leads at each step right now.", ["Status", "Leads"], r.pipeline.map((p) => row([p.label, String(p.count)])), "intake"),
+        table("Leads by practice area", null, ["Practice area", "Leads", "Hired", "Conversion"], r.byArea.map((a) => row([a.area, String(a.leads), String(a.hired), pct(a.conversionPct)])), "briefcase"),
+        table("Why leads did not hire the firm", r.definitions.notHired, ["Reason", "Leads"], r.notHiredReasons.map((x) => row([x.reason, String(x.count)])), "circle-alert"),
       ),
-      h("h2.report-h", "Leads by source"),
-      h("p.small.muted", r.definitions.bySource),
-      table(
-        ["Source", "Leads", "Hired", "Not hired", "In progress", "Conversion"],
-        r.bySource.map((s) => h("tr", h("td", s.source), h("td.num-cell", String(s.leads)), h("td.num-cell", String(s.hired)), h("td.num-cell", String(s.notHired)), h("td.num-cell", String(s.open)), h("td.num-cell", pct(s.conversionPct)))),
-      ),
-      h("h2.report-h", "Leads by practice area"),
-      table(["Practice area", "Leads", "Hired", "Conversion"], r.byArea.map((a) => h("tr", h("td", a.area), h("td.num-cell", String(a.leads)), h("td.num-cell", String(a.hired)), h("td.num-cell", pct(a.conversionPct))))),
-      h("h2.report-h", "Why leads did not hire the firm"),
-      h("p.small.muted", r.definitions.notHired),
-      table(["Reason", "Leads"], r.notHiredReasons.map((x) => h("tr", h("td", x.reason), h("td.num-cell", String(x.count))))),
-      h("h2.report-h", "Pipeline today"),
-      table(["Status", "Leads"], r.pipeline.map((p) => h("tr", h("td", p.label), h("td.num-cell", String(p.count))))),
+      kitCard({
+        title: "What these numbers mean",
+        icon: "info",
+        className: "definitions",
+        body: h(
+          "div.intake-defs",
+          ...["leads", "conversion", "decidedConversion", "timeToHire"].map((k) => h("p", r.definitions[k])),
+          r.timeToHire.count
+            ? h("p.muted", `Time to hire is based on ${plural(r.timeToHire.count, "lead")} hired in this period: average ${days(r.timeToHire.averageDays)}, fastest ${days(r.timeToHire.fastestDays)}, slowest ${days(r.timeToHire.slowestDays)}.`)
+            : null,
+        ),
+      }),
     );
   }
 
@@ -334,7 +352,7 @@ export async function intakeReportsView() {
   return h(
     "div.page.intake",
     pageHead("reports"),
-    h("form.filters", { onsubmit: (e) => (e.preventDefault(), load()) }, h("label.inline-label", "From ", from), h("label.inline-label", "to ", to), h("button.btn", { type: "submit" }, "Show")),
+    h("form.filters.intake-period", { onsubmit: (e) => (e.preventDefault(), load()) }, h("label.intake-date", h("span", "From"), from), h("label.intake-date", h("span", "to"), to), button("Show", { type: "submit" })),
     body,
   );
 }
@@ -512,6 +530,9 @@ export async function leadView([id]) {
     const steps = opts.statuses.filter((s) => s.key !== "not_hired");
     const idx = steps.findIndex((s) => s.key === l.status);
     return h(
+      "div.stage-card.lead-stage-card",
+      h("div.stage-label", h("span", "Step"), h("span.stage-count", idx >= 0 ? `${idx + 1} of ${steps.length}` : l.statusLabel)),
+      h(
       "ol.stage-bar.lead-stages",
       { "aria-label": "Where this lead is" },
       steps.map((s, i) =>
@@ -530,23 +551,24 @@ export async function leadView([id]) {
           ),
         ),
       ),
+      ),
     );
   }
 
   function nextAction() {
     switch (l.status) {
       case "new":
-        return h("button.btn.primary", { type: "button", onclick: () => act(() => post(`/intake/leads/${l.id}/status`, { status: "contacted" }), "Marked contacted") }, "Mark contacted");
+        return button("Mark contacted", { variant: "primary", icon: "phone", onclick: () => act(() => post(`/intake/leads/${l.id}/status`, { status: "contacted" }), "Marked contacted") });
       case "contacted":
-        return h("button.btn.primary", { type: "button", onclick: () => bookDialog() }, "Book a consultation");
+        return button("Book a consultation", { variant: "primary", icon: "calendar", onclick: () => bookDialog() });
       case "consult_scheduled":
-        return h("button.btn.primary", { type: "button", onclick: () => engagementDialog() }, "Prepare engagement letter");
+        return button("Prepare engagement letter", { variant: "primary", icon: "file-text", onclick: () => engagementDialog() });
       case "engagement_sent":
-        return h("button.btn.primary", { type: "button", onclick: () => convertDialog(l, () => refresh()) }, "Convert to client");
+        return button("Convert to client", { variant: "primary", icon: "user-plus", onclick: () => convertDialog(l, () => refresh()) });
       case "hired":
-        return l.matterId ? h("a.btn.primary", { href: `#/matters/${l.matterId}` }, "Open the matter") : null;
+        return l.matterId ? button("Open the matter", { variant: "primary", icon: "briefcase", href: `#/matters/${l.matterId}` }) : null;
       default:
-        return h("button.btn", { type: "button", onclick: () => act(() => post(`/intake/leads/${l.id}/status`, { status: "contacted" }), "Reopened") }, "Reopen");
+        return button("Reopen", { icon: "rotate-ccw", onclick: () => act(() => post(`/intake/leads/${l.id}/status`, { status: "contacted" }), "Reopened") });
     }
   }
 
@@ -554,20 +576,18 @@ export async function leadView([id]) {
   function conflictCard() {
     const k = l.conflictCheck;
     const body = [];
-    if (!k) body.push(h("p.empty", "No conflict check has been run."));
+    if (!k) body.push(h("p.lead-empty", "No conflict check has been run."));
     else {
       const who = k.decision ? `${k.decidedByName || "Someone"}, ${fmtTime(k.decidedAt)}` : null;
+      const status = callout({
+        tone: k.decision === "cleared" || k.decision === "waived" ? "success" : k.decision === "declined" ? "danger" : "warning",
+        title: k.decision === "cleared" ? "Cleared" : k.decision === "waived" ? "Waived" : k.decision === "declined" ? "Declined: conflict of interest" : k.hitCount || l.earlierInquiries.length ? "Needs a lawyer's review" : "No matches found; needs a lawyer to clear it",
+        body: [who ? `By ${who}.` : null, k.decisionNote].filter(Boolean).join(" ") || null,
+      });
+      status.classList.add("conflict-status", k.decision || "pending");
       body.push(
-        h(
-          "div.conflict-status." + (k.decision || "pending"),
-          h(
-            "strong",
-            k.decision === "cleared" ? "Cleared" : k.decision === "waived" ? "Waived" : k.decision === "declined" ? "Declined: conflict of interest" : k.hitCount || l.earlierInquiries.length ? "Needs a lawyer's review" : "No matches found; needs a lawyer to clear it",
-          ),
-          who ? h("span.small.muted", ` by ${who}`) : null,
-          k.decisionNote ? h("div.small", k.decisionNote) : null,
-        ),
-        h("p.small.muted", `Searched ${k.terms.map((t) => `“${t.name}”${t.role === "adverse_party" ? " (other party)" : ""}`).join(", ")} against every contact, alias and matter. Run ${fmtTime(k.runAt)}.`),
+        status,
+        h("p.lead-searched", `Searched ${k.terms.map((t) => `“${t.name}”${t.role === "adverse_party" ? " (other party)" : ""}`).join(", ")} against every contact, alias and matter. Run ${fmtTime(k.runAt)}.`),
       );
       if (k.results.length) {
         body.push(
@@ -576,9 +596,14 @@ export async function leadView([id]) {
             k.results.slice(0, 25).map((hit) =>
               h(
                 "li.hit." + hit.severity,
-                h("div.hit-head", h("strong", hit.name), h("span.tag" + (hit.severity === "high" ? ".high" : ""), `${hit.band} match`), hit.match === "related" ? h("span.tag", "related") : null),
-                hit.concerns.length ? h("div.small", hit.concerns.join(" ")) : null,
-                hit.involvements.length ? h("ul.small.hit-inv", hit.involvements.slice(0, 6).map((v) => h("li", v.text))) : null,
+                h(
+                  "div.hit-head",
+                  hit.contactId ? h("a.hit-name", { href: `#/contacts/${hit.contactId}` }, hit.name) : h("strong.hit-name", hit.name),
+                  pill(`${hit.band[0].toUpperCase()}${hit.band.slice(1)} match`, hit.severity === "high" ? "danger" : hit.band === "possible" ? "warning" : "neutral", { dot: false }),
+                  hit.match === "related" ? pill("Through a relationship", "neutral", { dot: false }) : null,
+                ),
+                hit.concerns.length ? h("div.hit-concern", icon("triangle-alert", { size: 14 }), h("span", hit.concerns.join(" "))) : null,
+                hit.involvements.length ? h("ul.hit-inv", hit.involvements.slice(0, 6).map((v) => h("li", v.text))) : null,
               ),
             ),
           ),
@@ -592,8 +617,8 @@ export async function leadView([id]) {
             l.earlierInquiries.map((e) =>
               h(
                 "li.hit.medium",
-                h("div.hit-head", h("a", { href: `#/intake/leads/${e.leadId}` }, e.leadName), h("span.tag", e.statusLabel)),
-                h("div.small", `“${e.term}” (${e.termAs}) is similar to “${e.matched}”, ${e.matchedAs} in an inquiry received ${fmtDate(e.receivedOn, today())}.`),
+                h("div.hit-head", h("a.hit-name", { href: `#/intake/leads/${e.leadId}` }, e.leadName), pill(e.statusLabel, "neutral", { dot: false })),
+                h("div.hit-text", `“${e.term}” (${e.termAs}) is similar to “${e.matched}”, ${e.matchedAs} in an inquiry received ${fmtDate(e.receivedOn, today())}.`),
               ),
             ),
           ),
@@ -603,15 +628,21 @@ export async function leadView([id]) {
         body.push(
           h(
             "div.form-actions.conflict-actions",
-            h("button.btn.small", { type: "button", onclick: () => act(() => post(`/intake/leads/${l.id}/conflict-check`), "Conflict check run again") }, "Run again"),
-            h("button.btn.small", { type: "button", onclick: () => decideDialog("declined") }, "Decline"),
-            h("button.btn.small", { type: "button", onclick: () => decideDialog("waived") }, "Waive"),
-            h("button.btn.small.primary", { type: "button", onclick: () => decideDialog("cleared") }, "Clear"),
+            button("Run again", { size: "sm", variant: "ghost", icon: "rotate-ccw", class: "conflict-rerun", onclick: () => act(() => post(`/intake/leads/${l.id}/conflict-check`), "Conflict check run again") }),
+            button("Decline", { size: "sm", onclick: () => decideDialog("declined") }),
+            button("Waive", { size: "sm", onclick: () => decideDialog("waived") }),
+            button("Clear", { size: "sm", variant: "primary", onclick: () => decideDialog("cleared") }),
           ),
         );
       }
     }
-    return h("section.card.conflict-card", h("h2", "Conflict check"), body);
+    return kitCard({
+      title: "Conflict check",
+      icon: "conflicts",
+      className: "conflict-card",
+      actions: k ? h("a.lead-card-link", { href: `#/conflicts/${k.id}` }, `Check no. ${k.id}`) : null,
+      body,
+    });
   }
 
   function decideDialog(decision) {
@@ -638,10 +669,10 @@ export async function leadView([id]) {
           }
         },
       },
-      h("p.small.muted", hint[decision]),
-      h("label", decision === "waived" ? "How it was waived" : "Note (optional)", note),
+      h("p.lead-dialog-hint", hint[decision]),
+      field(decision === "waived" ? "How it was waived" : "Note", note, { required: decision === "waived", optional: decision !== "waived" }),
       err,
-      h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, labels[decision])),
+      h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), button(labels[decision], { variant: decision === "declined" ? "danger" : "primary", type: "submit" })),
     );
     const dlg = modal(labels[decision], form);
     note.focus();
@@ -662,8 +693,8 @@ export async function leadView([id]) {
     };
     const locked = l.status === "hired";
     if (locked) Object.values(f).forEach((x) => (x.disabled = true));
-    return h(
-      "form.card.form-grid.lead-details",
+    const form = h(
+      "form.form-grid.lead-details-form",
       {
         onsubmit: (e) => {
           e.preventDefault();
@@ -684,36 +715,33 @@ export async function leadView([id]) {
           );
         },
       },
-      h("h2", "Details"),
       h("datalist#intake-sources-2", opts.sources.map((s) => h("option", { value: s }))),
-      h("div.form-row.two", h("label", "Name", f.name), h("label", "Person or business", f.kind)),
-      h("div.form-row.two", h("label", "Email", f.email), h("label", "Phone", f.phone)),
-      h("div.form-row", h("label", "How they heard about us", f.source), h("label", "Practice area", f.area), h("label", "Owner", f.owner)),
-      h("label", "Other people or businesses involved", f.opposing),
-      h("label", "What they need", f.summary),
-      locked ? null : h("div.form-actions", h("button.btn.primary", { type: "submit" }, "Save details")),
+      h("div.form-row.two", field("Name", f.name), field("Person or business", f.kind)),
+      h("div.form-row.two", field("Email", f.email), field("Phone", f.phone)),
+      h("div.form-row", field("How they heard about us", f.source), field("Practice area", f.area), field("Owner", f.owner)),
+      field("Other people or businesses involved", f.opposing, { hint: "One name per line. Each is checked for conflicts." }),
+      field("What they need", f.summary),
+      locked ? null : h("div.form-actions", button("Save details", { variant: "primary", type: "submit" })),
     );
+    return panel("Details", "user", "lead-details", form);
   }
 
   function answersCard() {
     if (!l.answers.length) return null;
-    return h(
-      "section.card",
-      h("h2", `Answers from “${l.formName || "intake form"}”`),
-      h("dl.answers", l.answers.flatMap((a) => [h("dt", a.label), h("dd.pre", a.value)])),
-    );
+    return panel(`Answers from “${l.formName || "intake form"}”`, "clipboard-list", "lead-answers", h("dl.answers", l.answers.flatMap((a) => [h("dt", a.label), h("dd.pre", a.value)])));
   }
 
   function notesCard() {
     const ta = h("textarea", { rows: 2, maxlength: 10000, placeholder: "Add a note: what was said, what happens next", "aria-label": "New note" });
-    return h(
-      "section.card",
-      h("h2", "Notes"),
+    return panel(
+      "Notes",
+      "message-square",
+      "lead-notes",
       h(
         "form.note-add",
         { onsubmit: (e) => (e.preventDefault(), ta.value.trim() && act(() => post(`/intake/leads/${l.id}/notes`, { body: ta.value }), "Note added")) },
         ta,
-        h("div.form-actions", h("button.btn.small", { type: "submit" }, "Add note")),
+        h("div.note-add-actions", button("Add note", { size: "sm", type: "submit" })),
       ),
       l.notes.length
         ? h(
@@ -721,20 +749,35 @@ export async function leadView([id]) {
             l.notes.map((n) =>
               h(
                 "li",
-                h("div.small.muted", `${n.userName || "Someone"}, ${fmtTime(n.at)}`, h("button.icon-btn.danger", { type: "button", "aria-label": "Delete note", title: "Delete note", onclick: () => confirm("Delete this note?") && act(() => del(`/intake/notes/${n.id}`), "Note deleted") }, "×")),
+                h(
+                  "div.note-head",
+                  avatar(n.userName, { size: "xs" }),
+                  h("span.note-by", h("strong", n.userName || "Someone"), ` · ${fmtTime(n.at)}`),
+                  iconButton("trash-2", "Delete note", { size: "sm", variant: "danger", onclick: () => confirm("Delete this note?") && act(() => del(`/intake/notes/${n.id}`), "Note deleted") }),
+                ),
                 h("div.pre", n.body),
               ),
             ),
           )
-        : h("p.empty.small", "No notes yet."),
+        : h("p.lead-empty", "No notes yet."),
     );
   }
 
   function historyCard() {
-    return h(
-      "section.card.activity",
-      h("h2", "History"),
-      h("ol.activity-list", l.activity.map((a) => h("li", h("span.act-time", fmtTime(a.at)), h("span.act-who", a.userName || (a.kind === "lead_created" ? "Website" : "Automatic")), h("span.act-what", a.detail)))),
+    return panel(
+      "History",
+      "activity",
+      "lead-history",
+      h(
+        "ol.lead-timeline",
+        l.activity.map((a) =>
+          h(
+            "li",
+            h("span.lead-tl-dot", { "aria-hidden": "true" }),
+            h("div.lead-tl-body", h("div.lead-tl-what", a.detail), h("div.lead-tl-meta", `${a.userName || (a.kind === "lead_created" ? "Website" : "Automatic")} · ${fmtTime(a.at)}`)),
+          ),
+        ),
+      ),
     );
   }
 
@@ -743,9 +786,10 @@ export async function leadView([id]) {
     const date = h("input", { type: "date", value: addDaysIso(today(), 2), "aria-label": "Reminder date" });
     const title = h("input", { maxlength: 300, placeholder: `Follow up with ${l.name}`, "aria-label": "Reminder" });
     const open = l.status !== "hired" && l.status !== "not_hired";
-    return h(
-      "section.card",
-      h("h2", "Follow-ups"),
+    return panel(
+      "Follow-ups",
+      "clock",
+      "lead-followups",
       l.tasks.length
         ? h(
             "ul.plain.mini-list",
@@ -757,16 +801,16 @@ export async function leadView([id]) {
               ),
             ),
           )
-        : h("p.empty.small", "No reminders."),
+        : h("p.lead-empty", "No reminders."),
       open
         ? h(
             "form.mini-form",
             { onsubmit: (e) => (e.preventDefault(), act(() => post(`/intake/leads/${l.id}/reminders`, { title: title.value || null, dueDate: date.value || null }), "Reminder added to the owner's tasks")) },
             title,
-            h("div.mini-row", date, h("button.btn.small", { type: "submit" }, "Add reminder")),
+            h("div.mini-row", date, button("Add reminder", { size: "sm", type: "submit" })),
           )
         : null,
-      h("h3.sub-h", "Emails waiting to go out"),
+      h("h3.lead-sub-h", "Emails waiting to go out"),
       l.emails.length
         ? h(
             "ul.plain.mini-list",
@@ -778,13 +822,13 @@ export async function leadView([id]) {
                   "span.small.muted",
                   `${m.status === "queued" ? "To send " + fmtDate(m.sendAfter.slice(0, 10), today()) : m.status === "sent" ? "Sent" : m.status === "failed" ? "Could not be sent" : "Cancelled"} · ${m.toAddress}`,
                 ),
-                m.status === "queued" ? h("button.btn.small.danger-text", { type: "button", onclick: () => act(() => post(`/intake/emails/${m.id}/cancel`), "Email cancelled") }, "Cancel") : null,
+                m.status === "queued" ? button("Cancel", { size: "sm", variant: "ghost", onclick: () => act(() => post(`/intake/emails/${m.id}/cancel`), "Email cancelled") }) : null,
               ),
             ),
           )
-        : h("p.empty.small", "None."),
-      open && l.email ? h("button.btn.small", { type: "button", onclick: () => emailDialog() }, "Write a follow-up email") : null,
-      open && !l.email ? h("p.small.muted", "Add an email address to write follow-up emails.") : null,
+        : h("p.lead-empty", "None."),
+      open && l.email ? button("Write a follow-up email", { size: "sm", variant: "ghost", icon: "mail", class: "lead-inline-btn", onclick: () => emailDialog() }) : null,
+      open && !l.email ? h("p.lead-empty", "Add an email address to write follow-up emails.") : null,
     );
   }
 
@@ -824,9 +868,10 @@ export async function leadView([id]) {
     const booked = l.consultations.filter((c) => c.status === "booked");
     const link = `${location.origin}/intake/book.html?b=${encodeURIComponent(opts.settings.bookingToken)}&lead=${encodeURIComponent(l.publicToken)}`;
     const open = l.status !== "hired" && l.status !== "not_hired";
-    return h(
-      "section.card",
-      h("h2", "Consultation"),
+    return panel(
+      "Consultation",
+      "calendar",
+      "lead-consult",
       booked.length
         ? h(
             "ul.plain.mini-list",
@@ -835,16 +880,16 @@ export async function leadView([id]) {
                 "li",
                 h("span", fmtInstant(c.startAt)),
                 h("span.small.muted", `with ${c.userName}${c.bookedVia === "public" ? " · booked online" : ""}`),
-                open ? h("button.btn.small.danger-text", { type: "button", onclick: () => confirm("Cancel this consultation and remove it from the calendar?") && act(() => post(`/intake/consultations/${c.id}/cancel`), "Consultation cancelled") }, "Cancel") : null,
+                open ? button("Cancel", { size: "sm", variant: "ghost", onclick: () => confirm("Cancel this consultation and remove it from the calendar?") && act(() => post(`/intake/consultations/${c.id}/cancel`), "Consultation cancelled") }) : null,
               ),
             ),
           )
-        : h("p.empty.small", "None booked."),
-      open ? h("button.btn.small", { type: "button", onclick: () => bookDialog() }, "Book a consultation") : null,
+        : h("p.lead-empty", "None booked."),
+      open ? button("Book a consultation", { size: "sm", variant: "ghost", icon: "plus", class: "lead-inline-btn", onclick: () => bookDialog() }) : null,
       open
         ? h(
             "div.share-link",
-            h("label.small.muted", { for: "lead-book-link" }, "Or send them their own booking link:"),
+            h("label.field-label", { for: "lead-book-link" }, "Or send them their own booking link"),
             h("input#lead-book-link", { readonly: true, value: link, onfocus: (e) => e.target.select() }),
           )
         : null,
@@ -929,9 +974,10 @@ export async function leadView([id]) {
   function engagementCard() {
     const open = l.status !== "hired" && l.status !== "not_hired";
     const statusText = { draft: "Ready to send", sent: "Sent", signed: "Signed", declined: "Declined" };
-    return h(
-      "section.card",
-      h("h2", "Engagement letter"),
+    return panel(
+      "Engagement letter",
+      "file-text",
+      "lead-engagement",
       l.engagements.length
         ? h(
             "ul.plain.mini-list",
@@ -942,14 +988,14 @@ export async function leadView([id]) {
                 h("span.small.muted", `${statusText[e.status]}${e.sentAt ? " " + fmtTime(e.sentAt) : ""}${e.signatureRef ? " · out for e-signature" : ""}${e.documentId ? " · filed to the matter" : ""}`),
                 h(
                   "span.mini-actions",
-                  h("button.btn.small", { type: "button", onclick: () => get(`/intake/engagements/${e.id}/download`).then(downloadFile, fail) }, "Download"),
-                  e.status === "draft" && open ? h("button.btn.small.primary", { type: "button", onclick: () => sendDialog(e) }, "Send") : null,
+                  button("Download", { size: "sm", onclick: () => get(`/intake/engagements/${e.id}/download`).then(downloadFile, fail) }),
+                  e.status === "draft" && open ? button("Send", { size: "sm", variant: "primary", onclick: () => sendDialog(e) }) : null,
                 ),
               ),
             ),
           )
-        : h("p.empty.small", "None prepared yet."),
-      open ? h("button.btn.small", { type: "button", onclick: () => engagementDialog() }, "Prepare engagement letter") : null,
+        : h("p.lead-empty", "None prepared yet."),
+      open ? button("Prepare engagement letter", { size: "sm", variant: "ghost", icon: "plus", class: "lead-inline-btn", onclick: () => engagementDialog() }) : null,
     );
   }
 
@@ -1014,32 +1060,32 @@ export async function leadView([id]) {
 
   function clientCard() {
     if (l.status !== "hired") return null;
-    return h(
-      "section.card.client-card",
-      h("h2", "Client"),
-      h("p", `Hired ${fmtDate(l.hiredOn, today())}.`),
-      l.matterId ? h("p", h("a", { href: `#/matters/${l.matterId}` }, l.matterNumber ? `${l.matterNumber} ` : "", l.matterName || "Open the matter")) : null,
+    return panel(
+      "Client",
+      "user-plus",
+      "client-card",
+      h("p.lead-empty", `Hired ${fmtDate(l.hiredOn, today())}.`),
+      l.matterId ? h("p", h("a.cell-title", { href: `#/matters/${l.matterId}` }, l.matterNumber ? h("span.matter-num", l.matterNumber) : null, " ", l.matterName || "Open the matter")) : null,
     );
   }
 
   function draw() {
     const open = l.status !== "hired" && l.status !== "not_hired";
     page.replaceChildren(
-      h("a.back", { href: "#/intake" }, "← Intake"),
-      h(
-        "div.page-head",
-        h(
-          "div",
-          h("h1", l.name),
-          h("p.sub", [l.statusLabel + (l.status === "not_hired" && l.notHiredReason ? `: ${l.notHiredReason}` : ""), `received ${fmtDate(l.receivedOn, today())}`, l.source, l.ownerName ? `owner ${l.ownerName}` : "no owner"].filter(Boolean).join(" · ")),
-        ),
-        h(
-          "div.head-actions",
-          open ? h("button.btn", { type: "button", onclick: () => notHiredDialog(l, () => refresh()) }, "Not hired") : null,
-          open && l.status !== "engagement_sent" ? h("button.btn", { type: "button", onclick: () => convertDialog(l, () => refresh()) }, "Convert to client") : null,
+      pageHeader({
+        title: l.name,
+        breadcrumbs: [{ label: "Intake", href: "#/intake" }, { label: l.name }],
+        meta: [
+          leadPill(l),
+          h("span.lead-head-meta", [l.status === "not_hired" && l.notHiredReason ? l.notHiredReason : null, `Received ${fmtDate(l.receivedOn, today())}`, l.source].filter(Boolean).join(" · ")),
+          l.ownerName ? person(l.ownerName, null, { size: "xs" }) : h("span.lead-head-meta", "No owner"),
+        ],
+        actions: [
+          open ? button("Not hired", { variant: "ghost", onclick: () => notHiredDialog(l, () => refresh()) }) : null,
+          open && l.status !== "engagement_sent" ? button("Convert to client", { onclick: () => convertDialog(l, () => refresh()) }) : null,
           nextAction(),
-        ),
-      ),
+        ].filter(Boolean),
+      }),
       stageBar(),
       h(
         "div.lead-grid",

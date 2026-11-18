@@ -37,6 +37,18 @@ test("normalising: Last, First, titles and personal suffixes", () => {
   assert.deepEqual(prepare("Baker, Hale & Moss", "company").tokens, ["baker", "hale", "and", "moss"]);
 });
 
+test("normalising: text in brackets is a note, not part of the name", () => {
+  assert.deepEqual(prepare("John Smith (deceased)").tokens, ["john", "smith"]);
+  assert.deepEqual(prepare("Smith, John (deceased)").tokens, ["john", "smith"]);
+  assert.deepEqual(prepare("Acme Supply LLC [old address]", "company").tokens, ["acme", "supply"]);
+  assert.deepEqual(prepare("Mary {estate} Ellis").tokens, ["mary", "ellis"]);
+  assert.deepEqual(prepare("John Smith (deceased)").stripped, [], "a bracketed note is not reported as a suffix");
+  // a name that is all brackets is kept rather than emptied
+  assert.deepEqual(prepare("(unknown)").tokens, ["unknown"]);
+  // the note no longer weakens the match
+  assert.equal(compareNames("John Smith (deceased)", "John Smith").score, compareNames("John Smith", "John Smith").score);
+});
+
 test("splitting names that carry other names", () => {
   assert.deepEqual(splitNames("John Smith d/b/a Smith Plumbing"), ["John Smith", "Smith Plumbing"]);
   assert.deepEqual(splitNames("Jane Doe f/k/a Jane Roe"), ["Jane Doe", "Jane Roe"]);

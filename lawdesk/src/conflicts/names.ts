@@ -284,6 +284,12 @@ export function prepare(raw: string, kind?: NameKind | null): Prepared {
   let s = fold(String(raw ?? ""));
   let reordered = false;
 
+  // Text in brackets is a note about the name, not part of it: "John Smith (deceased)",
+  // "Acme LLC [old address]". Dropped unless nothing else would be left. (Not recorded in
+  // `stripped`, which explains matches as "an ending such as LLC, Inc. or Jr.".)
+  const unbracketed = s.replace(/[(\[{][^()[\]{}]*[)\]}]/g, " ");
+  if (tokenize(unbracketed).length) s = unbracketed;
+
   // "Smith, John Q., Jr." -> "John Q. Smith" (suffix parts after commas are dropped first)
   const parts = s.split(",").map((p) => p.trim()).filter(Boolean);
   while (parts.length > 1 && isSuffixPart(parts[parts.length - 1])) stripped.push(tokenize(parts.pop()!).join(""));

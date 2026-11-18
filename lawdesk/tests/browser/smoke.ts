@@ -855,7 +855,7 @@ for (const [label, viewport] of [
     await page.goto(base + `/#/contacts/${demo.contacts.peggy}`);
     await page.waitForSelector(".ct-details");
     const text = await page.locator(".ct-grid").innerText();
-    for (const s of ["Peggy Ellison (demo)", "Maiden name", "an owner of", "Sunflower Coffee Roasters formation", "316-555-0144", "22 Sample Lane"]) assert.ok(text.includes(s), s);
+    for (const s of ["Peggy Ellison", "Maiden name", "an owner of", "Sunflower Coffee Roasters formation", "316-555-0144", "22 Sample Lane"]) assert.ok(text.includes(s), s);
     await page.locator("button", { hasText: "Add phone, email or address" }).click();
     await page.locator(".ct-add-detail select").first().selectOption("address");
     await page.fill(".ct-add-detail input[aria-label='Label']", "Work");
@@ -968,8 +968,8 @@ for (const [label, viewport] of [
     await page.locator("button", { hasText: "New matter" }).click();
     await page.fill("dialog input[name=name]", label === "desktop" ? "Panel warranty claim" : "Panel warranty dispute");
     await page.fill("dialog input[name=number]", label === "desktop" ? "D-2001" : "D-2002");
-    await page.locator("dialog select[name=client]").selectOption({ label: "Prairie Wind Solar Inc. (demo)" });
-    await page.fill("dialog .intake-party input", "Kestrel Panel Manufacturing Co. (demo)");
+    await page.locator("dialog select[name=client]").selectOption({ label: "Prairie Wind Solar Inc." });
+    await page.fill("dialog .intake-party input", "Kestrel Panel Manufacturing Co.");
     const submit = page.locator("dialog .form-actions button[type=submit]");
     assert.equal(await submit.innerText(), "Check for conflicts");
     await submit.click();
@@ -1182,7 +1182,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: lead page: conflict hits, clear, convert dialog`, async () => {
-    const id = (db.prepare("SELECT id FROM intake_leads WHERE name = 'Harper Quinn (demo)'").get() as any).id;
+    const id = (db.prepare("SELECT id FROM intake_leads WHERE name = 'Harper Quinn'").get() as any).id;
     await page.goto(base + `/#/intake/leads/${id}`);
     await page.waitForSelector(".conflict-card .hit");
     assert.match(await page.locator(".conflict-card").innerText(), /Sunflower Coffee Roasters/);
