@@ -4,9 +4,12 @@
 import { h, replace, select, modal, toast, fmtTime, plural } from "../dom.js";
 import { get, post, del } from "../api.js";
 import { sendFile, fmtSize } from "../upload.js";
+import { icon } from "../ui/icons.js";
+import { pageHeader, card, button, emptyState, field, callout, useStyles, loadingBlock } from "../ui/components.js";
 
 const fail = (err) => toast(err.message, { error: true });
 const KIND = { docx: "Word", txt: "Text", html: "Web page" };
+const KIND_ICON = { docx: "file-text", txt: "file-text", html: "file" };
 
 /** Plain-English label for a field, from the catalog, or a tidy version of the field name. */
 function labeller(catalog) {
@@ -28,67 +31,77 @@ async function copy(text) {
 // --------------------------------------------------------------- settings page
 
 export async function templatesSettingsView() {
+  useStyles("documents");
   const page = h("div.page.templates-page");
-  const listBox = h("div.template-list");
+  const listBody = h("div.template-list", loadingBlock("Loading templates", "lines", 3));
+  const listSub = h("span", "");
   let catalog = [];
   let showDeleted = false;
 
   async function load() {
-    const [templates, cat] = await Promise.all([get(`/document-templates${showDeleted ? "?deleted=1" : ""}`), get("/document-templates/fields")]);
-    catalog = cat;
-    drawList(templates);
-    drawReference();
+    try {
+      const [templates, cat] = await Promise.all([get(`/document-templates${showDeleted ? "?deleted=1" : ""}`), get("/document-templates/fields")]);
+      catalog = cat;
+      drawList(templates);
+      drawReference();
+    } catch (err) {
+      replace(listBody, h("div.docs-search-error", callout({ tone: "danger", title: "Couldn't load the templates", body: err.message, action: button("Try again", { size: "sm", onclick: load }) })));
+    }
   }
 
   function drawList(templates) {
     const label = labeller(catalog);
-    replace(listBox, 
+    const live = templates.filter((t) => !t.deletedAt).length;
+    listSub.textContent = templates.length ? `${plural(live, "template")}${live !== templates.length ? ` · ${templates.length - live} deleted` : ""}` : "";
+    replace(
+      listBody,
       templates.length
         ? h(
-            "ul.plain.templates",
+            "ul.templates",
             templates.map((t) =>
               h(
-                "li.card.template" + (t.deletedAt ? ".deleted" : ""),
+                "li.template" + (t.deletedAt ? ".deleted" : ""),
+                h("span.doc-icon", { "aria-hidden": "true" }, icon(KIND_ICON[t.kind] || "file", { size: 16 })),
                 h(
-                  "div.template-head",
-                  h("div", h("h3", t.name), h("p.muted.small", [KIND[t.kind] || t.kind, t.category, t.filename, fmtSize(t.size), `updated ${fmtTime(t.updatedAt)}`].filter(Boolean).join(" · "))),
+                  "div.template-main",
                   h(
-                    "div.head-actions",
-                    t.deletedAt
-                      ? h("button.btn.small", { type: "button", onclick: () => post(`/document-templates/${t.id}/restore`).then(() => (toast(`Restored “${t.name}”`), load()), fail) }, "Restore")
-                      : [
-                          h("a.btn.small", { href: `/api/document-templates/${t.id}/file`, download: t.filename }, "Download"),
-                          replaceButton(t),
-                          h(
-                            "button.btn.small.danger-text",
-                            {
-                              type: "button",
+                    "div.template-head",
+                    h(
+                      "div",
+                      h("h3.template-name", t.name, t.deletedAt ? h("span.visually-hidden", " (deleted)") : null),
+                      h("p.template-meta", [KIND[t.kind] || t.kind, t.category, t.filename, fmtSize(t.size), `updated ${fmtTime(t.updatedAt)}`].filter(Boolean).join(" · ")),
+                    ),
+                    h(
+                      "div.template-actions",
+                      t.deletedAt
+                        ? button("Restore", { size: "sm", icon: "rotate-ccw", onclick: () => post(`/document-templates/${t.id}/restore`).then(() => (toast(`Restored “${t.name}”`), load()), fail) })
+                        : [
+                            h("a.icon-btn.sm", { href: `/api/document-templates/${t.id}/file`, download: t.filename, "aria-label": `Download ${t.name}`, title: "Download" }, icon("download", { size: 15 })),
+                            replaceButton(t),
+                            button("Delete", {
+                              size: "sm",
+                              variant: "ghost",
+                              class: "danger-text",
                               onclick: () =>
                                 del(`/document-templates/${t.id}`).then(
                                   () => (toast(`Deleted “${t.name}”`, { action: { label: "Undo", run: () => post(`/document-templates/${t.id}/restore`).then(load, fail) } }), load()),
                                   fail,
                                 ),
-                            },
-                            "Delete",
-                          ),
-                        ],
+                            }),
+                          ],
+                    ),
                   ),
-                ),
-                t.description ? h("p", t.description) : null,
-                h(
-                  "div.template-fields",
-                  h("span.muted.small", t.fields.length ? `Fills in ${plural(t.fields.length, "field")}:` : "This template has no merge fields."),
-                  h("ul.plain.field-chips", t.fields.map((f) => h("li.field-chip", { title: code(f) }, label(f)))),
+                  t.description ? h("p.template-desc", t.description) : null,
+                  h(
+                    "div.template-fields",
+                    h("span.template-fields-label", t.fields.length ? `Fills in ${plural(t.fields.length, "field")}` : "This template has no merge fields."),
+                    t.fields.length ? h("ul.field-chips", t.fields.map((f) => h("li.field-chip", { title: code(f) }, label(f)))) : null,
+                  ),
                 ),
               ),
             ),
           )
-        : h("div.card.empty-big", h("p", "No templates yet."), h("p", "Upload a Word, text or web page file that uses merge fields such as {{client.name}}.")),
-      h(
-        "label.toggle",
-        h("input", { type: "checkbox", checked: showDeleted, onchange: (e) => ((showDeleted = e.target.checked), load()) }),
-        " Show deleted templates",
-      ),
+        : emptyState({ icon: "file-plus", title: "No templates yet", body: "Add a Word, text or web page file that uses merge fields such as {{client.name}}.", compact: true }),
     );
   }
 
@@ -111,18 +124,18 @@ export async function templatesSettingsView() {
         }
       },
     });
-    return [h("button.btn.small", { type: "button", onclick: () => input.click() }, "Replace file"), input];
+    return [button("Replace file", { size: "sm", icon: "upload", onclick: () => input.click() }), input];
   }
 
   // Upload form
   const name = h("input", { maxlength: 200, placeholder: "e.g. Engagement letter" });
   const category = h("input", { maxlength: 100, placeholder: "e.g. Letters" });
-  const description = h("input", { maxlength: 1000, placeholder: "What it's for (optional)" });
+  const description = h("input", { maxlength: 1000, placeholder: "What it's for" });
   const file = h("input", { type: "file", accept: ".docx,.txt,.md,.html,.htm", required: true });
   const err = h("p.error-text", { role: "alert" });
-  const bar = h("span.progress-fill", { style: { width: "0%" } });
+  const bar = h("span.docs-progress-fill", { style: { width: "0%" } });
   const upload = h(
-    "form.card.form-grid.template-upload",
+    "form.form-grid.template-upload",
     {
       onsubmit: async (e) => {
         e.preventDefault();
@@ -146,21 +159,18 @@ export async function templatesSettingsView() {
         }
       },
     },
-    h("h2", "Add a template"),
-    h("p.muted", "Word (.docx), text or web page files. Where a value should go, type the field in double curly brackets, for example {{client.name}}."),
-    h("label", "File", file),
-    h("div.form-row", h("label", "Name", name), h("label", "Category", category)),
-    h("label", "Description", description),
-    h("span.progress-bar", { "aria-hidden": "true" }, bar),
+    field("File", file, { required: true, hint: "Word (.docx), text or web page. Where a value should go, type the field in double curly brackets, for example {{client.name}}." }),
+    h("div.form-row", field("Name", name, { optional: true }), field("Category", category, { optional: true })),
+    field("Description", description, { optional: true }),
+    h("span.docs-progress", { "aria-hidden": "true" }, bar),
     err,
-    h("div.form-actions", h("button.btn.primary", { type: "submit" }, "Add template")),
+    h("div.form-actions", button("Add template", { variant: "primary", type: "submit", icon: "plus" })),
   );
 
-  const reference = h("aside.card.field-reference", { "aria-labelledby": "fields-title" });
+  const refBody = h("div");
   function drawReference() {
-    replace(reference, 
-      h("h2#fields-title", "Fields you can use"),
-      h("p.muted.small", "Click a field to copy it, then paste it into your template."),
+    replace(
+      refBody,
       catalog
         .filter((g) => g.fields.length)
         .map((g) =>
@@ -170,8 +180,8 @@ export async function templatesSettingsView() {
             h(
               "dl.field-list",
               g.fields.map((f) => [
-                h("dt", h("button.field-code", { type: "button", title: "Copy", onclick: () => copy(code(f.field)) }, code(f.field))),
-                h("dd", f.label, f.example ? h("span.muted", ` (today: ${f.example})`) : null, f.hint ? h("span.muted.small.field-hint", f.hint) : null),
+                h("dt", h("button.field-code", { type: "button", title: "Copy", "aria-label": `Copy ${code(f.field)}` }, code(f.field), icon("copy", { size: 12 }))),
+                h("dd", f.label, f.example ? h("span.muted", ` (today: ${f.example})`) : null, f.hint ? h("span.tpl-hint", f.hint) : null),
               ]),
             ),
           ),
@@ -192,12 +202,32 @@ export async function templatesSettingsView() {
         ),
       ),
     );
+    // One listener for every copy button (the label is the field code).
+    for (const b of refBody.querySelectorAll(".field-code")) b.addEventListener("click", () => copy(b.textContent));
   }
 
+  const toggle = h(
+    "label.toggle.templates-show-deleted",
+    h("input", { type: "checkbox", role: "switch", checked: showDeleted, onchange: (e) => ((showDeleted = e.target.checked), load()) }),
+    h("span.toggle-track", { "aria-hidden": "true" }),
+    "Show deleted",
+  );
+
   page.append(
-    h("a.back", { href: "#/settings" }, "← Settings"),
-    h("div.page-head", h("div", h("h1", "Document templates"), h("p.sub", "Letters and forms that fill in client and matter details for you."))),
-    h("div.templates-layout", h("div.templates-main", upload, listBox), reference),
+    pageHeader({
+      title: "Document templates",
+      breadcrumbs: [{ label: "Settings", href: "#/settings" }, { label: "Document templates" }],
+      subtitle: "Letters and forms that fill in client and matter details for you.",
+    }),
+    h(
+      "div.templates-layout",
+      h(
+        "div.templates-main",
+        card({ title: "Templates", subtitle: listSub, icon: "documents", flush: true, actions: toggle, body: listBody }),
+        card({ title: "Add a template", icon: "upload", body: upload }),
+      ),
+      card({ title: "Fields you can use", subtitle: "Click a field to copy it, then paste it into your template.", icon: "copy", tag: "aside", className: "field-reference", body: refBody }),
+    ),
   );
   await load();
   return page;
@@ -210,6 +240,7 @@ export async function templatesSettingsView() {
  * then create the document and open it.
  */
 export async function templateDialog(matterId, { folder = "" } = {}) {
+  useStyles("documents");
   let templates;
   let folders;
   try {
@@ -222,8 +253,13 @@ export async function templateDialog(matterId, { folder = "" } = {}) {
       "Create from template",
       h(
         "div.modal-body",
-        h("p", "There are no document templates yet."),
-        h("div.form-actions", h("a.btn.primary", { href: "#/settings/templates", onclick: () => none.close() }, "Add a template")),
+        emptyState({
+          icon: "file-plus",
+          title: "There are no document templates yet",
+          body: "Templates are letters and forms that fill in client and matter details. Add one in Settings.",
+          action: button("Add a template", { variant: "primary", href: "#/settings/templates", onclick: () => none.close() }),
+          compact: true,
+        }),
       ),
     );
     return;
@@ -235,42 +271,45 @@ export async function templateDialog(matterId, { folder = "" } = {}) {
   const folderSel = select([{ value: "", label: "Top level" }, ...[...paths].sort().map((p) => ({ value: p, label: p.split("/").join(" › ") }))], folder);
   const report = h("div.field-check", { "aria-live": "polite" });
   const err = h("p.error-text", { role: "alert" });
-  const go = h("button.btn.primary", { type: "submit" }, "Create document");
+  const go = button("Create document", { variant: "primary", type: "submit", icon: "file-plus" });
   let customFields = [];
 
   async function check() {
-    replace(report, h("p.muted", "Checking…"));
+    replace(report, loadingBlock("Checking the fields", "lines", 2));
     try {
       const c = await get(`/matters/${matterId}/templates/${pick.value}/check`);
       filename.value = c.suggestedName;
       const filled = c.fields.filter((f) => f.status === "filled");
       const blank = c.fields.filter((f) => f.status !== "filled" && !f.field.startsWith("custom."));
       customFields = c.fields.filter((f) => f.field.startsWith("custom."));
-      replace(report, 
-        blank.length
-          ? h(
-              "div.check-warn",
-              h("p", h("b", blank.length === 1 ? "1 field will be blank" : `${blank.length} fields will be blank`), blank.length === 1 ? ". Fill it in on the matter first, or edit the document afterwards." : ". Fill them in on the matter first, or edit the document afterwards."),
-              h("ul", blank.map((f) => h("li", f.label, f.status === "unknown" ? h("span.muted.small", ` (${code(f.field)} isn't a field Lawdesk knows; check the template)`) : null))),
-            )
-          : h("p.check-ok", "Every field has a value for this matter."),
+      const warn = blank.length
+        ? callout({
+            tone: "warning",
+            title: blank.length === 1 ? "1 field will be blank" : `${blank.length} fields will be blank`,
+            body: h(
+              "span",
+              blank.length === 1 ? "Fill it in on the matter first, or edit the document afterwards." : "Fill them in on the matter first, or edit the document afterwards.",
+              h("ul", blank.map((f) => h("li", f.label, f.status === "unknown" ? h("span.muted", ` (${code(f.field)} isn't a field Lawdesk knows; check the template)`) : null))),
+            ),
+          })
+        : callout({ tone: "success", title: "Every field has a value for this matter." });
+      warn.classList.add(blank.length ? "check-warn" : "check-ok");
+      replace(
+        report,
+        warn,
         customFields.length
           ? h(
               "fieldset.custom-fields",
               h("legend", "Values to type in"),
-              customFields.map((f) => h("label", f.label.replace(/ \(typed in when creating the document\)$/, ""), h("input", { "data-field": f.field.slice(7), maxlength: 2000 }))),
+              customFields.map((f) => field(f.label.replace(/ \(typed in when creating the document\)$/, ""), h("input", { "data-field": f.field.slice(7), maxlength: 2000 }))),
             )
           : null,
         filled.length
-          ? h(
-              "details.check-filled",
-              h("summary", `${plural(filled.length, "field")} will be filled in`),
-              h("dl.field-values", filled.map((f) => [h("dt", f.label), h("dd", f.value)])),
-            )
+          ? h("details.check-filled", h("summary", `${plural(filled.length, "field")} will be filled in`), h("dl.field-values", filled.map((f) => [h("dt", f.label), h("dd", f.value)])))
           : null,
       );
     } catch (ex) {
-      replace(report, h("p.error-text", ex.message));
+      replace(report, callout({ tone: "danger", title: "Couldn't check this template", body: ex.message }));
     }
   }
   pick.addEventListener("change", check);
@@ -295,12 +334,12 @@ export async function templateDialog(matterId, { folder = "" } = {}) {
         }
       },
     },
-    h("label", "Template", pick),
+    field("Template", pick),
     report,
-    h("div.form-row", h("label", "File name", filename), h("label", "Folder", folderSel)),
+    h("div.form-row", field("File name", filename), field("Folder", folderSel)),
     err,
-    h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), go),
+    h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), go),
   );
-  const dlg = modal("Create from template", form, { wide: true });
+  const dlg = modal("Create from template", form, { wide: true, subtitle: "Fills in the client and matter details, then saves the new document to this matter." });
   await check();
 }

@@ -4,13 +4,34 @@
 import { h, select, modal, toast, fmtTime } from "../dom.js";
 import { get, put, post, del } from "../api.js";
 import { state } from "../state.js";
+import { icon } from "../ui/icons.js";
+import { button, iconButton, emptyState, field, pill, callout, useStyles, loadingBlock } from "../ui/components.js";
+import { dataTable } from "../ui/table.js";
 
 const STATUS = { queued: "Waiting", sending: "Sending", sent: "Sent", failed: "Not sent", cancelled: "Cancelled" };
+const STATUS_TONE = { queued: "warning", sending: "info", sent: "success", failed: "danger", cancelled: "neutral" };
+
+/** The same header every Settings section uses. */
+function head() {
+  return h(
+    "header.card-header",
+    h(
+      "div.card-heading",
+      h("span.card-icon", icon("mail", { size: 16 })),
+      h("div", h("h2.card-title", "Email"), h("p.card-subtitle", "How the firm's email is sent, your own email notices, message templates and recent mail.")),
+    ),
+  );
+}
+
+function blockHead(title, sub = null, action = null) {
+  return h("div.email-block-head" + (action ? ".with-action" : ""), h("div", h("h3", title), sub ? h("p", sub) : null), action);
+}
 const KIND = { matter: "From a matter", task_assigned: "New task", digest: "Daily summary", reminder: "Reminder", password_reset: "Password reset", test: "Test" };
 
 /** Returns the section element; it loads its own data and can be kept across settings redraws. */
 export function emailSettingsSection() {
-  const section = h("section.card.email-settings#s-email", h("h2", "Email"), h("p.muted", "Loading…"));
+  useStyles("email");
+  const section = h("section.card.settings-section.email-settings#s-email", head(), loadingBlock("Loading email settings", "lines", 4));
   const fail = (err) => toast(err.message, { error: true });
 
   async function load() {
@@ -22,9 +43,9 @@ export function emailSettingsSection() {
         get("/email/templates"),
         get("/email/outbox?limit=20"),
       ]);
-      section.replaceChildren(h("h2", "Email"), sending(settings), notices(prefs), templateList(templates), outboxList(outbox));
+      section.replaceChildren(head(), sending(settings), notices(prefs), templateList(templates), outboxList(outbox));
     } catch (err) {
-      section.replaceChildren(h("h2", "Email"), h("p.error-text", err.message));
+      section.replaceChildren(head(), callout({ tone: "danger", title: "Couldn't load the email settings", body: err.message, action: button("Try again", { size: "sm", onclick: load }) }));
     }
   }
 
@@ -87,26 +108,22 @@ export function emailSettingsSection() {
       "div.email-smtp",
       h(
         "div.email-presets",
-        h("span.muted.small", "Fill in the usual settings for: "),
+        h("span.email-presets-label", "Fill in the usual settings for"),
         Object.entries(s.providers).map(([k, p]) =>
-          h(
-            "button.btn.small",
-            {
-              type: "button",
-              onclick: () => {
-                if (!host.disabled) host.value = p.host;
-                if (!port.disabled) port.value = p.port;
-                if (!security.disabled) security.value = p.security;
-              },
+          button(p.label, {
+            size: "sm",
+            onclick: () => {
+              if (!host.disabled) host.value = p.host;
+              if (!port.disabled) port.value = p.port;
+              if (!security.disabled) security.value = p.security;
             },
-            p.label,
-          ),
+          }),
         ),
       ),
-      h("div.form-row", h("label", "Mail server", host), h("label", "Port", port), h("label", "Encryption", security)),
-      h("div.form-row", h("label", "User name", user), h("label", "Password", pass), h("label", "Sign-in method", auth)),
+      h("div.form-row", field("Mail server", host), field("Port", port), field("Encryption", security)),
+      h("div.form-row", field("User name", user), field("Password", pass), field("Sign-in method", auth)),
       h(
-        "p.muted.small",
+        "p.email-note",
         "Google Workspace and Microsoft 365 may require an app password, or sign-in through OAuth, which the firm's administrator sets up. See the email setup notes that come with Lawdesk.",
       ),
     );
@@ -144,34 +161,31 @@ export function emailSettingsSection() {
           }
         },
       },
-      h("h3", "How email is sent"),
-      h("label", "Sending", transport),
-      s.transport === "dev" && s.devDir ? h("p.muted.small", `Messages are saved in the folder “${s.devDir}” on the server and are not delivered.`) : null,
+      blockHead("How email is sent", "Messages to clients and the team's notices go out through this account."),
+      field("Sending", transport),
+      s.transport === "dev" && s.devDir ? callout({ tone: "info", body: `Messages are saved in the folder “${s.devDir}” on the server and are not delivered.` }) : null,
       smtpBox,
-      h("div.form-row", h("label", "From name", fromName), h("label", "From address", fromAddress), h("label", "Lawdesk address (for links in emails)", appUrl)),
-      fixed.size ? h("p.muted.small", "Greyed-out fields are set on the server and can only be changed there.") : null,
+      h("div.form-row", field("From name", fromName), field("From address", fromAddress), field("Lawdesk address", appUrl, { hint: "Used for links in emails." })),
+      fixed.size ? h("p.email-note", "Greyed-out fields are set on the server and can only be changed there.") : null,
       h(
         "div.form-actions",
         s.passwordSet && !fixed.has("password")
-          ? h(
-              "button.btn",
-              {
-                type: "button",
-                onclick: async () => {
-                  if (!confirm("Remove the saved mail server password?")) return;
-                  try {
-                    await put("/email/settings", { clearPassword: true });
-                    toast("Password removed");
-                    load();
-                  } catch (err) {
-                    fail(err);
-                  }
-                },
+          ? button("Remove saved password", {
+              variant: "ghost",
+              class: "danger-text",
+              onclick: async () => {
+                if (!confirm("Remove the saved mail server password?")) return;
+                try {
+                  await put("/email/settings", { clearPassword: true });
+                  toast("Password removed");
+                  load();
+                } catch (err) {
+                  fail(err);
+                }
               },
-              "Remove saved password",
-            )
+            })
           : null,
-        h("button.btn.primary", { type: "submit" }, "Save email settings"),
+        button("Save email settings", { variant: "primary", type: "submit" }),
       ),
     );
     const test = h(
@@ -191,15 +205,15 @@ export function emailSettingsSection() {
           }
         },
       },
-      h("label", "Send a test email to", testTo),
-      h("button.btn", { type: "submit" }, "Send test email"),
+      field("Send a test email to", testTo),
+      button("Send test email", { type: "submit", icon: "send" }),
     );
-    return h("div.email-block", save, h("div.email-test-box", h("p.muted.small", "Save first, then send a test to check the settings."), test, testResult));
+    return h("div.email-block", save, h("div.email-test-box", h("p.email-note", "Save first, then send a test to check the settings."), test, testResult));
   }
 
   // ---------------------------------------------------------------- notices
   function notices(p) {
-    if (!p) return h("div.email-block", h("h3", "My email notices"), h("p.muted", "Choose who you are working as to set your notices."));
+    if (!p) return h("div.email-block", blockHead("My email notices", "Choose who you are working as to set your notices."));
     const who = state.setup?.allUsers?.find((u) => u.id === p.userId)?.name || "you";
     const box = (prop, label) =>
       h(
@@ -234,12 +248,15 @@ export function emailSettingsSection() {
     });
     return h(
       "div.email-block.email-notices",
-      h("h3", `Email notices for ${who}`),
-      p.email ? null : h("p.error-text", "There is no email address for this person. Add one under People to receive these."),
-      box("taskAssigned", "When someone assigns me a task"),
-      h("div.email-digest-line", box("digest", "A daily summary of my overdue tasks and tasks due today, at"), time, h("span.muted.small", "Central time")),
-      h("div.email-indent", box("digestWeekends", "Send the daily summary on Saturdays and Sundays too")),
-      box("reminders", "Calendar reminders for events I attend"),
+      blockHead(`Email notices for ${who}`, "Saved as soon as you change them."),
+      p.email ? null : callout({ tone: "warning", body: "There is no email address for this person. Add one under People to receive these." }),
+      h(
+        "div.email-notices-list",
+        box("taskAssigned", "When someone assigns me a task"),
+        h("div.email-digest-line", box("digest", "A daily summary of my overdue tasks and tasks due today, at"), time, h("span.email-digest-tz", "Central time")),
+        h("div.email-indent", box("digestWeekends", "Send the daily summary on Saturdays and Sundays too")),
+        box("reminders", "Calendar reminders for events I attend"),
+      ),
     );
   }
 
@@ -267,122 +284,118 @@ export function emailSettingsSection() {
             }
           },
         },
-        h("label", "Name", name),
-        h("label", "Subject", subject),
-        h("label", "Message", body),
-        h("p.muted.small", "Merge fields: {{recipient.name}}, {{client.name}}, {{matter.name}}, {{matter.number}}, {{matter.dates.closing_date|long}}, {{user.name}}, {{today}} and the other fields used in document templates."),
+        field("Name", name),
+        field("Subject", subject),
+        field("Message", body, { hint: "Merge fields: {{recipient.name}}, {{client.name}}, {{matter.name}}, {{matter.number}}, {{matter.dates.closing_date|long}}, {{user.name}}, {{today}} and the other fields used in document templates." }),
         err,
-        h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Save template")),
+        h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), button("Save template", { variant: "primary", type: "submit" })),
       );
       const dlg = modal(t ? "Edit email template" : "New email template", form, { wide: true });
     };
     return h(
       "div.email-block",
-      h("h3", "Email templates"),
+      blockHead("Email templates", "Ready-made messages to choose from when writing to a client from a matter.", button("New template", { size: "sm", icon: "plus", onclick: () => edit(null) })),
       list.length
         ? h(
-            "ul.plain.email-templates",
+            "ul.email-templates",
             list.map((t) =>
               h(
                 "li",
                 h("span.email-tpl-name", t.name),
-                h("span.muted.small.email-tpl-subject", t.subject),
+                h("span.email-tpl-subject", t.subject),
                 h(
                   "span.email-tpl-actions",
-                  h("button.btn.small", { type: "button", onclick: () => edit(t) }, "Edit"),
-                  h(
-                    "button.btn.small",
-                    {
-                      type: "button",
-                      onclick: async () => {
-                        if (!confirm(`Delete the template “${t.name}”?`)) return;
-                        try {
-                          await del(`/email/templates/${t.id}`);
-                          load();
-                        } catch (err) {
-                          fail(err);
-                        }
-                      },
+                  iconButton("pencil", `Edit ${t.name}`, { size: "sm", onclick: () => edit(t) }),
+                  iconButton("trash-2", `Delete ${t.name}`, {
+                    size: "sm",
+                    variant: "danger",
+                    onclick: async () => {
+                      if (!confirm(`Delete the template “${t.name}”?`)) return;
+                      try {
+                        await del(`/email/templates/${t.id}`);
+                        load();
+                      } catch (err) {
+                        fail(err);
+                      }
                     },
-                    "Delete",
-                  ),
+                  }),
                 ),
               ),
             ),
           )
-        : h("p.muted", "No templates yet."),
-      h("button.btn.small", { type: "button", onclick: () => edit(null) }, "New template"),
+        : emptyState({ icon: "email", title: "No email templates yet", body: "Add one for messages you send often, such as a status update.", compact: true }),
     );
   }
 
   // ---------------------------------------------------------------- outbox
   function outboxList(rows) {
-    const action = (label, path) =>
-      h(
-        "button.btn.small",
-        {
-          type: "button",
-          onclick: async () => {
-            try {
-              await post(path);
-              load();
-            } catch (err) {
-              fail(err);
-            }
-          },
+    const action = (label, path, ic) =>
+      button(label, {
+        size: "sm",
+        icon: ic,
+        onclick: async () => {
+          try {
+            await post(path);
+            load();
+          } catch (err) {
+            fail(err);
+          }
         },
-        label,
-      );
+      });
+    const runNow = button("Send waiting email now", {
+      size: "sm",
+      icon: "send",
+      onclick: async () => {
+        try {
+          const r = await post("/email/outbox/run");
+          toast(r.sent || r.failed || r.retrying ? `${r.sent} sent, ${r.retrying} will be retried, ${r.failed} not sent` : "Nothing was waiting to send");
+          load();
+        } catch (err) {
+          fail(err);
+        }
+      },
+    });
     return h(
       "div.email-block",
-      h(
-        "div.email-outbox-head",
-        h("h3", "Recent email"),
-        h(
-          "button.btn.small",
-          {
-            type: "button",
-            onclick: async () => {
-              try {
-                const r = await post("/email/outbox/run");
-                toast(r.sent || r.failed || r.retrying ? `${r.sent} sent, ${r.retrying} will be retried, ${r.failed} not sent` : "Nothing was waiting to send");
-                load();
-              } catch (err) {
-                fail(err);
-              }
-            },
-          },
-          "Send waiting email now",
-        ),
-      ),
+      blockHead("Recent email", "The last 20 messages Lawdesk sent or is waiting to send.", runNow),
       rows.length
         ? h(
-            "table.settings-table.email-outbox",
-            h("thead", h("tr", h("th", "When"), h("th", "To"), h("th", "Subject"), h("th", "Status"), h("th", ""))),
-            h(
-              "tbody",
-              rows.map((r) =>
-                h(
-                  "tr",
-                  h("td", { "data-label": "When" }, fmtTime(r.sent_at || r.created_at)),
-                  h("td", { "data-label": "To" }, r.recipients.join(", ")),
-                  h("td", { "data-label": "Subject" }, r.subject, h("span.muted.small", ` · ${KIND[r.kind] || r.kind}${r.matter_number ? ` · ${r.matter_number}` : ""}`)),
-                  h(
-                    "td",
-                    { "data-label": "Status" },
-                    h("span.tag" + (r.status === "failed" ? ".email-bad" : r.status === "sent" ? ".good" : ""), STATUS[r.status] || r.status),
-                    r.last_error && r.status !== "sent" ? h("div.muted.small.email-error", r.last_error) : null,
-                  ),
-                  h(
-                    "td",
-                    r.status === "failed" || r.status === "cancelled" ? action("Try again", `/email/outbox/${r.id}/retry`) : null,
-                    r.status === "queued" ? action("Cancel", `/email/outbox/${r.id}/cancel`) : null,
-                  ),
-                ),
-              ),
-            ),
+            "div.email-outbox-wrap",
+            dataTable({
+              label: "Recent email",
+              tableClass: "email-outbox",
+              toolbar: false,
+              rows,
+              noun: ["message", "messages"],
+              sortable: false,
+              columns: [
+                { key: "when", label: "When", className: "nowrap", render: (r) => fmtTime(r.sent_at || r.created_at) },
+                { key: "to", label: "To", render: (r) => r.recipients.join(", ") },
+                {
+                  key: "subject",
+                  label: "Subject",
+                  primary: true,
+                  render: (r) => h("div.cell-stack", h("span", r.subject), h("span.email-outbox-sub", [KIND[r.kind] || r.kind, r.matter_number].filter(Boolean).join(" · "))),
+                },
+                {
+                  key: "status",
+                  label: "Status",
+                  render: (r) => [pill(STATUS[r.status] || r.status, STATUS_TONE[r.status] || "neutral"), r.last_error && r.status !== "sent" ? h("div.email-error", r.last_error) : null],
+                },
+                {
+                  key: "actions",
+                  label: "",
+                  render: (r) =>
+                    r.status === "failed" || r.status === "cancelled"
+                      ? action("Try again", `/email/outbox/${r.id}/retry`, "rotate-ccw")
+                      : r.status === "queued"
+                        ? action("Cancel", `/email/outbox/${r.id}/cancel`, "x")
+                        : null,
+                },
+              ],
+            }),
           )
-        : h("p.muted", "No email has been sent yet."),
+        : emptyState({ icon: "inbox", title: "No email sent yet", body: "Messages appear here as they are sent.", compact: true }),
     );
   }
 

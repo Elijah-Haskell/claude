@@ -768,6 +768,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: matter communications: log a call, write an email, file a saved email`, async () => {
+    await page.evaluate(() => document.querySelectorAll("dialog[open]").forEach((d) => (d as HTMLDialogElement).close()));
     await page.goto(base + `/#/matters/${demo.matters.m1}/communications`);
     await page.waitForSelector("#communications .comms-toolbar");
     await page.locator("#communications button", { hasText: "Log a call or meeting" }).click();
@@ -795,6 +796,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: settings > email saves and sends a test email`, async () => {
+    await page.evaluate(() => document.querySelectorAll("dialog[open]").forEach((d) => (d as HTMLDialogElement).close()));
     await page.goto(base + "/#/settings");
     await page.waitForSelector("#s-email .email-sending");
     await page.locator("#s-email input[aria-label='From address']").fill("office@example.test");
@@ -1044,17 +1046,25 @@ for (const [label, viewport] of [
   });
 
   // ---------------------------------------------------------------- documents
+  // A dialog left open by an earlier failed check would block every click here (hash
+  // navigation doesn't reload the page), so these checks start with none open.
+  const closeDialogs = () => page.evaluate(() => document.querySelectorAll("dialog[open]").forEach((d) => (d as HTMLDialogElement).close()));
+
 
   await check(`${label}: matter page shows the Documents card`, async () => {
+    await closeDialogs();
     await page.goto(base + `/#/matters/${demo.matters.m4}/files`);
     await page.waitForSelector(".docs-card .doc-mini li");
     assert.ok((await page.locator(".docs-card .doc-mini li").count()) >= 3);
+    await noHorizontalScroll();
+    await page.locator(".docs-card").screenshot({ path: shots + `documents-card-${label}.png` });
     await page.locator(".docs-card a.docs-all").click();
     await page.waitForSelector(".docs-tree .tree-item");
     await noHorizontalScroll();
   });
 
   await check(`${label}: upload with progress, then a same-name upload becomes version 2`, async () => {
+    await closeDialogs();
     await page.goto(base + `/#/matters/${demo.matters.m4}/documents`);
     await page.waitForSelector(".docs-table");
     await page.locator(".tree-item", { hasText: "Correspondence" }).click();
@@ -1104,6 +1114,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: image preview, rename and tag a document`, async () => {
+    await closeDialogs();
     await page.goto(base + `/#/matters/${demo.matters.m4}/documents`);
     await page.locator("a.doc-name", { hasText: "Site photo" }).first().click();
     await page.waitForFunction(() => (document.querySelector("img.doc-image") as HTMLImageElement | null)?.naturalWidth! > 0);
@@ -1116,6 +1127,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: versions list restores an older version`, async () => {
+    await closeDialogs();
     await page.goto(base + `/#/matters/${demo.matters.m1}/documents`);
     await page.locator("a.doc-name", { hasText: "Articles of organization" }).click();
     await page.waitForSelector(".versions .version");
@@ -1158,6 +1170,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: firm-wide search highlights matches and filters`, async () => {
+    await closeDialogs();
     await page.goto(base + "/#/documents");
     await page.waitForSelector(".result-list");
     await page.fill("input[data-search]", "indemnification");
@@ -1177,6 +1190,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: Settings > Document templates lists fields and accepts an upload`, async () => {
+    await closeDialogs();
     await page.goto(base + "/#/settings");
     await page.locator(".settings-nav a", { hasText: "Document templates" }).click();
     await page.waitForSelector(".template");
@@ -1195,6 +1209,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: create from template warns about blanks, then opens the new document`, async () => {
+    await closeDialogs();
     await page.goto(base + `/#/matters/${demo.matters.m5}/files`);
     await page.locator(".docs-card button", { hasText: "Create from template" }).click();
     await page.locator("dialog select[aria-label=Template]").selectOption({ label: `Cover note ${label}` });
@@ -1206,7 +1221,7 @@ for (const [label, viewport] of [
     await page.locator("dialog button[type=submit]").click();
     await page.waitForSelector(".doc-paper");
     assert.match(page.url(), /#\/matters\/\d+\/documents\/\d+$/);
-    assert.match(await page.locator(".doc-paper").innerText(), /Dear Taylor Brooks \(demo\):/);
+    assert.match(await page.locator(".doc-paper").innerText(), /Dear Taylor Brooks:/);
   });
 
   // ---------------------------------------------------------------- intake
