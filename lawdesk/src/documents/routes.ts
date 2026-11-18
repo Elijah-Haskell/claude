@@ -13,6 +13,7 @@ import { EngineError } from "../engine.ts";
 import { type Ctx, type Route, intParam } from "../http.ts";
 import { Documents, decodeBase64 } from "./documents.ts";
 import { fileResponse, readUpload, tagsField } from "./transfer.ts";
+import { assertCanSeeRow, filterVisible } from "../auth/access.ts";
 
 const instances = new WeakMap<DB, Documents>();
 
@@ -54,6 +55,18 @@ function fileOut(f: { filename: string; mime: string; data: Buffer; [k: string]:
   return { ...rest, base64: data.toString("base64") };
 }
 
+/** A document id from the path, refused (404) when the document's matter is hidden from this person. */
+function docId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "doc_documents", id, "Document");
+  return id;
+}
+
+/** Search results without documents on matters hidden from this person. */
+function searchVisible<T extends { results: { matterId: number }[] }>(ctx: Ctx, r: T): T {
+  return { ...r, results: filterVisible(ctx.db, ctx.userId, r.results, "matterId") };
+}
+
 /** The request of a raw route (the server sets it). */
 function source(ctx: Ctx) {
   if (!ctx.req) throw new EngineError("This route needs the request body", 500);
@@ -88,7 +101,7 @@ export const routes: Route[] = [
     raw: true,
     handler: async (ctx) => {
       const docs = documentsFor(ctx);
-      const id = intParam(ctx, "id");
+      const id = docId(ctx);
       const { fields, file } = await readUpload(source(ctx), ctx.query, docs.maxBytes);
       return docs.addVersion(id, { filename: file.filename, data: file.data, userId: ctx.userId, note: fields.note || null });
     },
@@ -98,7 +111,7 @@ export const routes: Route[] = [
     path: "/documents/:id/file",
     handler: (ctx) => {
       const inline = ctx.query.get("inline") === "1";
-      const f = documentsFor(ctx).download(intParam(ctx, "id"), {
+      const f = documentsFor(ctx).download(docId(ctx), {
         version: optInt(ctx.query.get("version"), "version"),
         userId: ctx.userId,
         action: inline ? "view" : "download",
@@ -106,7 +119,7 @@ export const routes: Route[] = [
       return fileResponse(f, inline);
     },
   },
-  { method: "GET", path: "/documents/:id/text", handler: (ctx) => documentsFor(ctx).text(intParam(ctx, "id")) },
+  { method: "GET", path: "/documents/:id/text", handler: (ctx) => documentsFor(ctx).text(docId(ctx)) },
   { method: "GET", path: "/documents/facets", handler: (ctx) => documentsFor(ctx).facets() },
   {
     method: "POST",
@@ -173,7 +186,7 @@ export const routes: Route[] = [
     method: "GET",
     path: "/documents/search",
     handler: (ctx) =>
-      documentsFor(ctx).search({
+      searchVisible(ctx, documentsFor(ctx).search({
         q: ctx.query.get("q"),
         matterId: optInt(ctx.query.get("matter"), "matter"),
         name: ctx.query.get("name"),
@@ -182,7 +195,7 @@ export const routes: Route[] = [
         folder: ctx.query.get("folder"),
         includeDeleted: ctx.query.get("deleted") === "1",
         limit: optInt(ctx.query.get("limit"), "limit") ?? undefined,
-      }),
+      })),
   },
   {
     method: "GET",
@@ -237,37 +250,37 @@ export const routes: Route[] = [
     path: "/matters/:id/merge-fields",
     handler: (ctx) => documentsFor(ctx).mergeData(intParam(ctx, "id"), ctx.userId),
   },
-  { method: "GET", path: "/documents/:id", handler: (ctx) => documentsFor(ctx).get(intParam(ctx, "id")) },
+  { method: "GET", path: "/documents/:id", handler: (ctx) => documentsFor(ctx).get(docId(ctx)) },
   {
     method: "PATCH",
     path: "/documents/:id",
     handler: (ctx) => {
       const b = bodyObj(ctx);
-      return documentsFor(ctx).update(intParam(ctx, "id"), { name: b.name, folder: b.folder, category: b.category, tags: b.tags }, ctx.userId);
+      return documentsFor(ctx).update(docId(ctx), { name: b.name, folder: b.folder, category: b.category, tags: b.tags }, ctx.userId);
     },
   },
-  { method: "DELETE", path: "/documents/:id", handler: (ctx) => documentsFor(ctx).delete(intParam(ctx, "id"), ctx.userId) },
-  { method: "POST", path: "/documents/:id/restore", handler: (ctx) => documentsFor(ctx).restore(intParam(ctx, "id"), ctx.userId) },
-  { method: "GET", path: "/documents/:id/versions", handler: (ctx) => documentsFor(ctx).versions(intParam(ctx, "id")) },
+  { method: "DELETE", path: "/documents/:id", handler: (ctx) => documentsFor(ctx).delete(docId(ctx), ctx.userId) },
+  { method: "POST", path: "/documents/:id/restore", handler: (ctx) => documentsFor(ctx).restore(docId(ctx), ctx.userId) },
+  { method: "GET", path: "/documents/:id/versions", handler: (ctx) => documentsFor(ctx).versions(docId(ctx)) },
   {
     method: "POST",
     path: "/documents/:id/versions",
     handler: (ctx) => {
       const docs = documentsFor(ctx);
       const b = bodyObj(ctx);
-      return docs.addVersion(intParam(ctx, "id"), { filename: b.filename, data: decodeBase64(b.contentBase64, docs.maxBytes), userId: ctx.userId });
+      return docs.addVersion(docId(ctx), { filename: b.filename, data: decodeBase64(b.contentBase64, docs.maxBytes), userId: ctx.userId });
     },
   },
   {
     method: "POST",
     path: "/documents/:id/versions/:version/restore",
-    handler: (ctx) => documentsFor(ctx).restoreVersion(intParam(ctx, "id"), intParam(ctx, "version"), ctx.userId),
+    handler: (ctx) => documentsFor(ctx).restoreVersion(docId(ctx), intParam(ctx, "version"), ctx.userId),
   },
   {
     method: "GET",
     path: "/documents/:id/download",
     handler: (ctx) =>
-      fileOut(documentsFor(ctx).download(intParam(ctx, "id"), { version: optInt(ctx.query.get("version"), "version"), userId: ctx.userId })),
+      fileOut(documentsFor(ctx).download(docId(ctx), { version: optInt(ctx.query.get("version"), "version"), userId: ctx.userId })),
   },
 
   // Templates

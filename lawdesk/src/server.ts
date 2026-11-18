@@ -16,7 +16,7 @@ import { matchPath, type Ctx, type Route } from "./http.ts";
 import type { ISODate } from "./dates.ts";
 import { modules, type Module } from "./modules.ts";
 import { startEmailWorker } from "./email/worker.ts";
-import { authenticate, authorize, clientIp, isSecure } from "./auth/guard.ts";
+import { assertMatterAccess, authenticate, authorize, clientIp, isSecure } from "./auth/guard.ts";
 import { SCHEMA as AUTH_SCHEMA } from "./auth/schema.ts";
 
 const PUBLIC_DIR = resolve(fileURLToPath(new URL("../public", import.meta.url)));
@@ -96,6 +96,8 @@ export function createServer(
     authorize(route, who, req);
     // A raw route (file upload) streams the body itself and enforces its own size limit.
     const body = route.raw ? {} : req.method === "GET" || req.method === "DELETE" ? await readBody(req, true) : await readBody(req, false);
+    // A restricted matter named in the path, query or body is a 404 for anyone not on its list.
+    assertMatterAccess(db, route, who, params!, url.searchParams, body);
     const client = { ip: clientIp(req), userAgent: (req.headers["user-agent"] as string | undefined) ?? null, secure: isSecure(req) };
     const ctx: Ctx = {
       db, engine, params: params!, query: url.searchParams, body,

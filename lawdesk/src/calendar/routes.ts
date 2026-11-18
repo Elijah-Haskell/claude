@@ -7,6 +7,7 @@
 import { EngineError } from "../engine.ts";
 import { type Ctx, type Route, intParam } from "../http.ts";
 import { Calendar } from "./calendar.ts";
+import { assertCanSeeRow, filterVisible } from "../auth/access.ts";
 
 export interface RawResponse {
   __raw: true;
@@ -37,26 +38,39 @@ function actor(ctx: Ctx): number | null {
   return optInt(ctx.query.get("user"), "user") ?? null;
 }
 
+/** An event id from the path, refused (404) when the event's matter is hidden from this person. */
+function eventId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "cal_events", id, "Event");
+  return id;
+}
+
+/** Events, agenda items and reminders without those on matters hidden from this person. */
+const visible = <T extends Record<string, any>>(ctx: Ctx, rows: T[]) => filterVisible(ctx.db, ctx.userId, rows, "matterId");
+
 export const routes: Route[] = [
   // ---- events
   {
     method: "GET",
     path: "/calendar/events",
     handler: (ctx) =>
-      cal(ctx).listEvents({
-        matterId: optInt(ctx.query.get("matter"), "matter"),
-        source: ctx.query.get("source") ?? undefined,
-        sourceRef: ctx.query.get("sourceRef") ?? undefined,
-      }),
+      visible(
+        ctx,
+        cal(ctx).listEvents({
+          matterId: optInt(ctx.query.get("matter"), "matter"),
+          source: ctx.query.get("source") ?? undefined,
+          sourceRef: ctx.query.get("sourceRef") ?? undefined,
+        }),
+      ),
   },
-  { method: "GET", path: "/calendar/events/:id", handler: (ctx) => cal(ctx).getEvent(intParam(ctx, "id")) },
+  { method: "GET", path: "/calendar/events/:id", handler: (ctx) => cal(ctx).getEvent(eventId(ctx)) },
   { method: "POST", path: "/calendar/events", handler: (ctx) => cal(ctx).createEvent(ctx.body, actor(ctx)) },
-  { method: "PATCH", path: "/calendar/events/:id", handler: (ctx) => cal(ctx).updateEvent(intParam(ctx, "id"), ctx.body, actor(ctx)) },
+  { method: "PATCH", path: "/calendar/events/:id", handler: (ctx) => cal(ctx).updateEvent(eventId(ctx), ctx.body, actor(ctx)) },
   {
     method: "DELETE",
     path: "/calendar/events/:id",
     handler: (ctx) => {
-      cal(ctx).deleteEvent(intParam(ctx, "id"), actor(ctx));
+      cal(ctx).deleteEvent(eventId(ctx), actor(ctx));
       return { ok: true };
     },
   },
@@ -65,13 +79,13 @@ export const routes: Route[] = [
   {
     method: "PATCH",
     path: "/calendar/events/:id/occurrences/:key",
-    handler: (ctx) => cal(ctx).editOccurrence(intParam(ctx, "id"), ctx.params.key, ctx.body, actor(ctx)),
+    handler: (ctx) => cal(ctx).editOccurrence(eventId(ctx), ctx.params.key, ctx.body, actor(ctx)),
   },
   {
     method: "DELETE",
     path: "/calendar/events/:id/occurrences/:key",
     handler: (ctx) => {
-      cal(ctx).cancelOccurrence(intParam(ctx, "id"), ctx.params.key, actor(ctx));
+      cal(ctx).cancelOccurrence(eventId(ctx), ctx.params.key, actor(ctx));
       return { ok: true };
     },
   },
@@ -79,7 +93,7 @@ export const routes: Route[] = [
     method: "POST",
     path: "/calendar/events/:id/occurrences/:key/restore",
     handler: (ctx) => {
-      cal(ctx).restoreOccurrence(intParam(ctx, "id"), ctx.params.key, actor(ctx));
+      cal(ctx).restoreOccurrence(eventId(ctx), ctx.params.key, actor(ctx));
       return { ok: true };
     },
   },
@@ -104,6 +118,13 @@ export const routes: Route[] = [
         out.items = out.items.filter((i: any) => i.matterId === matterId);
         out.conflicts = [];
       }
+      const shown = visible(ctx, out.items);
+      if (shown.length !== out.items.length) {
+        out.items = shown;
+        // Double-bookings are worked out over every event; keep only those between items still shown.
+        const ids = new Set(shown.map((i: any) => i.eventId));
+        out.conflicts = out.conflicts.filter((c) => ids.has(c.a.eventId) && ids.has(c.b.eventId));
+      }
       return out;
     },
   },
@@ -122,7 +143,7 @@ export const routes: Route[] = [
   {
     method: "GET",
     path: "/calendar/reminders",
-    handler: (ctx) => cal(ctx).remindersDue(ctx.query.get("from") ?? "", ctx.query.get("to") ?? ""),
+    handler: (ctx) => visible(ctx, cal(ctx).remindersDue(ctx.query.get("from") ?? "", ctx.query.get("to") ?? "")),
   },
 
   // ---- import

@@ -185,16 +185,24 @@ A matter is the case file, so modules add to it without editing `views/matter.js
 ```js
 import { registerMatterTab, registerMatterCard } from "../ui/matter-slots.js";
 
-registerMatterTab({ id: "documents", label: "Documents", icon: "documents", order: 20,
-  count: (ctx) => ctx.data.documentCount ?? null, render: async (ctx) => node });
+registerMatterTab({ id: "notes", label: "Notes", icon: "file-text", order: 60,
+  count: (ctx) => null, render: async (ctx) => node });
 
 registerMatterCard({ id: "billing", order: 20,
   render: async (ctx) => card({ title: "Billing", icon: "billing", body: … }) }); // return null to hide
 ```
 
 `ctx` is `{ matterId, matter, data, refresh, openTab }`. Tabs get their own URL
-(`#/matters/12/documents`). Cards appear on the Overview tab below the built-in ones. Keep them
+(`#/matters/12/notes`). Cards appear on the Overview tab below the built-in ones. Keep them
 short (3–6 rows) and end them with a "View all" link to your tab.
+
+The tabs today: Overview, Tasks, Calendar (`calendar`), Documents (`files`), Billing (`billing`),
+Communications (`communications`) and Activity. The module tabs are registered in
+`views/matter-tabs.js` and show each module's own matter card. Don't use `documents` as a tab id:
+`#/matters/12/documents` is the full documents page. Overview is a summary (`views/matter-summary.js`):
+its rows are links, never `taskRow`s, so `.task` only matches the Tasks tab. The right rail holds
+People, "Who can see this matter" (`views/matter-access.js`), Parties, Key dates and Checklists;
+the conflict check card sits on Overview. Matter page styles are in `public/css/matter.css`.
 
 ## Building a new screen
 

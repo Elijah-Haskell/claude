@@ -49,8 +49,9 @@ export const NAV = [
   { href: "#/deadlines", label: "Deadlines", key: "d", icon: "deadlines", section: "Practice" },
   { href: "#/checklists", label: "Checklists", key: "c", icon: "checklists", section: "Practice" },
   { href: "#/billing", label: "Billing", key: "b", icon: "billing", section: "Finance" },
-  { href: "#/trust", label: "Trust", key: "t", icon: "trust", section: "Finance" },
-  // Firm-wide figures: shown to attorneys and administrators (a convenience; the server decides).
+  // Trust, reports and the firm overview show to attorneys and administrators only; the
+  // server refuses their API routes to staff (roles: ATTORNEYS), so this just hides dead ends.
+  { href: "#/trust", label: "Trust", key: "t", icon: "trust", section: "Finance", audience: "attorneys" },
   { href: "#/reports", label: "Reports", key: "r", icon: "reports", section: "Finance", audience: "firm" },
   { href: "#/overview", label: "Firm overview", key: "o", icon: "overview", section: "Admin", audience: "firm" },
   { href: "#/settings", label: "Settings", key: "s", icon: "settings", section: "Admin" },

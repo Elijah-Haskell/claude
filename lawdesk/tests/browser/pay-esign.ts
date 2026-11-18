@@ -56,7 +56,7 @@ export async function onlinePaymentAndSignatureChecks(o: Opts): Promise<void> {
   await check(`${label}: client pays an invoice online (test provider)`, async () => {
     billing.addExpense({ matterId, costCents: 12_345, description: `Filing fee (${label} smoke test)`, date: undefined as any });
     const inv = billing.finalize(billing.createDraft({ matterId }).id as number);
-    await page.goto(base + `/#/matters/${matterId}`);
+    await page.goto(base + `/#/matters/${matterId}/billing`);
     const row = page.locator(".pay-card .pay-list > li", { hasText: `Invoice ${inv.number}` });
     await row.locator(".pay-online").click();
     await page.getByRole("button", { name: "Create payment link" }).click();
@@ -95,7 +95,7 @@ export async function onlinePaymentAndSignatureChecks(o: Opts): Promise<void> {
     );
     assert.ok(up.ok, up.text);
 
-    await page.goto(base + `/#/matters/${matterId}`);
+    await page.goto(base + `/#/matters/${matterId}/files`);
     await page.reload();
     await page.getByRole("button", { name: "Send a document for signature…" }).click();
     const sel = page.locator(".modal select").first();

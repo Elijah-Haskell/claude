@@ -11,6 +11,7 @@ import { EngineError } from "../engine.ts";
 import { type Ctx, type Route, intParam } from "../http.ts";
 import { Payments, type PaymentsOptions } from "./payments.ts";
 import { ProviderError } from "./provider.ts";
+import { ATTORNEYS, assertCanSeeRow, filterVisible } from "../auth/access.ts";
 
 export type PublicRoute = Route & { public?: boolean };
 
@@ -40,6 +41,18 @@ export function publicBaseUrl(ctx: Pick<Ctx, "req">, env: Record<string, string 
   return "http://localhost:3000";
 }
 
+// Matter restrictions (src/auth/access.ts): invoices and payment links by id.
+function invoiceId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "billing_invoices", id, "Invoice");
+  return id;
+}
+function linkId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "pay_links", id, "Payment link");
+  return id;
+}
+
 function body(ctx: Ctx): Record<string, any> {
   return ctx.body && typeof ctx.body === "object" ? ctx.body : {};
 }
@@ -67,11 +80,11 @@ export const routes: PublicRoute[] = [
   { method: "GET", path: "/pay/settings", handler: (ctx) => paymentsFor(ctx).settings(publicBaseUrl(ctx)) },
   { method: "PATCH", path: "/pay/settings", handler: (ctx) => paymentsFor(ctx).updateSettings(body(ctx), ctx.userId) },
   { method: "GET", path: "/pay/matters/:id", handler: (ctx) => paymentsFor(ctx).matterOverview(intParam(ctx, "id")) },
-  { method: "GET", path: "/pay/invoices/:id/links", handler: (ctx) => paymentsFor(ctx).invoiceLinks(intParam(ctx, "id")) },
+  { method: "GET", path: "/pay/invoices/:id/links", handler: (ctx) => paymentsFor(ctx).invoiceLinks(invoiceId(ctx)) },
   {
     method: "POST",
     path: "/pay/invoices/:id/links",
-    handler: (ctx) => paymentsFor(ctx).createInvoiceLink(intParam(ctx, "id"), { amountCents: body(ctx).amountCents ?? null }, ctx.userId, publicBaseUrl(ctx)),
+    handler: (ctx) => paymentsFor(ctx).createInvoiceLink(invoiceId(ctx), { amountCents: body(ctx).amountCents ?? null }, ctx.userId, publicBaseUrl(ctx)),
   },
   {
     method: "POST",
@@ -81,10 +94,10 @@ export const routes: PublicRoute[] = [
       return paymentsFor(ctx).createTrustLink({ matterId: b.matterId, amountCents: b.amountCents, description: b.description }, ctx.userId, publicBaseUrl(ctx));
     },
   },
-  { method: "POST", path: "/pay/links/:id/cancel", handler: (ctx) => paymentsFor(ctx).cancelLink(intParam(ctx, "id"), ctx.userId) },
-  { method: "GET", path: "/pay/attention", handler: (ctx) => paymentsFor(ctx).attention({ includeResolved: ctx.query.get("all") === "1" }) },
+  { method: "POST", path: "/pay/links/:id/cancel", handler: (ctx) => paymentsFor(ctx).cancelLink(linkId(ctx), ctx.userId) },
+  { method: "GET", path: "/pay/attention", handler: (ctx) => filterVisible(ctx.db, ctx.userId, paymentsFor(ctx).attention({ includeResolved: ctx.query.get("all") === "1" })) },
   { method: "POST", path: "/pay/attention/:id/done", handler: (ctx) => paymentsFor(ctx).resolveAttention(intParam(ctx, "id"), body(ctx).resolution, ctx.userId) },
-  { method: "GET", path: "/pay/trust-receipts", handler: (ctx) => paymentsFor(ctx).trustReceipts() },
+  { method: "GET", path: "/pay/trust-receipts", roles: ATTORNEYS, handler: (ctx) => filterVisible(ctx.db, ctx.userId, paymentsFor(ctx).trustReceipts()) },
   {
     method: "POST",
     path: "/pay/test/checkouts/:id/simulate",

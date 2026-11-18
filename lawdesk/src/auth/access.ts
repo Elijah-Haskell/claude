@@ -37,7 +37,17 @@ export function roleOf(db: DB, userId: number | null | undefined): Role | null {
   return r?.role ?? null;
 }
 
+const withAuthTables = new WeakSet<DB>();
+/** False while the sign-in tables aren't there (a module's tests open a bare database): nothing is restricted then. */
+function authTables(db: DB): boolean {
+  if (withAuthTables.has(db)) return true;
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'auth_matter_access'").get()) return false;
+  withAuthTables.add(db);
+  return true;
+}
+
 export function isRestricted(db: DB, matterId: number): boolean {
+  if (!authTables(db)) return false;
   return !!db.prepare("SELECT 1 FROM auth_matter_access WHERE matter_id = ? LIMIT 1").get(matterId);
 }
 
@@ -61,6 +71,7 @@ export function assertCanSeeMatter(db: DB, userId: number | null | undefined, ma
 
 /** Ids of restricted matters this person may not see; filter lists with it. */
 export function hiddenMatterIds(db: DB, userId: number | null | undefined): Set<number> {
+  if (!authTables(db)) return new Set();
   if (userId != null && roleOf(db, userId) === "admin") return new Set();
   const rows = db
     .prepare(
@@ -82,4 +93,101 @@ export function matterAccessList(db: DB, matterId: number): { user_id: number; n
   return db
     .prepare("SELECT a.user_id, u.name FROM auth_matter_access a JOIN users u ON u.id = a.user_id WHERE a.matter_id = ? ORDER BY u.name")
     .all(matterId) as { user_id: number; name: string }[];
+}
+
+/**
+ * The matter a row belongs to, looked up by the row's id: a number, null (the row has no
+ * matter), or undefined (no such row, or the module's table isn't there). `table` and
+ * `column` are names from code, never from a request.
+ */
+export function matterOfRow(db: DB, table: string, id: number, column = "matter_id"): number | null | undefined {
+  try {
+    const r = db.prepare(`SELECT ${column} AS m FROM ${table} WHERE id = ?`).get(id) as { m: number | null } | undefined;
+    return r === undefined ? undefined : r.m;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Throws "<what> not found" (404) when the row with this id belongs to a matter this person
+ * may not see: the same answer as for a row that doesn't exist. Rows that don't exist, or
+ * have no matter, are left to the handler.
+ */
+export function assertCanSeeRow(db: DB, userId: number | null | undefined, table: string, id: number, what: string, column = "matter_id") {
+  const m = matterOfRow(db, table, id, column);
+  if (m != null && !canSeeMatter(db, userId, m)) throw new EngineError(`${what} not found`, 404);
+}
+
+/**
+ * The matter ids a request names in the usual places: a `/matters/:x` path segment (in any
+ * module: /matters/:id/documents, /billing/matters/:matterId, /trust/matters/:id/ledgers),
+ * a `matterId` or `matter` query parameter, and a `matterId` in a JSON body. The server
+ * checks each of them before a non-public handler runs (guard.ts `assertMatterAccess`), so a
+ * route that takes its matter in one of these places needs no code of its own.
+ */
+export function matterIdsInRequest(routePath: string, params: Record<string, string>, query: URLSearchParams, body: unknown): number[] {
+  const ids: number[] = [];
+  const add = (v: unknown) => {
+    const n = typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v) ? Number(v) : NaN;
+    if (Number.isInteger(n) && n > 0) ids.push(n);
+  };
+  const segs = routePath.split("/").filter(Boolean);
+  for (let i = 0; i < segs.length - 1; i++) if (segs[i] === "matters" && segs[i + 1].startsWith(":")) add(params[segs[i + 1].slice(1)]);
+  add(query.get("matterId"));
+  add(query.get("matter"));
+  if (body && typeof body === "object" && !Array.isArray(body)) add((body as Record<string, unknown>).matterId);
+  return ids;
+}
+
+/**
+ * Conflict-check results must still search every matter (a walled matter's adverse party is
+ * still a conflict), but must not name a matter this person can't see. This walks a result
+ * and rewrites each involvement `{ matterId, matter, text, ... }` on a hidden matter to
+ * "a restricted matter", without its id, so the hit stays and the matter stays private.
+ */
+export function maskHiddenInvolvements<T>(db: DB, userId: number | null | undefined, value: T): T {
+  const hidden = hiddenMatterIds(db, userId);
+  if (!hidden.size) return value;
+  // Plain-English lines ("Adverse party in matter T-2 Sealed acquisition") name matters too.
+  const names: string[] = [];
+  for (const id of hidden) {
+    const m = db.prepare("SELECT number, name FROM matters WHERE id = ?").get(id) as { number: string | null; name: string } | undefined;
+    if (!m) continue;
+    if (m.number) names.push(`${m.number} ${m.name}`);
+    if (m.name.length >= 4) names.push(m.name);
+  }
+  names.sort((a, b) => b.length - a.length);
+  const scrub = (s: string) => {
+    let out = s;
+    for (const n of names) out = out.split(`matter ${n}`).join("a restricted matter").split(n).join("a restricted matter");
+    return out;
+  };
+  const walk = (v: any): any => {
+    if (typeof v === "string") return names.length ? scrub(v) : v;
+    if (Array.isArray(v)) return v.map(walk);
+    if (!v || typeof v !== "object") return v;
+    if (typeof v.matterId === "number" && hidden.has(v.matterId) && typeof v.matter === "string") {
+      const role = typeof v.text === "string" ? v.text.replace(/ in matter .*$/s, "") : "Involved";
+      return { ...v, matterId: null, matter: "Restricted matter", restricted: true, text: `${role} in a restricted matter (ask an administrator)` };
+    }
+    const out: any = {};
+    for (const [k, x] of Object.entries(v)) out[k] = walk(x);
+    return out;
+  };
+  return walk(value);
+}
+
+/**
+ * Report-style results: drop rows that belong to hidden matters and re-add the plain sums.
+ * `matterOf(row)` says which matter a row is about (null: none). Returns how many went.
+ */
+export function hideRows<T extends Record<string, any>>(db: DB, userId: number | null | undefined, rows: T[], matterOf: (r: T) => number | null | undefined): { rows: T[]; hidden: number } {
+  const hidden = hiddenMatterIds(db, userId);
+  if (!hidden.size) return { rows, hidden: 0 };
+  const out = rows.filter((r) => {
+    const m = matterOf(r);
+    return m == null || !hidden.has(m);
+  });
+  return { rows: out, hidden: rows.length - out.length };
 }

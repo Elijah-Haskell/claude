@@ -11,6 +11,7 @@ import { documentsFor } from "../documents/routes.ts";
 import { type PublicRoute, publicBaseUrl } from "../payments/routes.ts";
 import { ESign, requestMeta } from "./esign.ts";
 import { ProviderNotAvailable } from "./providers.ts";
+import { assertCanSeeRow } from "../auth/access.ts";
 
 const clocks = new WeakMap<DB, () => Date>();
 
@@ -36,6 +37,18 @@ function file(f: { filename: string; mime: string; data: Buffer }, disposition: 
   };
 }
 
+// Matter restrictions (src/auth/access.ts): requests and documents by id.
+function requestId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "esign_requests", id, "Signature request");
+  return id;
+}
+function docId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "doc_documents", id, "Document");
+  return id;
+}
+
 async function guard<T>(fn: () => Promise<T> | T): Promise<T> {
   try {
     return await fn();
@@ -50,13 +63,14 @@ export const routes: PublicRoute[] = [
   { method: "GET", path: "/esign/settings", handler: (ctx) => esignFor(ctx).settings() },
   { method: "PATCH", path: "/esign/settings", handler: (ctx) => esignFor(ctx).updateSettings(body(ctx), ctx.userId) },
   { method: "GET", path: "/matters/:id/esign", handler: (ctx) => esignFor(ctx).forMatter(intParam(ctx, "id")) },
-  { method: "GET", path: "/documents/:id/esign", handler: (ctx) => esignFor(ctx).forDocument(intParam(ctx, "id")) },
+  { method: "GET", path: "/documents/:id/esign", handler: (ctx) => esignFor(ctx).forDocument(docId(ctx)) },
   {
     method: "POST",
     path: "/esign/requests",
     handler: (ctx) => {
       const b = body(ctx);
       if (!Number.isInteger(b.documentId)) throw new EngineError("documentId is required");
+      assertCanSeeRow(ctx.db, ctx.userId, "doc_documents", b.documentId, "Document");
       return guard(() =>
         esignFor(ctx).send(
           { documentId: b.documentId, signerName: b.signerName, signerEmail: b.signerEmail, message: b.message, expiresDays: b.expiresDays, provider: b.provider },
@@ -66,14 +80,14 @@ export const routes: PublicRoute[] = [
       );
     },
   },
-  { method: "GET", path: "/esign/requests/:id", handler: (ctx) => esignFor(ctx).request(intParam(ctx, "id")) },
-  { method: "POST", path: "/esign/requests/:id/resend", handler: (ctx) => esignFor(ctx).resend(intParam(ctx, "id"), ctx.userId, publicBaseUrl(ctx)) },
-  { method: "POST", path: "/esign/requests/:id/cancel", handler: (ctx) => esignFor(ctx).cancel(intParam(ctx, "id"), body(ctx).reason, ctx.userId) },
+  { method: "GET", path: "/esign/requests/:id", handler: (ctx) => esignFor(ctx).request(requestId(ctx)) },
+  { method: "POST", path: "/esign/requests/:id/resend", handler: (ctx) => esignFor(ctx).resend(requestId(ctx), ctx.userId, publicBaseUrl(ctx)) },
+  { method: "POST", path: "/esign/requests/:id/cancel", handler: (ctx) => esignFor(ctx).cancel(requestId(ctx), body(ctx).reason, ctx.userId) },
   {
     method: "GET",
     path: "/esign/requests/:id/signature",
     handler: (ctx) => {
-      const png = esignFor(ctx).signatureImage(intParam(ctx, "id"));
+      const png = esignFor(ctx).signatureImage(requestId(ctx));
       if (!png) throw new EngineError("No drawn signature on this request", 404);
       return { __raw: true, contentType: "image/png", body: png };
     },

@@ -1,23 +1,23 @@
 // One matter, laid out as a case file: header with the key facts, the stage bar, then
-// tabs (Overview, Tasks, Activity, plus any a module registers) beside a right rail with
-// people, key dates and checklists. Modules add Overview cards and tabs through
-// ui/matter-slots.js.
+// tabs beside a right rail (people, who can see it, parties, key dates, checklists).
+// Overview is a short summary that links onward, with the conflict check status; Tasks
+// and Activity are built in; Calendar, Documents, Billing and Communications come from
+// views/matter-tabs.js.
+// Modules add Overview cards and tabs through ui/matter-slots.js.
 
 import { h, select, fmtDate, fmtTime, modal, toast, plural, relDate, daysBetween } from "../dom.js";
 import { get, post, put, patch } from "../api.js";
 import { state, today, users, prefs, loadMatters, loadSetup } from "../state.js";
-import { quickAdd, taskRow, effectLines, redraw } from "../tasks.js";
+import { quickAdd, taskRow, effectLines, redraw, focusTask } from "../tasks.js";
 import { icon } from "../ui/icons.js";
-import { breadcrumbs, button, card, pill, person, avatar, emptyState, tabs as tabBar, progressBar, field, activityText } from "../ui/components.js";
+import { breadcrumbs, button, card, pill, person, avatar, emptyState, tabs as tabBar, progressBar, field, activityText, useStyles } from "../ui/components.js";
 import { menu } from "../ui/popover.js";
 import { matterTabs, matterCards } from "../ui/matter-slots.js";
 import { ago } from "./home.js";
-import { upcomingCard } from "../cal.js";
-import { billingCard } from "../billing/matter-card.js";
-import { communicationsCard } from "./communications.js";
 import { matterConflictCards } from "./parties.js";
-import { matterDocumentsCard } from "./documents.js";
-import { matterPaymentsCard, matterSignaturesCard } from "./pay-esign.js";
+import { nextUpCard, moneyCard, eventsCard, latestDocsCard } from "./matter-summary.js";
+import { accessCard } from "./matter-access.js";
+import "./matter-tabs.js"; // registers the Calendar, Documents, Billing and Communications tabs
 
 const BUILT_IN_TABS = [
   { id: "overview", label: "Overview", icon: "layout-grid", order: 0 },
@@ -26,6 +26,7 @@ const BUILT_IN_TABS = [
 ];
 
 export async function matterView([idStr, tabArg]) {
+  useStyles("matter");
   const id = Number(idStr);
   const page = h("div.page.matter-page");
   let d = null;
@@ -45,16 +46,16 @@ export async function matterView([idStr, tabArg]) {
   const activityBox = h("div.activity-panel");
   const aside = h("aside.matter-aside", { "aria-label": "Matter details" });
   const panels = new Map();
-  // Module cards keep their own state, so each is made once and moved into place on redraw.
+  // Cards that load their own data are made once and moved into place on redraw. The
+  // module areas (calendar, documents, billing, communications) live in their own tabs
+  // (views/matter-tabs.js); the Overview shows short summaries that link to them.
   const [partiesCard, conflictCard] = matterConflictCards(id, { onChange: () => refresh() });
-  const moduleCards = {
-    upcoming: upcomingCard(id),
-    docs: matterDocumentsCard(id),
-    billing: billingCard(id),
-    comms: communicationsCard(id, { onChange: () => refresh().catch(() => {}) }),
-    payments: matterPaymentsCard(id),
-    signatures: null,
+  const summaries = {
+    money: moneyCard(id, { openTab: (t) => openTab(t) }),
+    events: eventsCard(id, { openTab: (t) => openTab(t) }),
+    docs: latestDocsCard(id, { openTab: (t) => openTab(t) }),
   };
+  const access = accessCard(id, { onChange: () => refresh() });
 
   const ctx = () => ({ matterId: id, matter: d.matter, data: d, refresh, openTab });
 
@@ -62,6 +63,7 @@ export async function matterView([idStr, tabArg]) {
     d = await get(`/matters/${id}`);
     drawAll();
     await redraw(tasksBox, buildTasks);
+    summaries.money.reload();
     loadMatters().catch(() => {});
   };
 
@@ -261,6 +263,14 @@ export async function matterView([idStr, tabArg]) {
         { label: "Matter sections" },
       ),
     );
+    // On a phone the tab bar scrolls sideways: keep the open tab in view (without moving the page).
+    requestAnimationFrame(() => {
+      const sel = tabsSlot.querySelector('[aria-selected="true"]');
+      const bar = sel?.parentElement;
+      if (!sel || !bar || bar.scrollWidth <= bar.clientWidth) return;
+      const left = sel.offsetLeft - bar.offsetLeft;
+      if (left < bar.scrollLeft || left + sel.offsetWidth > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = Math.max(0, left - 16);
+    });
   }
 
   function openTab(tid, redrawBar = true) {
@@ -285,28 +295,10 @@ export async function matterView([idStr, tabArg]) {
   }
 
   // -------------------------------------------------------------- overview
+  // A calm summary: what's next, money, conflict status (the parties module's card), what's
+  // coming up and the latest papers.
   function drawOverview() {
-    const open = d.tasks
-      .filter((t) => !finished(t))
-      .sort((a, b) => (a.status === "waiting") - (b.status === "waiting") || String(a.due_date || "9999").localeCompare(String(b.due_date || "9999")) || a.id - b.id);
-    const next = open.slice(0, 5);
-    const nextCard = card({
-      title: "Next up",
-      subtitle: open.length ? `${plural(open.length, "open task")} on this matter` : null,
-      icon: "list-checks",
-      flush: true,
-      actions: button("All tasks", { variant: "ghost", size: "sm", iconRight: "arrow-right", onclick: () => openTab("tasks") }),
-      body: next.length
-        ? h(
-            "ul.task-list.flush-list",
-            next.map((t) => {
-              const row = taskRow(t, { refresh, showMatter: false, byId: new Map(d.tasks.map((x) => [x.id, x])) });
-              row.removeAttribute("id"); // the Tasks tab holds the canonical row
-              return row;
-            }),
-          )
-        : emptyState({ icon: "circle-check", title: "No open tasks", body: d.matter.status === "open" ? "Add a task or apply a checklist from the right." : "This matter is closed.", compact: true }),
-    });
+    const nextCard = nextUpCard(d, { openTab, focusTask, addTask: addTaskDialog });
 
     const recent = d.activity.slice(0, 5);
     const actCard = card({
@@ -324,17 +316,12 @@ export async function matterView([idStr, tabArg]) {
     });
 
     const extSlot = h("div.overview-cards");
-    if (!moduleCards.signatures) {
-      const client = state.setup.contacts.find((c) => c.id === d.matter.client_id);
-      moduleCards.signatures = matterSignaturesCard({ id, client_name: d.matter.client_name, client_email: client?.email ?? null });
-    }
-    const mc = moduleCards;
+    const s = summaries;
     overviewBox.replaceChildren(
-      h("div.overview-grid", nextCard, about, actCard),
-      h("div.overview-modules", mc.upcoming, mc.docs, mc.billing, mc.comms, mc.signatures, mc.payments),
+      h("div.matter-overview", nextCard, h("div.matter-overview-side", s.money, conflictCard), s.events, s.docs, about, actCard),
       extSlot,
     );
-    // Module cards drop in below, two to a row on wide screens.
+    // Cards a module registers (registerMatterCard) drop in below, two to a row on wide screens.
     for (const c of matterCards) {
       const holder = h("div.overview-card-slot");
       extSlot.append(holder);
@@ -561,7 +548,7 @@ export async function matterView([idStr, tabArg]) {
       ],
     });
 
-    aside.replaceChildren(people, partiesCard, conflictCard, dates, checklists);
+    aside.replaceChildren(people, access, partiesCard, dates, checklists);
   }
 
   // -------------------------------------------------------------- activity

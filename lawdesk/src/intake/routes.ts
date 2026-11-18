@@ -9,6 +9,7 @@ import { FIELD_MAPS, FIELD_TYPES, SOURCES, STATUSES } from "./schema.ts";
 import { createForm, defaultFields, deleteForm, getForm, listForms, newFormLink, publicForm, submitForm, updateForm } from "./forms.ts";
 import { book, cancelConsultation, listAvailability, openSlots, publicBook, publicBooking, setAvailability, slotsByDay } from "./booking.ts";
 import { intakeReport } from "./reports.ts";
+import { hiddenMatterIds } from "../auth/access.ts";
 
 const intake = (ctx: Ctx) => new Intake(ctx.db, ctx.engine, { documents: documentsFor(ctx) });
 
@@ -29,7 +30,7 @@ function optInt(v: unknown, what: string): number | null {
 
 const ipOf = (ctx: Ctx) => (ctx as Ctx & { ip?: string | null }).ip ?? null;
 
-export const routes: Route[] = [
+const intakeRoutes: Route[] = [
   // ------------------------------------------------------------ public pages
   { method: "GET", path: "/intake/public/forms/:token", public: true, handler: (ctx) => publicForm(intake(ctx), ctx.params.token) },
   { method: "POST", path: "/intake/public/forms/:token", public: true, handler: (ctx) => submitForm(intake(ctx), ctx.params.token, ctx.body ?? {}, ipOf(ctx)) },
@@ -178,3 +179,31 @@ export const routes: Route[] = [
   // --------------------------------------------------------------- reports
   { method: "GET", path: "/intake/reports", handler: (ctx) => intakeReport(intake(ctx), { from: ctx.query.get("from"), to: ctx.query.get("to") }) },
 ] as Route[];
+
+/**
+ * Matter restrictions (src/auth/access.ts): a lead stays on the intake board after it is
+ * converted, but once its matter is restricted the lead no longer names or links to it for
+ * people who can't see it (`matterRestricted: true` instead).
+ */
+function hideMatters(hidden: Set<number>, v: any): any {
+  if (Array.isArray(v)) return v.map((x) => hideMatters(hidden, x));
+  if (!v || typeof v !== "object" || Buffer.isBuffer(v) || v instanceof Uint8Array) return v;
+  const out: any = {};
+  for (const [k, x] of Object.entries(v)) out[k] = hideMatters(hidden, x);
+  if (typeof v.matterId === "number" && hidden.has(v.matterId)) Object.assign(out, { matterId: null, matterName: null, matterNumber: null, matterRestricted: true });
+  return out;
+}
+
+export const routes: Route[] = intakeRoutes.map((r) =>
+  r.public
+    ? r
+    : {
+        ...r,
+        handler: async (ctx: Ctx) => {
+          const out: any = await r.handler(ctx);
+          if (!out || typeof out !== "object" || out.__raw) return out;
+          const hidden = hiddenMatterIds(ctx.db, ctx.userId);
+          return hidden.size ? hideMatters(hidden, out) : out;
+        },
+      },
+);

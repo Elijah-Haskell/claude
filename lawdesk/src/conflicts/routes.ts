@@ -7,6 +7,7 @@ import {
   listAliases, listParties, listRelationships, updateAlias, updateParty, updateRelationship,
 } from "./store.ts";
 import { decideCheck, getCheck, linkCheck, listChecks, runCheck, searchConflicts } from "./search.ts";
+import { assertCanSeeRow, filterVisible, maskHiddenInvolvements } from "../auth/access.ts";
 
 /** Who is acting. Until sign-in exists the body may name a user; the signed-in user always wins. */
 function actor(ctx: Ctx): number | null {
@@ -15,6 +16,20 @@ function actor(ctx: Ctx): number | null {
   const n = Number(ctx.body.userId);
   if (!Number.isInteger(n) || n <= 0 || !ctx.db.prepare("SELECT id FROM users WHERE id = ?").get(n)) throw new EngineError("Unknown userId");
   return n;
+}
+
+// Matter restrictions (src/auth/access.ts). A check still searches every matter, so a walled
+// matter's parties still raise a hit, but the hit doesn't name a matter this person can't see.
+const mask = <T>(ctx: Ctx, v: T): T => maskHiddenInvolvements(ctx.db, ctx.userId, v);
+function checkId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "conflicts_checks", id, "Conflict check");
+  return id;
+}
+function partyId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "conflicts_matter_parties", id, "Party");
+  return id;
 }
 
 function optInt(v: unknown, what: string): number | null {
@@ -82,11 +97,11 @@ export const routes: Route[] = [
       ),
     }),
   },
-  { method: "PATCH", path: "/conflicts/parties/:id", handler: (ctx) => updateParty(ctx.db, intParam(ctx, "id"), ctx.body ?? {}, actor(ctx)) },
+  { method: "PATCH", path: "/conflicts/parties/:id", handler: (ctx) => updateParty(ctx.db, partyId(ctx), ctx.body ?? {}, actor(ctx)) },
   {
     method: "DELETE",
     path: "/conflicts/parties/:id",
-    handler: (ctx) => (deleteParty(ctx.db, intParam(ctx, "id"), actor(ctx)), { ok: true }),
+    handler: (ctx) => (deleteParty(ctx.db, partyId(ctx), actor(ctx)), { ok: true }),
   },
 
   // searching. POST /conflicts/search saves the check; preview=true runs it without saving
@@ -103,8 +118,8 @@ export const routes: Route[] = [
         related: b.related,
         limit: b.limit === undefined ? undefined : Math.min(1000, Math.max(1, Number(b.limit) || 500)),
       };
-      if (b.preview === true) return { checkId: null, ...searchConflicts(ctx.db, input) };
-      return runCheck(ctx.db, input, actor(ctx));
+      if (b.preview === true) return mask(ctx, { checkId: null, ...searchConflicts(ctx.db, input) });
+      return mask(ctx, runCheck(ctx.db, input, actor(ctx)));
     },
   },
 
@@ -113,17 +128,17 @@ export const routes: Route[] = [
     method: "GET",
     path: "/conflicts/checks",
     handler: (ctx) =>
-      listChecks(ctx.db, {
+      filterVisible(ctx.db, ctx.userId, listChecks(ctx.db, {
         matterId: optInt(ctx.query.get("matterId"), "matterId"),
         pending: ctx.query.get("pending") === "1" || ctx.query.get("pending") === "true",
         limit: ctx.query.get("limit") ? Number(ctx.query.get("limit")) : undefined,
-      }),
+      }), "matterId"),
   },
-  { method: "GET", path: "/conflicts/checks/:id", handler: (ctx) => getCheck(ctx.db, intParam(ctx, "id")) },
+  { method: "GET", path: "/conflicts/checks/:id", handler: (ctx) => mask(ctx, getCheck(ctx.db, checkId(ctx))) },
   {
     method: "POST",
     path: "/conflicts/checks/:id/decision",
-    handler: (ctx) => decideCheck(ctx.db, intParam(ctx, "id"), ctx.body?.decision, ctx.body?.note, actor(ctx)),
+    handler: (ctx) => decideCheck(ctx.db, checkId(ctx), ctx.body?.decision, ctx.body?.note, actor(ctx)),
   },
   {
     method: "PATCH",
@@ -131,7 +146,7 @@ export const routes: Route[] = [
     handler: (ctx) => {
       const matterId = optInt(ctx.body?.matterId, "matterId");
       if (matterId == null) throw new EngineError("Give the matterId to link this check to");
-      return linkCheck(ctx.db, intParam(ctx, "id"), matterId, actor(ctx));
+      return linkCheck(ctx.db, checkId(ctx), matterId, actor(ctx));
     },
   },
 ];
