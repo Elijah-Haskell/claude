@@ -1,0 +1,99 @@
+/* Client trust accounts: layout for the trust screens only. Colours come from app.css tokens. */
+
+.trust .trust-crumb { margin: 0 0 2px; font-size: 0.85rem; color: var(--muted); }
+.trust .page-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.trust .trust-head-actions,
+.trust .trust-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.trust .trust-actions { margin: 4px 0 8px; }
+.trust .trust-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.trust .stat-n { font-variant-numeric: tabular-nums; }
+
+.trust-notice {
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--gold);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin: 0 0 16px;
+  font-size: 0.92rem;
+}
+.trust-notice.trust-ok-box { border-left-color: var(--good); }
+
+.trust-scroll { overflow-x: auto; max-width: 100%; }
+table.trust-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-variant-numeric: tabular-nums;
+}
+table.trust-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+table.trust-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.trust-table tr:last-child td { border-bottom: 0; }
+table.trust-table .n { text-align: right; white-space: nowrap; }
+tr.trust-reversed td { color: var(--muted); }
+tr.trust-reversed td:first-child { box-shadow: inset 3px 0 0 var(--border-strong); }
+.trust-money { white-space: nowrap; }
+.trust-cleared { color: var(--good); font-size: 0.88rem; }
+.trust-uncleared { color: var(--today); font-size: 0.88rem; white-space: nowrap; }
+
+.trust .link-btn { background: none; border: 0; padding: 0 0 0 6px; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
+.trust .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.trust-form .trust-check,
+.trust-check { display: flex; gap: 8px; align-items: flex-start; color: var(--text); }
+.trust-form .trust-check input { width: auto; margin-top: 3px; }
+.trust-form textarea { width: 100%; }
+
+.trust .card + .card { margin-top: 16px; }
+.trust-holds li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+
+/* Reconciliation */
+.trust-step1 { align-items: end; }
+.trust-history-link { align-self: end; }
+.trust-three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
+.trust-col { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--surface); display: flex; flex-direction: column; }
+.trust-col h3 { margin-bottom: 8px; color: var(--accent); }
+.trust-col-total { margin-top: auto; padding-top: 8px; border-top: 2px solid var(--accent); font-family: var(--serif); font-size: 1.3rem; text-align: right; }
+.trust-line { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 0.92rem; }
+.trust-line > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.trust-diffs { margin-top: 12px; max-width: 420px; margin-left: auto; }
+.trust-ok { color: var(--good); }
+.trust-bad { color: var(--late); font-weight: 600; }
+.trust-verdict { margin: 12px 0; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); }
+.trust-verdict.trust-ok { background: var(--good-soft); }
+.trust-verdict.trust-bad { background: var(--late-soft); }
+.trust-recon .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+
+/* Reports */
+.trust-report { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.trust-report:last-child { border-bottom: 0; }
+.trust-report-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.trust-report-row select { max-width: 100%; }
+.trust-gaps { padding-left: 18px; }
+.trust-gaps li { margin: 6px 0; }
+
+@media (max-width: 720px) {
+  .trust .trust-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trust-three { grid-template-columns: 1fr; }
+  .trust .form-row { grid-template-columns: 1fr; }
+  /* Tables become stacked cards on a phone. */
+  table.trust-table thead { display: none; }
+  table.trust-table, table.trust-table tbody, table.trust-table tr, table.trust-table td { display: block; width: 100%; }
+  table.trust-table tr { border-bottom: 1px solid var(--border); padding: 6px 0; }
+  table.trust-table td { border: 0; padding: 3px 10px; text-align: left; }
+  table.trust-table td.n { text-align: left; }
+  table.trust-table td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); font-size: 0.8rem; }
+  .trust-diffs { max-width: none; }
+}

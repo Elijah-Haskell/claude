@@ -659,6 +659,70 @@ for (const [label, viewport] of [
     await page.locator("#s-email").screenshot({ path: shots + `settings-email-${label}.png` });
   });
 
+  await check(`${label}: trust account, deposit, refused overdraft, reconciliation`, async () => {
+    await page.goto(base + "/#/trust");
+    await page.waitForSelector(".page-head h1:has-text('Client trust accounts')");
+    await page.locator("button", { hasText: "New trust account" }).click();
+    const dlg = page.locator("dialog[open]");
+    await dlg.getByLabel("Account name", { exact: true }).fill(`IOLTA ${label}`);
+    await dlg.getByLabel("Bank", { exact: true }).fill("Example Bank (demo)");
+    await dlg.locator("button[type=submit]").click();
+    await page.waitForTimeout(300);
+    assert.equal(await page.locator("dialog[open]").count(), 1, "the browser blocks submit until the Kansas box is ticked");
+    await dlg.locator("input[type=checkbox]").first().check();
+    await dlg.locator("button[type=submit]").click();
+    await page.waitForSelector(`h1:has-text('IOLTA ${label}')`);
+    await noHorizontalScroll();
+
+    await page.locator(".trust-actions button", { hasText: "Record deposit" }).click();
+    const dep = page.locator("dialog[open]");
+    await dep.locator("select").first().selectOption({ index: 1 });
+    await dep.getByLabel("Amount", { exact: true }).fill("1,250.00");
+    await dep.getByLabel("Received from", { exact: true }).fill("Demo client");
+    await dep.locator("input[type=checkbox]").check();
+    await dep.locator("button[type=submit]").click();
+    await page.waitForSelector(".trust-register td:has-text('$1,250.00')");
+
+    await page.locator(".trust-actions button", { hasText: "Record payment" }).click();
+    const pay = page.locator("dialog[open]");
+    await pay.locator("select").first().selectOption({ index: 1 });
+    await pay.getByLabel("Amount", { exact: true }).fill("1250.01");
+    await pay.getByLabel("Check number", { exact: true }).fill("1001");
+    await pay.getByLabel("Payee", { exact: true }).fill("County clerk");
+    await pay.getByLabel("For", { exact: true }).fill("Filing fee");
+    await pay.locator("button[type=submit]").click();
+    await pay.locator(".error-text:has-text('below zero')").waitFor();
+    // That refusal is the point of the check; drop the browser's log line for the 409 it caused.
+    const i = errors.findIndex((e) => /status of 409/.test(e));
+    if (i >= 0) errors.splice(i, 1);
+    await pay.locator("button", { hasText: "Cancel" }).click();
+
+    await page.locator(".segmented button", { hasText: "Client ledgers" }).click();
+    await page.waitForSelector(".trust-table td:has-text('$1,250.00')");
+    await page.screenshot({ path: shots + `trust-account-${label}.png`, fullPage: true });
+
+    await page.locator("a", { hasText: "Reconcile a month" }).click();
+    await page.waitForSelector("h1:has-text('three-way reconciliation')");
+    await page.getByLabel("Month", { exact: true }).fill(now.slice(0, 7));
+    await page.getByLabel("Statement ending balance", { exact: true }).fill("1,250.00");
+    await page.getByLabel("Statement ending balance", { exact: true }).dispatchEvent("change");
+    await page.waitForSelector(".trust-verdict.trust-ok");
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `trust-reconcile-${label}.png`, fullPage: true });
+    await page.getByLabel("Statement ending balance", { exact: true }).fill("1,249.99");
+    await page.getByLabel("Statement ending balance", { exact: true }).dispatchEvent("change");
+    await page.waitForSelector(".trust-verdict.trust-bad:has-text('$0.01')");
+    assert.ok(await page.locator("button", { hasText: "Sign off and lock" }).isDisabled(), "can't sign when it doesn't balance");
+    assert.ok(!(await page.locator("#main").innerText()).match(/\bnull\b|undefined|NaN/), "no stray null/undefined/NaN on the page");
+
+    await page.locator(".trust-crumb a").last().click();
+    await page.locator(".trust-head-actions a", { hasText: "Reports" }).click();
+    await page.waitForSelector("h1:has-text('Trust reports')");
+    assert.equal(await page.locator(".trust-report").count(), 5);
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `trust-reports-${label}.png`, fullPage: true });
+  });
+
   await check(`${label}: no script errors`, async () => {
     assert.deepEqual(errors, []);
   });

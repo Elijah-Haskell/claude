@@ -16,6 +16,8 @@ import { SCHEMA as CALENDAR_SCHEMA } from "./calendar/schema.ts";
 import { routes as reportsRoutes } from "./reports/routes.ts";
 import { routes as emailRoutes } from "./email/routes.ts";
 import { SCHEMA as EMAIL_SCHEMA } from "./email/schema.ts";
+import { routes as trustRoutes } from "./trust/routes.ts";
+import { SCHEMA as TRUST_SCHEMA } from "./trust/schema.ts";
 
 export interface Module {
   name: string;
@@ -33,4 +35,6 @@ export const modules: Module[] = [
   { name: "calendar", routes: calendarRoutes, schema: CALENDAR_SCHEMA },
   { name: "reports", routes: reportsRoutes },
   { name: "email", routes: emailRoutes, schema: EMAIL_SCHEMA },
+  // After billing: trust entries refer to billing invoices and payments.
+  { name: "trust", routes: trustRoutes, schema: TRUST_SCHEMA },
 ];
