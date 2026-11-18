@@ -4,6 +4,7 @@
 import { h, select, toast, fmtDate, slug } from "../dom.js";
 import { get, post, patch, put, del } from "../api.js";
 import { state, loadSetup, today } from "../state.js";
+import { emailSettingsSection } from "./email-settings.js";
 
 export async function settingsView() {
   const page = h("div.page.settings");
@@ -38,13 +39,15 @@ export async function settingsView() {
       ["s-dates", "Matter dates"],
       ["s-closed", "Closed days"],
       ["s-auto", "Automatic steps"],
+      ["s-email", "Email"],
     ].map(([id, label]) => h("a", { href: `#${id}`, onclick: (e) => (e.preventDefault(), document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })) }, label)),
   );
   const body = h("div.settings-body");
+  const emailSection = emailSettingsSection(); // loads its own data; kept across redraws
 
   function draw() {
     const s = state.setup;
-    body.replaceChildren(people(s), clients(s), areas(s), dateFields(s), closedDays(s), automations(s));
+    body.replaceChildren(people(s), clients(s), areas(s), dateFields(s), closedDays(s), automations(s), emailSection);
   }
 
   // ---------------------------------------------------------------- people

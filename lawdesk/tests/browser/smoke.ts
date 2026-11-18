@@ -15,6 +15,16 @@ import { openDb } from "../../src/db.ts";
 import { createServer } from "../../src/server.ts";
 import { seed } from "../../src/seed.ts";
 import { today } from "../../src/dates.ts";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildMessage } from "../../src/email/mime.ts";
+
+// Dev mail and uploaded files go to a throwaway folder, not the working tree.
+const scratch = mkdtempSync(join(tmpdir(), "lawdesk-smoke-"));
+process.env.LAWDESK_MAIL_DIR ??= join(scratch, "mail");
+process.env.LAWDESK_FILES ??= join(scratch, "files");
+delete process.env.LAWDESK_MAIL_TRANSPORT;
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
@@ -178,6 +188,51 @@ for (const [label, viewport] of [
     await page.waitForSelector("#s-auto");
     for (const id of ["s-people", "s-clients", "s-areas", "s-dates", "s-closed", "s-auto"]) assert.equal(await page.locator("#" + id).count(), 1, id);
     await noHorizontalScroll();
+  });
+
+  await check(`${label}: matter communications: log a call, write an email, file a saved email`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m1}`);
+    await page.waitForSelector("#communications .comms-toolbar");
+    await page.locator("#communications button", { hasText: "Log a call or meeting" }).click();
+    await page.locator("dialog[open] input[aria-label='With']").fill(`Client call ${label}`);
+    await page.locator("dialog[open] input[aria-label='Length in minutes']").fill("15");
+    await page.locator("dialog[open] button[type=submit]").click();
+    await page.waitForSelector(`#communications .comms-entry:has-text('Client call ${label}')`);
+
+    await page.locator("#communications button", { hasText: "Write an email" }).click();
+    await page.locator("dialog[open] input[aria-label='Other recipients']").fill("client@example.test");
+    await page.locator("dialog[open] select[aria-label='Template']").selectOption({ label: "Status update" });
+    await page.waitForFunction(() => (document.querySelector("dialog[open] input[aria-label='Subject']") as HTMLInputElement)?.value.includes("status update"));
+    await noHorizontalScroll();
+    await page.locator("dialog[open] button[type=submit]").click();
+    await page.waitForSelector("#communications .comms-entry:has-text('Email sent')");
+
+    const eml = buildMessage({ from: { name: "Client (demo)", address: "client@example.test" }, to: [{ address: "jordan@example.com" }], subject: `Reply from client ${label}`, text: "Thank you for the update." }).raw;
+    await page.locator("#communications .comms-file-input").setInputFiles({ name: "reply.eml", mimeType: "message/rfc822", buffer: eml });
+    await page.waitForSelector(`#communications .comms-entry:has-text('Reply from client ${label}')`);
+    await page.locator(".comms-head", { hasText: `Reply from client ${label}` }).click();
+    await page.waitForSelector(".comms-text:has-text('Thank you for the update.')");
+    await noHorizontalScroll();
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.locator("#communications").screenshot({ path: shots + `communications-${label}.png` });
+  });
+
+  await check(`${label}: settings > email saves and sends a test email`, async () => {
+    await page.goto(base + "/#/settings");
+    await page.waitForSelector("#s-email .email-sending");
+    await page.locator("#s-email input[aria-label='From address']").fill("office@example.test");
+    await page.locator("#s-email button", { hasText: "Save email settings" }).click();
+    await page.waitForSelector(".toast:has-text('Email settings saved'), .toast:has-text('No changes')");
+    await page.waitForSelector("#s-email .email-test");
+    await page.locator("#s-email input[aria-label='Send a test to']").fill("jordan@example.com");
+    await page.locator("#s-email button", { hasText: "Send test email" }).click();
+    await page.waitForSelector("#s-email .email-test-result.ok");
+    await page.locator("#s-email input[aria-label='Time of the daily summary']").fill("08:15");
+    await page.locator("#s-email input[aria-label='Time of the daily summary']").dispatchEvent("change");
+    await page.waitForSelector(".toast:has-text('Saved')");
+    await noHorizontalScroll();
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
+    await page.locator("#s-email").screenshot({ path: shots + `settings-email-${label}.png` });
   });
 
   await check(`${label}: no script errors`, async () => {

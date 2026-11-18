@@ -1,3 +1,4 @@
 *.db
 files/
 !screenshots/*.png
+mail-out/
