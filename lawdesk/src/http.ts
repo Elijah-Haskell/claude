@@ -1,6 +1,7 @@
 // Shared contract for API routes. Each module exports `routes: Route[]` from
 // src/<module>/routes.ts and the server mounts them all under /api.
 
+import type { IncomingMessage } from "node:http";
 import type { DB } from "./db.ts";
 import type { Engine } from "./engine.ts";
 
@@ -14,6 +15,8 @@ export interface Ctx {
   body: any;
   /** The signed-in user's id, or null until sign-in exists. */
   userId: number | null;
+  /** Only on routes with `raw: true`: the request with its body still unread, to stream it. */
+  req?: IncomingMessage;
 }
 
 export interface Route {
@@ -22,6 +25,11 @@ export interface Route {
   path: string;
   /** Return any JSON-serialisable value. Throw EngineError(message, status) for 4xx. */
   handler: (ctx: Ctx) => unknown | Promise<unknown>;
+  /**
+   * true: the server does not read or parse the body; the handler streams it from ctx.req
+   * (file uploads) and ctx.body is {}. Default false: the body is parsed as JSON.
+   */
+  raw?: boolean;
 }
 
 export function matchPath(pattern: string, path: string): Record<string, string> | null {

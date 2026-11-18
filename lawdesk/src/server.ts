@@ -19,7 +19,8 @@ import { modules, type Module } from "./modules.ts";
 import { startEmailWorker } from "./email/worker.ts";
 
 const PUBLIC_DIR = resolve(fileURLToPath(new URL("../public", import.meta.url)));
-// Document uploads arrive as base64 JSON (25 MiB decoded), so the limit is about 34 MiB.
+// The older base64 JSON document upload (25 MiB decoded) needs about 34 MiB. Binary uploads go
+// through raw routes, which stream the body and apply the documents module's own limit.
 const BODY_LIMIT = 34 * 1024 * 1024;
 
 const TYPES: Record<string, string> = {
@@ -87,8 +88,10 @@ export function createServer(
       }
     }
     if (!route) throw new HttpError(pathMatched ? 405 : 404, pathMatched ? "Method not allowed" : "No such API route");
-    const body = req.method === "GET" || req.method === "DELETE" ? await readBody(req, true) : await readBody(req, false);
+    // A raw route (file upload) streams the body itself and enforces its own size limit.
+    const body = route.raw ? {} : req.method === "GET" || req.method === "DELETE" ? await readBody(req, true) : await readBody(req, false);
     const ctx: Ctx = { db, engine, params: params!, query: url.searchParams, body, userId: actingUser(db, req) };
+    if (route.raw) ctx.req = req;
     const out: any = await route.handler(ctx);
     if (out && typeof out === "object" && out.__raw === true) return sendRaw(res, out);
     sendJson(res, 200, out === undefined ? { ok: true } : out);
@@ -106,6 +109,8 @@ export function createServer(
       else await serveStatic(req, res, url.pathname);
     } catch (err: any) {
       const status = statusOf(err);
+      // A refused upload may leave body bytes unread; don't reuse the connection for them.
+      if (!req.complete && !res.headersSent) res.setHeader("Connection", "close");
       if (status) sendJson(res, status, { error: err.message });
       else {
         log(`[lawdesk] ${req.method} ${url.pathname} failed:`, err);

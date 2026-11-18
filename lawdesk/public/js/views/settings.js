@@ -41,6 +41,7 @@ export async function settingsView() {
       ["s-auto", "Automatic steps"],
       ["s-email", "Email"],
     ].map(([id, label]) => h("a", { href: `#${id}`, onclick: (e) => (e.preventDefault(), document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })) }, label)),
+    h("a", { href: "#/settings/templates" }, "Document templates"),
   );
   const body = h("div.settings-body");
   const emailSection = emailSettingsSection(); // loads its own data; kept across redraws

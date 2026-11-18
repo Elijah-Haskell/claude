@@ -18,6 +18,8 @@ import { reportsListView, reportView } from "./views/reports.js";
 import { trustView, trustAccountView, trustLedgerView, trustReconcileView, trustReportsView } from "./views/trust.js";
 import { contactsView, contactView } from "./views/contacts.js";
 import { conflictsView, checkView, checkHistoryView } from "./views/conflicts.js";
+import { documentsSearchView, matterDocumentsView } from "./views/documents.js";
+import { templatesSettingsView } from "./views/templates.js";
 
 const NAV = [
   { href: "#/my", label: "My tasks", key: "m" },
@@ -25,6 +27,7 @@ const NAV = [
   { href: "#/matters", label: "Matters", key: "a" },
   { href: "#/calendar", label: "Calendar", key: "l", section: "Work", icon: "calendar" },
   { href: "#/deadlines", label: "Deadlines", key: "d", section: "Practice", icon: "deadlines" },
+  { href: "#/documents", label: "Documents", key: "e", section: "Practice", icon: "documents" },
   { href: "#/checklists", label: "Checklists", key: "c" },
   { href: "#/billing", label: "Billing", key: "b", section: "Finance", icon: "billing" },
   // Trust: limit to admins and attorneys once sign-in lands.
@@ -50,6 +53,9 @@ const ROUTES = [
   [/^#\/firm$/, () => firmTasksView],
   [/^#\/matters$/, () => mattersView],
   [/^#\/matters\/(\d+)$/, () => matterView],
+  [/^#\/matters\/(\d+)\/documents(?:\/(\d+|trash))?$/, () => matterDocumentsView],
+  [/^#\/documents$/, () => documentsSearchView],
+  [/^#\/settings\/templates$/, () => templatesSettingsView],
   [/^#\/checklists$/, () => checklistsView],
   [/^#\/checklists\/(new|\d+)$/, () => checklistEditView],
   [/^#\/settings$/, () => settingsView],
@@ -138,7 +144,7 @@ function showHelp() {
     ["e", "Rename it"],
     ["m", "More actions"],
     ["Enter", "Open the task's matter"],
-    ["g then m / f / a / l / d / c / s / o / r", "Go to My tasks, Firm tasks, Matters, Calendar, Deadlines, Checklists, Settings, Firm overview, Reports"],
+    ["g then m / f / a / l / d / e / p / k / b / t / c / s / o / r", "Go to My tasks, Firm tasks, Matters, Calendar, Deadlines, Documents, Contacts, Conflict check, Billing, Trust, Checklists, Settings, Firm overview, Reports"],
     ["?", "This list"],
   ];
   modal(

@@ -9,6 +9,7 @@ import { upcomingCard } from "../cal.js";
 import { billingCard } from "../billing/matter-card.js";
 import { communicationsCard } from "./communications.js";
 import { matterConflictCards } from "./parties.js";
+import { matterDocumentsCard } from "./documents.js";
 
 export async function matterView([idStr]) {
   const id = Number(idStr);
@@ -25,6 +26,7 @@ export async function matterView([idStr]) {
   const aside = h("aside.matter-aside");
   const activityBox = h("section.card.activity");
   const [partiesCard, conflictCard] = matterConflictCards(id, { onChange: () => refresh() });
+  const docsCard = matterDocumentsCard(id);
 
   const refresh = async () => {
     d = await get(`/matters/${id}`);
@@ -360,7 +362,7 @@ export async function matterView([idStr]) {
         : null,
     );
 
-    replace(aside, upcomingCard(id), people, partiesCard, conflictCard, billingCard(id), dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
+    replace(aside, upcomingCard(id), people, partiesCard, conflictCard, docsCard, billingCard(id), dates, checklists, m.description ? h("section.card", h("h2", "About"), h("p.pre", m.description)) : null);
   }
 
   function drawActivity() {

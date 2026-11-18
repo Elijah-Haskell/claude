@@ -22,6 +22,9 @@ import { SCHEMA as CONTACTS_SCHEMA } from "./contacts/schema.ts";
 import { addAlias, addParty, addRelationship } from "./conflicts/store.ts";
 import { decideCheck, runCheck } from "./conflicts/search.ts";
 import { addDetail } from "./contacts/contacts.ts";
+import { Documents } from "./documents/documents.ts";
+import { existingDocuments } from "./documents/routes.ts";
+import { seedDocuments } from "./documents/seed.ts";
 
 export const DEMO_NOTE = "Fictional demo data. Not a real client.";
 
@@ -493,6 +496,9 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
     // Office lease renewal and Brooks formation: a little intake time.
     time(m3, riley, -1, 0.4, "Intake call with the practice manager about the renewal");
     time(m5, jordan, 0, 0.5, "Initial consultation on forming the LLC");
+    // Demo documents and a Word template. Files go to the documents store for this database
+    // (LAWDESK_FILES, default ./files), or the one a caller set with setDocuments().
+    seedDocuments(existingDocuments(db) ?? new Documents(db, { today: () => now }), db, { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 } });
     stampActivity();
     db.exec("COMMIT");
     return {

@@ -7,7 +7,9 @@
 // Not part of `npm test`, which stays dependency-free.
 
 import { createRequire } from "node:module";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 import assert from "node:assert/strict";
@@ -16,9 +18,6 @@ import { createServer } from "../../src/server.ts";
 import { seed } from "../../src/seed.ts";
 import { today } from "../../src/dates.ts";
 import { addReportsDemo } from "./reports-demo.ts";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { buildMessage } from "../../src/email/mime.ts";
 
 // Dev mail and uploaded files go to a throwaway folder, not the working tree.
@@ -26,6 +25,8 @@ const scratch = mkdtempSync(join(tmpdir(), "lawdesk-smoke-"));
 process.env.LAWDESK_MAIL_DIR ??= join(scratch, "mail");
 process.env.LAWDESK_FILES ??= join(scratch, "files");
 delete process.env.LAWDESK_MAIL_TRANSPORT;
+import { Documents } from "../../src/documents/documents.ts";
+import { setDocuments } from "../../src/documents/routes.ts";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
@@ -35,6 +36,9 @@ mkdirSync(shots, { recursive: true });
 
 const now = today();
 const db = openDb();
+// Document files go to a throwaway folder, not ./files.
+const filesDir = mkdtempSync(join(tmpdir(), "lawdesk-smoke-files-"));
+setDocuments(db, new Documents(db, { dir: filesDir, today: () => now }));
 const demo = seed(db, now);
 addReportsDemo(db, now, demo);
 const server = createServer(db, { today: () => now });
@@ -60,7 +64,7 @@ for (const [label, viewport] of [
   ["desktop", { width: 1280, height: 860 }],
   ["phone", { width: 390, height: 844 }],
 ] as const) {
-  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, acceptDownloads: true });
   const page = await ctx.newPage();
   page.setDefaultTimeout(8000);
   const errors: string[] = [];
@@ -446,6 +450,7 @@ for (const [label, viewport] of [
     await page.locator(".segmented button", { hasText: "List" }).click();
     await page.waitForSelector(".cal-list .cal-line");
     await noHorizontalScroll();
+    await page.locator(".cal-line", { hasText: `Case strategy ${label}` }).first().waitFor();
     const before = await page.locator(".cal-line", { hasText: `Case strategy ${label}` }).count();
     assert.ok(before >= 1, "the new series is listed");
     await page.locator(".cal-line", { hasText: `Case strategy ${label}` }).first().locator("button").click();
@@ -890,13 +895,180 @@ for (const [label, viewport] of [
     }
   });
 
+  // ---------------------------------------------------------------- documents
+
+  await check(`${label}: matter page shows the Documents card`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m4}`);
+    await page.waitForSelector(".docs-card .doc-mini li");
+    assert.ok((await page.locator(".docs-card .doc-mini li").count()) >= 3);
+    await page.locator(".docs-card a.docs-all").click();
+    await page.waitForSelector(".docs-tree .tree-item");
+    await noHorizontalScroll();
+  });
+
+  await check(`${label}: upload with progress, then a same-name upload becomes version 2`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m4}/documents`);
+    await page.waitForSelector(".docs-table");
+    await page.locator(".tree-item", { hasText: "Correspondence" }).click();
+    const name = `Upload check ${label}.txt`;
+    const input = page.locator(".head-actions input[type=file]");
+    await input.setInputFiles({ name, mimeType: "text/plain", buffer: Buffer.from("first upload, demo text") });
+    await page.waitForSelector(`.doc-row:has-text("${name}")`);
+    assert.match(await page.locator(".doc-row", { hasText: name }).innerText(), /v1/);
+    await input.setInputFiles({ name, mimeType: "text/plain", buffer: Buffer.from("second upload, demo text") });
+    await page.locator("dialog .btn.primary", { hasText: "Save as new version" }).click();
+    await page.waitForSelector(`.doc-row:has-text("${name}") >> text=v2`);
+  });
+
+  await check(`${label}: dropping a file on the drop area uploads it`, async () => {
+    const name = `Dropped ${label}.txt`;
+    await page.evaluate((n: string) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File(["dropped demo text"], n, { type: "text/plain" }));
+      const zone = document.querySelector(".dropzone")!;
+      for (const type of ["dragenter", "dragover", "drop"]) zone.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+    }, name);
+    await page.waitForSelector(`.doc-row:has-text("${name}")`);
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `documents-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: PDF preview is served inline as a PDF, and Download saves the file`, async () => {
+    await page.locator(".tree-item", { hasText: "All documents" }).click();
+    await page.locator("a.doc-name", { hasText: "Title commitment.pdf" }).click();
+    const frame = page.locator("iframe.doc-frame");
+    await frame.waitFor();
+    const src = await frame.getAttribute("src");
+    const head = await page.evaluate(async (u: string) => {
+      const r = await fetch(u);
+      return { type: r.headers.get("content-type"), disp: r.headers.get("content-disposition"), nosniff: r.headers.get("x-content-type-options") };
+    }, src!);
+    assert.equal(head.type, "application/pdf");
+    assert.match(head.disp!, /^inline/);
+    assert.equal(head.nosniff, "nosniff");
+    const [download] = await Promise.all([page.waitForEvent("download"), page.locator(".doc-title a.btn.primary", { hasText: "Download" }).click()]);
+    assert.equal(download.suggestedFilename(), "Title commitment.pdf");
+    assert.ok((await page.locator(".versions .version").count()) >= 1);
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `document-pdf-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: image preview, rename and tag a document`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m4}/documents`);
+    await page.locator("a.doc-name", { hasText: "Site photo" }).first().click();
+    await page.waitForFunction(() => (document.querySelector("img.doc-image") as HTMLImageElement | null)?.naturalWidth! > 0);
+    const name = page.locator(".doc-form label", { hasText: "Name" }).locator("input");
+    await name.fill(`Site photo - ${label}.png`);
+    await page.locator(".doc-form label", { hasText: "Tags" }).locator("input").fill("survey, exterior");
+    await page.locator(".doc-form button[type=submit]").click();
+    await page.waitForSelector(`.doc-title h2:has-text("Site photo - ${label}.png")`);
+    assert.equal(await page.locator(".doc-form label", { hasText: "Tags" }).locator("input").inputValue(), "exterior, survey");
+  });
+
+  await check(`${label}: versions list restores an older version`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m1}/documents`);
+    await page.locator("a.doc-name", { hasText: "Articles of organization" }).click();
+    await page.waitForSelector(".versions .version");
+    const before = await page.locator(".versions .version").count();
+    await page.locator(".version", { has: page.locator(".version-n", { hasText: /^Version 1$/ }) }).locator("button", { hasText: "Make current" }).click();
+    await page.waitForFunction((n: number) => document.querySelectorAll(".versions .version").length === n + 1, before);
+    assert.match(await page.locator(".version.current").innerText(), /Restored from version 1/);
+    assert.match(await page.locator(".doc-paper").innerText(), /ARTICLES OF ORGANIZATION \(DEMO DRAFT\)/);
+  });
+
+  await check(`${label}: delete a document, find it in Deleted documents, restore it`, async () => {
+    await page.locator(".doc-title button", { hasText: "Delete" }).click();
+    await page.waitForSelector(".docs-table");
+    assert.equal(await page.locator("a.doc-name", { hasText: "Articles of organization" }).count(), 0);
+    await page.locator(".trash-link").click();
+    const row = page.locator(".docs-table tr", { hasText: "Articles of organization" });
+    await row.locator("button", { hasText: "Restore" }).click();
+    await page.waitForSelector(".toast:has-text('Restored')");
+    await page.locator(".tree-item", { hasText: "All documents" }).click();
+    await page.waitForSelector(`a.doc-name:has-text("Articles of organization")`);
+  });
+
+  await check(`${label}: new folder, then move a document into it (drag on desktop, folder list on phone)`, async () => {
+    await page.locator(".head-actions button", { hasText: "New folder" }).click();
+    await page.locator("dialog input").fill(`Filed ${label}`);
+    await page.locator("dialog button[type=submit]").click();
+    await page.waitForSelector(`.tree-item.current:has-text("Filed ${label}")`);
+    await page.locator(".tree-item", { hasText: "All documents" }).click();
+    if (label === "desktop") {
+      await page.locator(".doc-row", { hasText: "Formation questionnaire" }).dragTo(page.locator(".tree-item", { hasText: `Filed ${label}` }));
+      await page.waitForSelector(".toast:has-text('Moved')");
+    } else {
+      await page.locator("a.doc-name", { hasText: "Formation questionnaire" }).click();
+      await page.locator(".doc-form label", { hasText: "Folder" }).locator("select").selectOption(`Filed ${label}`);
+      await page.locator(".doc-form button[type=submit]").click();
+      await page.waitForSelector(`.docs-main > a.back:has-text("Filed ${label}")`);
+    }
+    await page.locator(".tree-item", { hasText: `Filed ${label}` }).click();
+    await page.waitForSelector(`.doc-row:has-text("Formation questionnaire")`);
+  });
+
+  await check(`${label}: firm-wide search highlights matches and filters`, async () => {
+    await page.goto(base + "/#/documents");
+    await page.waitForSelector(".result-list");
+    await page.fill("input[data-search]", "indemnification");
+    await page.waitForSelector(".doc-snippet mark");
+    assert.match(await page.locator(".doc-snippet mark").first().innerText(), /indemnification/i);
+    assert.equal(await page.locator(".result").count(), 1);
+    await page.fill("input[data-search]", "");
+    await page.locator("select[aria-label=Tag]").selectOption("lender");
+    await page.waitForFunction(() => document.querySelectorAll(".result").length >= 2 && [...document.querySelectorAll(".result")].every((r) => r.textContent!.includes("lender")));
+    await page.fill("input[data-search]", "lender");
+    await page.waitForSelector(".doc-snippet mark");
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `documents-search-${label}.png`, fullPage: true });
+    await page.locator("select[aria-label=Tag]").selectOption("");
+    await page.fill("input[data-search]", "");
+  });
+
+  await check(`${label}: Settings > Document templates lists fields and accepts an upload`, async () => {
+    await page.goto(base + "/#/settings");
+    await page.locator(".settings-nav a", { hasText: "Document templates" }).click();
+    await page.waitForSelector(".template");
+    assert.ok((await page.locator(".template", { hasText: "Engagement letter" }).locator(".field-chip").count()) >= 5);
+    assert.ok(await page.locator(".field-reference .field-code", { hasText: "{{client.name}}" }).count());
+    await page.locator(".template-upload input[type=file]").setInputFiles({
+      name: `Cover note ${label}.txt`,
+      mimeType: "text/plain",
+      buffer: Buffer.from("To {{client.name}}\nRe: {{matter.name}}\nFiling date: {{matter.dates.filing_date|long}}\n"),
+    });
+    await page.locator(".template-upload button[type=submit]").click();
+    await page.waitForSelector(`.template:has-text("Cover note ${label}")`);
+    await noHorizontalScroll();
+    await clearToasts();
+    await page.screenshot({ path: shots + `templates-${label}.png`, fullPage: true });
+  });
+
+  await check(`${label}: create from template warns about blanks, then opens the new document`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m5}`);
+    await page.locator(".docs-card button", { hasText: "Create from template" }).click();
+    await page.locator("dialog select[aria-label=Template]").selectOption({ label: `Cover note ${label}` });
+    await page.waitForSelector("dialog .check-warn:has-text('Filing date')");
+    await clearToasts();
+    await page.screenshot({ path: shots + `template-dialog-${label}.png` });
+    await page.locator("dialog select[aria-label=Template]").selectOption({ label: "Engagement letter" });
+    await page.waitForFunction(() => (document.querySelector("dialog input[maxlength='200']") as HTMLInputElement)?.value.startsWith("Engagement letter"));
+    await page.locator("dialog button[type=submit]").click();
+    await page.waitForSelector(".doc-paper");
+    assert.match(page.url(), /#\/matters\/\d+\/documents\/\d+$/);
+    assert.match(await page.locator(".doc-paper").innerText(), /Dear Taylor Brooks \(demo\):/);
+  });
+
   await check(`${label}: no script errors`, async () => {
-    assert.deepEqual(errors, []);
+    assert.deepEqual(errors, [], errors.slice(0, 3).join(" | "));
   });
   await ctx.close();
 }
 
 await browser.close();
 server.close();
+rmSync(filesDir, { recursive: true, force: true });
 console.log(`\n${results.length - failures} passed, ${failures} failed. Screenshots in ${shots}`);
 process.exit(failures ? 1 : 0);
