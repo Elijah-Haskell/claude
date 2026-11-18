@@ -30,7 +30,6 @@ import { Documents } from "./documents/documents.ts";
 import { existingDocuments } from "./documents/routes.ts";
 import { seedDocuments } from "./documents/seed.ts";
 import { seedIntake } from "./intake/seed.ts";
-import { Calendar } from "./calendar/calendar.ts";
 import { SCHEMA as CALENDAR_SCHEMA } from "./calendar/schema.ts";
 
 export const DEMO_NOTE = "Fictional demo data. Not a real client.";
@@ -784,25 +783,8 @@ export function seed(db: DB, realToday: ISODate = todayIn()) {
     e.addTask({ title: "Update the firm's engagement letter template", assigneeId: riley, dueDate: addDays(realToday, 10), priority: "low" }, riley);
 
     // ------------------------------------------------------------- calendar
-    const cal = new Calendar(db, { now: () => new Date(`${now}T15:00:00Z`) });
-    const atTime = (n: number, time: string) => `${workday(n)}T${time}`;
-    const ev = (title: string, kind: string, start: string, end: string | null, extra: Record<string, unknown> = {}) =>
-      cal.createEvent({ title, kind: kind as any, start, end, timeZone: "America/Chicago", ...extra } as any, jordan);
-    const nextMonday = (() => {
-      let d = addDays(realToday, 1);
-      while (new Date(d + "T12:00:00Z").getUTCDay() !== 1) d = addDays(d, 1);
-      return d;
-    })();
-    ev("Weekly case review", "meeting", `${nextMonday}T09:00`, `${nextMonday}T10:00`, { rrule: "FREQ=WEEKLY;BYDAY=MO", attendees: [jordan, riley, avery, sam, dana], location: "Conference room" });
-    ev("Call with Prairie Wind about distributor minimums", "meeting", `${realToday}T15:30`, `${realToday}T16:00`, { matterId: m10, attendees: [jordan] });
-    ev("Client call: Wheatland Analytics DPA questions", "meeting", atTime(1, "11:00"), atTime(1, "11:30"), { matterId: m7, attendees: [avery, jordan] });
-    ev("Closing: Warehouse purchase", "meeting", atTime(5, "10:00"), atTime(5, "11:30"), { matterId: m12, attendees: [jordan, casey], location: "Title company conference room" });
-    ev("Status conference: Granger v. Flint Hills Dental", "hearing", atTime(7, "13:30"), atTime(7, "14:00"), { matterId: m17, attendees: [jordan, sam], location: "District Court, Courtroom 3" });
-    ev("Harper signing ceremony", "meeting", atTime(8, "10:00"), atTime(8, "11:30"), { matterId: m14, attendees: [jordan, priya], location: "Our office" });
-    ev("Sunflower Coffee operating agreement signing", "meeting", atTime(9, "14:00"), atTime(9, "15:00"), { matterId: m1, attendees: [jordan, sam] });
-    ev("Mediation: Granger v. Flint Hills Dental", "hearing", atTime(16, "09:00"), atTime(16, "16:00"), { matterId: m17, attendees: [jordan], location: "Mediator's office" });
-    ev("Lunch and learn: e-signature tools", "other", atTime(3, "12:00"), atTime(3, "13:00"), { attendees: [jordan, riley, avery, sam, dana, casey, priya] });
-    seedCalendar(db, { users: { jordan, riley, sam, casey }, matters: { m1, m2, m3, m4, m5, m6 } }, realToday, closed);
+    // Hearings, meetings and milestones (the signing, closing and mediation dates set above).
+    seedCalendar(db, { users: { jordan, riley, sam, casey, avery, dana, priya }, matters: { m1, m2, m3, m4, m5, m6, m7, m10, m12, m14, m17 } }, realToday, closed);
 
     // ------------------------------------------------------- billing
     // Made-up rates, hours and amounts. Two invoices are finalized (one partly paid,

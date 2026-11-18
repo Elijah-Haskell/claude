@@ -6,9 +6,12 @@ import { h, replace, select, modal, toast, addDays, weekday, fmtTime, plural } f
 import { get, post, del } from "../api.js";
 import { state, today, users, userName, prefs, loadMatters } from "../state.js";
 import { KINDS, clock, eventDialog, itemDialog, itemLine, kindLabel, longDate, matterLabel, minutesOfDay, monthName, dayName } from "../cal.js";
+import { pageHeader, card, button, iconButton, emptyState, segmented, callout } from "../ui/components.js";
+import { menu } from "../ui/popover.js";
 
 const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const HOUR_PX = 44;
+const HOUR_PX = 48;
+const ALLDAY_MAX = 3;
 const phoneQuery = window.matchMedia("(max-width: 720px)");
 
 export async function calendarView() {
@@ -21,11 +24,13 @@ export async function calendarView() {
   let anchor = today();
   let selected = today();
   let listDays = 30;
+  let allDayOpen = false;
   let data = null;
   let seq = 0;
 
   const titleEl = h("h2.cal-range", { "aria-live": "polite" });
   const body = h("div.cal-body");
+  const below = h("div.cal-below");
 
   const range = () => {
     if (view === "month") {
@@ -61,7 +66,9 @@ export async function calendarView() {
       data = d;
       draw();
     } catch (ex) {
-      replace(body, h("p.error-box", ex.message));
+      if (my !== seq) return;
+      replace(body, h("div.cal-error", callout({ tone: "danger", title: "The calendar could not be loaded.", body: ex.message, action: button("Try again", { size: "sm", onclick: load }) })));
+      replace(below);
     }
   }
 
@@ -78,30 +85,48 @@ export async function calendarView() {
 
   function draw() {
     if (!data) return;
-    if (view === "month") replace(body, drawMonth());
-    else if (view === "week") replace(body, phoneQuery.matches ? drawDayList(range().from, 7, true) : drawWeek());
-    else replace(body, drawList());
-    viewButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === view)));
+    // The view that is drawn (the browser checks wait on this, not on the button).
+    body.dataset.view = view;
+    if (view === "month") {
+      const map = byDate();
+      replace(body, drawMonth(map));
+      replace(below, dayPanel(selected, map.get(selected) ?? []));
+    } else {
+      replace(body, view === "week" ? (phoneQuery.matches ? drawDayList(range().from, 7, true) : drawWeek()) : drawList());
+      replace(below);
+    }
   }
 
   // ----------------------------------------------------------------- month
   function chip(it) {
     const isTask = it.type === "task";
     return h(
-      "button.cal-chip" + (isTask ? ".is-task" : `.k-${it.kind}`) + (it.conflict ? ".is-conflict" : ""),
+      "button.cal-chip" + (isTask ? ".is-task" : `.k-${it.kind}`) + (it.allDay && !isTask ? ".is-allday" : "") + (it.conflict ? ".is-conflict" : ""),
       {
         type: "button",
-        title: `${isTask ? "Task due" : kindLabel(it.kind)}: ${it.title}${it.matter ? " · " + matterLabel(it.matter) : ""}`,
+        title: `${isTask ? "Task due" : kindLabel(it.kind)}: ${it.title}${it.matter ? " · " + matterLabel(it.matter) : ""}${it.conflict ? " · Double-booked" : ""}`,
         onclick: (e) => (e.stopPropagation(), itemDialog(it, load)),
       },
-      isTask ? h("span.cal-box", { "aria-hidden": "true" }) : !it.allDay ? h("span.cal-chip-time", clock(it.start).replace(":00", "").replace(" ", "").toLowerCase()) : null,
+      isTask ? h("span.cal-box", { "aria-hidden": "true" }) : h("span.cal-kdot", { "aria-hidden": "true" }),
+      !isTask && !it.allDay ? h("span.cal-chip-time", shortClock(it.start)) : null,
       h("span.cal-chip-text", it.title),
     );
   }
 
-  function drawMonth() {
+  /** Events first (all-day, then by time), then task due dates. */
+  const sortDay = (items) =>
+    items
+      .slice()
+      .sort(
+        (a, b) =>
+          Number(a.type === "task") - Number(b.type === "task") ||
+          Number(b.allDay) - Number(a.allDay) ||
+          (a.start || "").localeCompare(b.start || "") ||
+          a.title.localeCompare(b.title),
+      );
+
+  function drawMonth(map) {
     const { from } = range();
-    const map = byDate();
     const month = anchor.slice(0, 7);
     const grid = h("div.cal-month", { role: "grid", "aria-label": rangeTitle() });
     grid.append(h("div.cal-row.cal-head", { role: "row" }, SHORT_DAYS.map((d, i) => h("div.cal-hd", { role: "columnheader", "aria-label": dayName(addDays(from, i)) }, d))));
@@ -109,21 +134,31 @@ export async function calendarView() {
       const row = h("div.cal-row", { role: "row" });
       for (let i = 0; i < 7; i++) {
         const d = addDays(from, w * 7 + i);
-        const items = map.get(d) ?? [];
+        const items = sortDay(map.get(d) ?? []);
         const max = 3;
         const cell = h(
-          "div.cal-cell" + (d.slice(0, 7) !== month ? ".other" : "") + (d === today() ? ".today" : "") + (d === selected ? ".selected" : ""),
-          { role: "gridcell", dataset: { date: d }, onclick: () => selectDay(d) },
-          h("button.cal-daynum", { type: "button", "aria-label": `${longDate(d)}, ${plural(items.length, "item")}`, onclick: (e) => (e.stopPropagation(), selectDay(d)) }, String(Number(d.slice(8, 10)))),
+          "div.cal-cell" + (d.slice(0, 7) !== month ? ".other" : "") + (d === today() ? ".today" : "") + (d === selected ? ".selected" : "") + (i === 0 || i === 6 ? ".weekend" : ""),
+          { role: "gridcell", dataset: { date: d }, "aria-selected": d === selected ? "true" : "false", onclick: () => selectDay(d) },
+          h(
+            "button.cal-daynum",
+            { type: "button", "aria-label": `${longDate(d)}, ${plural(items.length, "item")}`, onclick: (e) => (e.stopPropagation(), selectDay(d)) },
+            String(Number(d.slice(8, 10))),
+          ),
           h("div.cal-chips", items.slice(0, max).map(chip)),
           items.length > max ? h("button.cal-more", { type: "button", onclick: (e) => (e.stopPropagation(), selectDay(d)) }, `${items.length - max} more`) : null,
-          items.length ? h("div.cal-dots", { "aria-hidden": "true" }, items.slice(0, 4).map((it) => h("span.cal-dot" + (it.type === "task" ? ".is-task" : `.k-${it.kind}`)))) : null,
+          items.length
+            ? h(
+                "div.cal-dots",
+                { "aria-hidden": "true" },
+                items.slice(0, 4).map((it) => h("span.cal-dot" + (it.type === "task" ? ".is-task" : `.k-${it.kind}`))),
+              )
+            : null,
         );
         row.append(cell);
       }
       grid.append(row);
     }
-    return h("div", grid, dayPanel(selected, map.get(selected) ?? []));
+    return grid;
   }
 
   function selectDay(d) {
@@ -137,14 +172,25 @@ export async function calendarView() {
   }
 
   function dayPanel(d, items) {
-    return h(
-      "section.card.cal-daypanel",
-      h("div.cal-daypanel-head", h("h3", longDate(d)), h("button.btn.small", { type: "button", onclick: () => newEvent({ date: d }) }, "Add event on this day")),
-      items.length ? h("ul.cal-lines", sortDay(items).map((it) => itemLine(it, load))) : h("p.muted", "Nothing on the calendar."),
-    );
+    const sorted = sortDay(items);
+    const events = sorted.filter((it) => it.type !== "task");
+    const tasks = sorted.filter((it) => it.type === "task");
+    const summary = [events.length ? plural(events.length, "event") : null, tasks.length ? plural(tasks.length, "task") + " due" : null].filter(Boolean).join(" · ");
+    return card({
+      title: longDate(d),
+      subtitle: d === today() ? `Today${summary ? " · " + summary : ""}` : summary || null,
+      icon: "calendar",
+      className: "cal-daypanel",
+      flush: true,
+      actions: button("Add event", { size: "sm", icon: "plus", onclick: () => newEvent({ date: d }) }),
+      body: items.length
+        ? [
+            events.length ? h("ul.cal-lines", events.map((it) => itemLine(it, load))) : null,
+            tasks.length ? [h("h3.cal-subhead", "Tasks due"), h("ul.cal-lines", tasks.map((it) => itemLine(it, load, { taskOwner: true })))] : null,
+          ]
+        : emptyState({ icon: "calendar", title: "Nothing on the calendar", body: "Hearings, meetings and deadlines on this day will show here.", compact: true }),
+    });
   }
-
-  const sortDay = (items) => items.slice().sort((a, b) => Number(b.allDay) - Number(a.allDay) || (a.start || "").localeCompare(b.start || "") || (a.type === b.type ? 0 : a.type === "event" ? -1 : 1));
 
   // ------------------------------------------------------------------ week
   function drawWeek() {
@@ -175,11 +221,25 @@ export async function calendarView() {
         ),
       ),
     );
+    const allDayOf = (d) => sortDay((map.get(d) ?? []).filter((it) => it.type === "task" || it.allDay));
+    const longest = Math.max(0, ...days.map((d) => allDayOf(d).length));
     const allDayRow = h(
       "div.cal-week-allday",
-      h("div.cal-gutter.small.muted", "All day"),
-      days.map((d) => h("div.cal-week-allcell", (map.get(d) ?? []).filter((it) => it.type === "task" || it.allDay).map(chip))),
+      h("div.cal-gutter.cal-allday-label", "All day"),
+      days.map((d) => {
+        const items = allDayOf(d);
+        const shown = allDayOpen ? items : items.slice(0, ALLDAY_MAX);
+        return h(
+          "div.cal-week-allcell" + (d === today() ? ".today" : ""),
+          shown.map(chip),
+          !allDayOpen && items.length > ALLDAY_MAX ? h("button.cal-more", { type: "button", onclick: () => ((allDayOpen = true), draw()) }, `${items.length - ALLDAY_MAX} more`) : null,
+        );
+      }),
     );
+    const allDayToggle =
+      allDayOpen && longest > ALLDAY_MAX
+        ? h("div.cal-allday-less", h("button.cal-more", { type: "button", onclick: () => ((allDayOpen = false), draw()) }, "Show fewer"))
+        : null;
     const gutter = h("div.cal-gutter.cal-hours");
     gutter.style.height = height + "px";
     for (let m = lo; m < hi; m += 60) {
@@ -188,7 +248,7 @@ export async function calendarView() {
       gutter.append(lab);
     }
     const cols = days.map((d) => {
-      const col = h("div.cal-week-col" + (d === today() ? ".today" : ""), { "aria-label": longDate(d) });
+      const col = h("div.cal-week-col" + (d === today() ? ".today" : "") + (weekday(d) === 0 || weekday(d) === 6 ? ".weekend" : ""), { "aria-label": longDate(d) });
       col.style.height = height + "px";
       for (let m = lo; m < hi; m += 60) {
         const line = h("div.cal-hourline");
@@ -199,23 +259,27 @@ export async function calendarView() {
         const s = minutesOfDay(it.start);
         let e = minutesOfDay(it.end);
         if (e <= s) e = it.end === it.start ? s + 30 : 24 * 60;
+        const size = e - s < 50 ? ".short" : e - s < 75 ? ".medium" : "";
         const block = h(
-          "button.cal-block" + `.k-${it.kind}` + (it.conflict ? ".is-conflict" : ""),
-          { type: "button", onclick: () => itemDialog(it, load), title: `${clock(it.start)}${it.start === it.end ? "" : " – " + clock(it.end)}: ${it.title}` },
+          "button.cal-block" + `.k-${it.kind}` + (it.conflict ? ".is-conflict" : "") + size + (lanes > 1 ? ".narrow" : ""),
+          {
+            type: "button",
+            onclick: () => itemDialog(it, load),
+            title: `${clock(it.start)}${it.start === it.end ? "" : " – " + clock(it.end)}: ${it.title}${it.location ? " · " + it.location : ""}${it.conflict ? " · Double-booked" : ""}`,
+          },
           h("span.cal-block-title", it.title),
-          " ",
-          h("span.cal-block-time", clock(it.start)),
-          it.location && e - s >= 60 ? h("span.cal-block-loc", it.location) : null,
+          h("span.cal-block-time", shortClock(it.start)),
+          it.location && e - s >= 75 ? h("span.cal-block-loc", it.location) : null,
         );
-        block.style.top = ((s - lo) / 60) * HOUR_PX + "px";
-        block.style.height = Math.max(22, ((e - s) / 60) * HOUR_PX - 2) + "px";
+        block.style.top = ((s - lo) / 60) * HOUR_PX + 1 + "px";
+        block.style.height = Math.max(20, ((e - s) / 60) * HOUR_PX - 3) + "px";
         block.style.left = `calc(${(lane / lanes) * 100}% + 2px)`;
-        block.style.width = `calc(${100 / lanes}% - 4px)`;
+        block.style.width = `calc(${100 / lanes}% - 5px)`;
         col.append(block);
       }
       return col;
     });
-    return h("div.cal-week", head, allDayRow, h("div.cal-week-grid", gutter, cols));
+    return h("div.cal-week", head, allDayRow, allDayToggle, h("div.cal-week-grid", gutter, cols));
   }
 
   // ------------------------------------------------------------------ list
@@ -231,12 +295,20 @@ export async function calendarView() {
       out.append(
         h(
           "section.cal-list-day" + (d === today() ? ".today" : ""),
-          h("h3.cal-list-date", h("span", longDate(d)), d === today() ? h("span.tag", "Today") : null),
-          items.length ? h("ul.cal-lines", sortDay(items).map((it) => itemLine(it, load))) : h("p.muted.small", "Nothing scheduled."),
+          h("h3.cal-list-date", h("span", longDate(d)), d === today() ? h("span.pill.pill-brand", "Today") : null),
+          items.length ? h("ul.cal-lines", sortDay(items).map((it) => itemLine(it, load))) : h("p.cal-list-none", "Nothing scheduled."),
         ),
       );
     }
-    if (!any) out.append(h("p.empty-big", h("p", "Nothing on the calendar in these dates.")));
+    if (!any)
+      out.append(
+        emptyState({
+          icon: "calendar",
+          title: "Nothing on the calendar in these dates",
+          body: "Hearings, meetings, court deadlines and task due dates show here as they are added.",
+          action: button("New event", { size: "sm", icon: "plus", onclick: () => newEvent({ date: anchor }) }),
+        }),
+      );
     return out;
   }
 
@@ -244,10 +316,7 @@ export async function calendarView() {
     return h(
       "div",
       drawDayList(anchor, listDays, false),
-      h(
-        "div.cal-list-more",
-        h("button.btn", { type: "button", onclick: () => ((listDays += 30), load()) }, "Show the next 30 days"),
-      ),
+      h("div.cal-list-more", button(`Show the next 30 days`, { size: "sm", iconRight: "chevron-down", onclick: () => ((listDays += 30), load()) })),
     );
   }
 
@@ -262,28 +331,34 @@ export async function calendarView() {
     else anchor = addDays(anchor, listDays * dir);
     load();
   };
-  const viewButtons = [
-    ["month", "Month"],
-    ["week", "Week"],
-    ["list", "List"],
-  ].map(([v, label]) =>
-    h(
-      "button",
-      {
-        type: "button",
-        dataset: { view: v },
-        "aria-pressed": String(view === v),
-        onclick: () => {
-          view = v;
-          prefs.set("cal.view", v);
-          if (v === "list") listDays = 30;
-          anchor = selected;
-          load();
-        },
-      },
-      label,
-    ),
+  const unitName = () => (view === "month" ? "month" : view === "week" ? "week" : `${listDays} days`);
+  const prevBtn = iconButton("chevron-left", "Previous", { class: "bordered", onclick: () => move(-1) });
+  const nextBtn = iconButton("chevron-right", "Next", { class: "bordered", onclick: () => move(1) });
+  const syncNavLabels = () => {
+    for (const [b, w] of [[prevBtn, "Previous"], [nextBtn, "Next"]]) {
+      b.setAttribute("aria-label", `${w} ${unitName()}`);
+      b.title = `${w} ${unitName()}`;
+    }
+  };
+  syncNavLabels();
+  const viewSwitch = segmented(
+    [
+      { value: "month", label: "Month" },
+      { value: "week", label: "Week" },
+      { value: "list", label: "List" },
+    ],
+    view,
+    (v) => {
+      view = v;
+      prefs.set("cal.view", v);
+      if (v === "list") listDays = 30;
+      anchor = selected;
+      syncNavLabels();
+      load();
+    },
+    { label: "View" },
   );
+  viewSwitch.classList.add("cal-views");
   const scopeSel = select(
     [{ value: "firm", label: "Whole firm" }, ...users().map((u) => ({ value: u.id, label: u.id === state.me ? `${u.name} (you)` : u.name }))],
     scope,
@@ -301,6 +376,7 @@ export async function calendarView() {
     "label.toggle.cal-tasks-toggle",
     h("input", {
       type: "checkbox",
+      role: "switch",
       checked: showTasks,
       onchange: (e) => {
         showTasks = e.target.checked;
@@ -308,37 +384,48 @@ export async function calendarView() {
         load();
       },
     }),
-    " Show task due dates",
+    h("span.toggle-track", { "aria-hidden": "true" }),
+    "Task due dates",
   );
 
   const newEvent = (preset = {}) =>
     eventDialog(null, { attendees: scope !== "firm" ? [Number(scope)] : state.me ? [state.me] : [], ...preset }, () => load());
 
+  const moreBtn = button("Import or subscribe", { iconRight: "chevron-down", "aria-haspopup": "menu" });
+  moreBtn.addEventListener("click", () =>
+    menu(
+      moreBtn,
+      [
+        { label: "Import a calendar file", icon: "archive", hint: ".ics from Outlook, Google, Apple or a court notice", onSelect: () => importDialog(load) },
+        { label: "Subscribe in Outlook, Google or Apple", icon: "calendar-days", hint: "A private link to Lawdesk events", onSelect: () => subscribeDialog() },
+      ],
+      "Import or subscribe",
+      { align: "end" },
+    ),
+  );
+
   page.append(
+    pageHeader({
+      title: "Calendar",
+      subtitle: "Hearings, court deadlines and meetings, with task due dates. Times are Central.",
+      actions: [
+        button("Deadline calculator", { icon: "deadlines", href: "#/deadlines" }),
+        moreBtn,
+        button("New event", { variant: "primary", icon: "plus", onclick: () => newEvent({ date: selected }) }),
+      ],
+    }),
     h(
-      "div.page-head",
-      h("div", h("h1", "Calendar"), h("p.sub", "Hearings, deadlines and meetings, with task due dates. Times are Central.")),
+      "section.card.card-v2.flush.cal-shell",
+      { "aria-label": "Calendar" },
       h(
-        "div.head-actions",
-        h("button.btn", { type: "button", onclick: () => importDialog(load) }, "Import a calendar file"),
-        h("button.btn", { type: "button", onclick: () => subscribeDialog() }, "Subscribe in Outlook, Google or Apple"),
-        h("a.btn", { href: "#/deadlines" }, "Court deadline calculator"),
-        h("button.btn.primary", { type: "button", onclick: () => newEvent({ date: selected }) }, "New event"),
+        "div.cal-toolbar",
+        h("div.cal-nav", prevBtn, button("Today", { onclick: () => ((anchor = today()), (selected = today()), load()) }), nextBtn, titleEl),
+        h("div.cal-filters", viewSwitch, scopeSel, tasksToggle),
       ),
+      body,
+      h("footer.card-footer.cal-legend-foot", legend()),
     ),
-    h(
-      "div.cal-toolbar",
-      h(
-        "div.cal-nav",
-        h("button.btn", { type: "button", onclick: () => move(-1), "aria-label": "Previous" }, "‹"),
-        h("button.btn", { type: "button", onclick: () => ((anchor = today()), (selected = today()), load()) }, "Today"),
-        h("button.btn", { type: "button", onclick: () => move(1), "aria-label": "Next" }, "›"),
-        titleEl,
-      ),
-      h("div.cal-filters", h("div.segmented", { role: "group", "aria-label": "View" }, viewButtons), scopeSel, tasksToggle),
-    ),
-    body,
-    legend(),
+    below,
   );
   const onMedia = () => view === "week" && draw();
   phoneQuery.addEventListener("change", onMedia);
@@ -346,6 +433,11 @@ export async function calendarView() {
   if (!state.matters.length) loadMatters().catch(() => {});
   await load();
   return page;
+}
+
+/** "9a", "1:30p" style compact times for chips and blocks. */
+function shortClock(instant) {
+  return clock(instant).replace(":00", "").replace(" AM", "am").replace(" PM", "pm");
 }
 
 function clockOfMinutes(m) {
@@ -379,9 +471,10 @@ function layLanes(items) {
 function legend() {
   return h(
     "div.cal-legend",
-    { "aria-label": "Key" },
-    KINDS.map((k) => h("span.cal-legend-item", h("span.cal-dot" + `.k-${k.value}`), k.label)),
-    h("span.cal-legend-item", h("span.cal-box"), "Task due"),
+    { role: "list", "aria-label": "Key" },
+    KINDS.map((k) => h("span.cal-legend-item", { role: "listitem" }, h("span.cal-dot" + `.k-${k.value}`), k.label)),
+    h("span.cal-legend-item", { role: "listitem" }, h("span.cal-dot.is-task"), "Task due"),
+    h("span.cal-legend-item", { role: "listitem" }, h("span.cal-legend-dbl"), "Double-booked"),
   );
 }
 
@@ -509,7 +602,7 @@ function subscribeDialog() {
     replace(steps,
       h("ol", a.steps.map((s) => h("li", s))),
       a.note ? h("p.muted.small", a.note) : null,
-      h("p.small", "Source: ", h("a", { href: a.source, target: "_blank", rel: "noopener noreferrer" }, a.sourceLabel)),
+      h("p.small.cal-source", "Source: ", h("a", { href: a.source, target: "_blank", rel: "noopener noreferrer" }, a.sourceLabel)),
     );
   }
 
@@ -609,7 +702,7 @@ function subscribeDialog() {
       "div.modal-body.cal-subscribe",
       h("p", `Make a private link for ${userName(state.me)}'s Lawdesk calendar, then add it to your calendar app. The app checks the link for changes on its own schedule; it shows Lawdesk events but cannot change them.`),
       location.hostname === "localhost" || location.hostname === "127.0.0.1"
-        ? h("p.cal-info", "Lawdesk is running on this computer only, so Outlook on the web and Google cannot reach the link yet. Apple Calendar or classic Outlook on this same computer can. The link will work everywhere once Lawdesk is hosted.")
+        ? callout({ tone: "info", title: "Running on this computer only", body: "Outlook on the web and Google cannot reach the link yet. Apple Calendar or classic Outlook on this same computer can. The link will work everywhere once Lawdesk is hosted." })
         : null,
       make,
       created,

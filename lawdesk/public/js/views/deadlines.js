@@ -7,6 +7,8 @@ import { h, replace, select, toast, fmtDate, daysBetween } from "../dom.js";
 import { get, post } from "../api.js";
 import { state, today, users, loadMatters } from "../state.js";
 import { longDate, matterLabel } from "../cal.js";
+import { pageHeader, card, button, iconButton, field, emptyState, callout } from "../ui/components.js";
+import { icon } from "../ui/icons.js";
 
 const SERVICE = [
   { value: "", label: "Not served, or it doesn't matter for this period" },
@@ -40,7 +42,7 @@ export async function deadlinesView([matterIdStr]) {
   const triggerTime = h("input", { type: "time", value: "09:00", "aria-label": "Time of the event", name: "triggerTime" });
   const triggerLabel = h("span", "Date of the event");
   const service = select(SERVICE, "", { id: "dl-service", name: "service" });
-  const serviceHint = h("p.muted.small.dl-hint");
+  const serviceHint = h("span.field-hint.dl-hint");
   const amount = h("input#dl-amount", { type: "number", min: 1, max: 3650, value: 30, name: "amount" });
   const unit = select(
     [
@@ -73,9 +75,9 @@ export async function deadlinesView([matterIdStr]) {
     replace(closedChips,
       ...closedDays.map((d) =>
         h(
-          "span.tag.dl-closed",
+          "span.pill.pill-neutral.dl-closed",
           fmtDate(d, today()),
-          h("button.icon-btn", { type: "button", "aria-label": `Remove ${d}`, onclick: () => (closedDays.splice(closedDays.indexOf(d), 1), drawClosed(), compute()) }, "×"),
+          iconButton("x", `Remove ${fmtDate(d, today())}`, { size: "sm", onclick: () => (closedDays.splice(closedDays.indexOf(d), 1), drawClosed(), compute()) }),
         ),
       ),
     );
@@ -93,7 +95,7 @@ export async function deadlinesView([matterIdStr]) {
     triggerLabel.textContent = r ? `Date: ${r.triggerLabel.toLowerCase()}` : "Date of the event that starts the clock";
     if (r) {
       replace(ruleInfo,
-        h("p.dl-cite", h("a", { href: r.url, target: "_blank", rel: "noopener noreferrer" }, r.citation)),
+        h("p.dl-cite", h("a", { href: r.url, target: "_blank", rel: "noopener noreferrer" }, r.citation, icon("external-link", { size: 13 }))),
         h("blockquote.dl-quote", `“${r.quote}”`),
         r.notes ? h("p.muted.small", r.notes) : null,
       );
@@ -127,7 +129,15 @@ export async function deadlinesView([matterIdStr]) {
     syncForm();
     if (!ruleSel.value) {
       lastInput = null;
-      replace(result, h("div.card.dl-empty", h("p", "Choose a deadline and the date of the event to see the result."), disclaimer(lib.disclaimer)));
+      replace(result,
+        card({
+          className: "dl-empty",
+          body: [
+            emptyState({ icon: "deadlines", title: "Choose a deadline", body: "Pick the rule and the date of the event that started the clock. The last day appears here with every step of the working and its sources.", compact: true }),
+            disclaimer(lib.disclaimer),
+          ],
+        }),
+      );
       return;
     }
     if (!trigger.value) return;
@@ -143,7 +153,7 @@ export async function deadlinesView([matterIdStr]) {
     } catch (ex) {
       if (my !== seq) return;
       lastInput = null;
-      replace(result, h("div.card", h("p.error-box", ex.message), disclaimer(lib.disclaimer)));
+      replace(result, card({ className: "dl-empty", body: [callout({ tone: "danger", title: "That date could not be worked out.", body: ex.message }), disclaimer(lib.disclaimer)] }));
     }
   }
 
@@ -152,32 +162,45 @@ export async function deadlinesView([matterIdStr]) {
     const n = daysBetween(today(), r.date);
     const rel = n === 0 ? "today" : n === 1 ? "tomorrow" : n === -1 ? "yesterday" : n > 0 ? `${n} days from today` : `${-n} days ago`;
     replace(result,
-      h(
-        "section.card.dl-answer",
-        h("p.dl-label", "Last day"),
-        h("p.dl-date", longDate(r.date), r.time ? ` at ${fmtClock(r.time)}` : ""),
-        h("p.muted", `That is ${rel}.`),
-        r.laterDateIfExtended
-          ? h(
-              "p.dl-note",
-              `If the weekend and holiday rule applies again after the 3 added days, the last day would be ${longDate(r.laterDateIfExtended)}. The statute does not say, so the earlier date is shown.`,
-            )
-          : null,
-        r.warnings.length
-          ? h("div.dl-warnings", { role: "alert" }, h("h3", "Check these before relying on this date"), h("ul", r.warnings.map((w) => h("li", w))))
-          : null,
-        disclaimer(disc),
-      ),
+      card({
+        className: "dl-answer",
+        body: [
+          h(
+            "div.dl-answer-top",
+            h("div", h("p.dl-label", "Last day"), h("p.dl-date", longDate(r.date), r.time ? ` at ${fmtClock(r.time)}` : "")),
+            n < 0 ? h("span.pill.pill-danger.has-dot", "Already passed") : n <= 7 ? h("span.pill.pill-warning.has-dot", "Within a week") : null,
+          ),
+          h("p.dl-rel", `That is ${rel}.`),
+          r.laterDateIfExtended
+            ? callout({
+                tone: "info",
+                body: `If the weekend and holiday rule applies again after the 3 added days, the last day would be ${longDate(r.laterDateIfExtended)}. The statute does not say, so the earlier date is shown.`,
+              })
+            : null,
+          r.warnings.length
+            ? h(
+                "div.callout.callout-warning.dl-warnings",
+                { role: "alert" },
+                icon("triangle-alert", { size: 16, class: "callout-icon" }),
+                h("div.callout-text", h("strong", "Check these before relying on this date"), h("ul", r.warnings.map((w) => h("li", w)))),
+              )
+            : null,
+          disclaimer(disc),
+        ],
+      }),
       addCard(),
-      h(
-        "section.card.dl-working",
-        h("h2", "How this date was worked out"),
-        h("ol.dl-steps", r.steps.map((s) => h("li", s))),
-        h("h3", "When the last day ends"),
-        h("p", r.lastDayEnds),
-        h("h3", "Sources"),
-        h("ul.dl-sources", r.citations.map((c) => h("li", h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer" }, c.cite)))),
-      ),
+      card({
+        title: "How this date was worked out",
+        icon: "list-checks",
+        className: "dl-working",
+        body: [
+          h("ol.dl-steps", r.steps.map((s) => h("li", s))),
+          h("h3", "When the last day ends"),
+          h("p", r.lastDayEnds),
+          h("h3", "Sources"),
+          h("ul.dl-sources", r.citations.map((c) => h("li", h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer" }, c.cite, icon("external-link", { size: 12 }))))),
+        ],
+      }),
     );
   }
 
@@ -190,6 +213,7 @@ export async function deadlinesView([matterIdStr]) {
   );
   const who = select([{ value: "", label: "The matter's attorney" }, ...users().map((u) => ({ value: u.id, label: u.name }))], "", { id: "dl-who", "aria-label": "Responsible" });
   const titleIn = h("input#dl-title", { maxlength: 300, name: "title" });
+  const titleHint = h("span.field-hint");
   let titleTouched = false;
   titleIn.addEventListener("input", () => (titleTouched = true));
 
@@ -207,23 +231,32 @@ export async function deadlinesView([matterIdStr]) {
   function addCard() {
     const r = lastRule;
     if (!titleTouched) titleIn.value = r ? `${r.name} due` : "";
-    const btn = h("button.btn.primary#dl-add", { type: "button", onclick: addToMatter }, "Add to the calendar and task list");
-    return h(
-      "section.card.dl-add",
-      h("h2", "Put it on a matter"),
-      h("p.muted.small", "Adds a court-deadline event to the calendar and a high-priority task with all of the working above, the sources and the disclaimer."),
-      h("div.form-grid", h("label", "Matter", matterSel), h("label", "What is due", titleIn, h("span.muted.small", r ? "" : "For example: Response to motion to compel due")), h("label", "Responsible", who)),
-      h("div.form-actions", btn),
-      added ? addedNote(added) : null,
-    );
+    titleHint.textContent = r ? "" : "For example: Response to motion to compel due";
+    return card({
+      title: "Put it on a matter",
+      subtitle: "Adds a court-deadline event to the calendar and a high-priority task, with the working, the sources and the disclaimer.",
+      icon: "briefcase",
+      className: "dl-add",
+      body: [
+        field("Matter", matterSel),
+        h("div.form-row", field("What is due", [titleIn, titleHint]), field("Responsible", who)),
+        h("div.form-actions", button("Add to the calendar and task list", { variant: "primary", icon: "plus", id: "dl-add", onclick: addToMatter })),
+        added ? addedNote(added) : null,
+      ],
+    });
   }
 
   function addedNote(a) {
     return h(
-      "div.dl-added",
+      "div.callout.callout-success.dl-added",
       { role: "status" },
-      h("p", h("strong", "Added. "), a.summary),
-      h("p", h("a", { href: `#/matters/${a.event.matterId}` }, "Open the matter"), " · ", h("a", { href: "#/calendar" }, "Open the calendar")),
+      icon("circle-check", { size: 16, class: "callout-icon" }),
+      h(
+        "div.callout-text",
+        h("strong", "Added to the calendar and task list"),
+        h("span", a.summary),
+        h("span", h("a", { href: `#/matters/${a.event.matterId}` }, "Open the matter"), " · ", h("a", { href: "#/calendar" }, "Open the calendar")),
+      ),
     );
   }
 
@@ -260,33 +293,37 @@ export async function deadlinesView([matterIdStr]) {
   });
 
   const backTo = presetMatter ? state.matters.find((m) => m.id === presetMatter) : null;
-  page.append(
-    backTo ? h("a.back", { href: `#/matters/${presetMatter}` }, `← ${matterLabel(backTo)}`) : null,
-    h(
-      "div.page-head",
-      h("div", h("h1", "Court deadline calculator"), h("p.sub", "Kansas state courts, civil cases (K.S.A. 60-206). Not for federal court.")),
-    ),
-    h(
-      "div.dl-grid",
+  const form = card({
+    tag: "form",
+    title: "What started the clock",
+    icon: "deadlines",
+    className: "dl-form",
+    body: [
+      field("Deadline", ruleSel),
+      ruleInfo,
+      customBox,
+      field(triggerLabel, h("div.dl-inline", trigger, triggerTime)),
+      field("How was it served?", [service, serviceHint]),
       h(
-        "form.card.dl-form.form-grid",
-        { onsubmit: (e) => e.preventDefault() },
-        h("h2", "What started the clock"),
-        h("label", "Deadline", ruleSel),
-        ruleInfo,
-        customBox,
-        h("label", triggerLabel, h("div.dl-inline", trigger, triggerTime)),
-        h("label", "How was it served?", service, serviceHint),
-        h(
-          "fieldset",
-          h("legend", "Days the clerk's office was closed (optional)"),
-          h("p.muted.small", "For example a weather closure. K.S.A. 60-206(a)(3) extends a last day that falls on one."),
-          closedInput,
-          closedChips,
-        ),
+        "fieldset",
+        h("legend", "Days the clerk's office was closed (optional)"),
+        h("span.field-hint", "For example a weather closure. K.S.A. 60-206(a)(3) extends a last day that falls on one."),
+        closedInput,
+        closedChips,
       ),
-      result,
-    ),
+    ],
+  });
+  form.addEventListener("submit", (e) => e.preventDefault());
+  page.append(
+    pageHeader({
+      title: "Court deadline calculator",
+      subtitle: "Kansas state courts, civil cases (K.S.A. 60-206). Not for federal court.",
+      breadcrumbs: backTo
+        ? [{ label: "Matters", href: "#/matters" }, { label: matterLabel(backTo), href: `#/matters/${presetMatter}` }, { label: "Court deadline" }]
+        : [{ label: "Calendar", href: "#/calendar" }, { label: "Court deadline calculator" }],
+      actions: [button("Calendar", { href: "#/calendar", icon: "calendar" })],
+    }),
+    h("div.dl-grid", form, result),
   );
   if (presetMatter) pickAssignee();
   await compute();
@@ -294,7 +331,7 @@ export async function deadlinesView([matterIdStr]) {
 }
 
 function disclaimer(text) {
-  return h("div.dl-disclaimer", { role: "note" }, h("strong", "Verify this date. "), text.replace(/^VERIFY THIS DATE\.\s*/, ""));
+  return h("div.dl-disclaimer", { role: "note" }, icon("scale", { size: 16 }), h("p", h("strong", "Verify this date. "), text.replace(/^VERIFY THIS DATE\.\s*/, "")));
 }
 
 function fmtClock(hhmm) {
