@@ -1,10 +1,13 @@
-// Documents: the card on a matter page, a matter's full Documents page (folders, upload,
-// preview, versions, trash) and the firm-wide Documents search.
+// Documents: the Documents card (or tab panel) on a matter page, a matter's full Documents
+// page (folders, upload, preview, versions, deleted documents) and the firm-wide search.
 
 import { h, replace, select, modal, toast, fmtTime, plural } from "../dom.js";
 import { get, patch, post, del } from "../api.js";
 import { sendFile, fmtSize, kindOf, previewKind, fileUrl } from "../upload.js";
 import { templateDialog } from "./templates.js";
+import { icon } from "../ui/icons.js";
+import { pageHeader, card, button, iconButton, emptyState, field, pill, callout, useStyles, loadingBlock } from "../ui/components.js";
+import { dataTable } from "../ui/table.js";
 
 const fail = (err) => toast(err.message, { error: true });
 
@@ -16,8 +19,24 @@ async function facets(fresh = false) {
 
 const folderLabel = (f) => (f ? f.split("/").join(" › ") : "Top level");
 
-function typeBadge(mime) {
-  return h("span.doc-type", { title: mime || "" }, kindOf(mime));
+const KIND_ICON = { PDF: "file-text", Word: "file-text", Text: "file-text", "Web page": "file-text", Excel: "file-spreadsheet", Slides: "file", Image: "file-image", Email: "mail", Zip: "archive" };
+
+/** A small neutral tile with the file type's icon. The type is also written out next to it. */
+export function docIcon(mime, size = "md") {
+  const kind = kindOf(mime);
+  return h("span.doc-icon.doc-icon-" + size, { title: kind, "aria-hidden": "true" }, icon(KIND_ICON[kind] || "file", { size: size === "sm" ? 14 : 16 }));
+}
+
+/** "Just now", "3h ago", "Yesterday", or a date: how recently a document changed. */
+function when(stamp) {
+  const t = new Date(stamp).getTime();
+  if (Number.isNaN(t)) return "";
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return "Just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 2 * 86400) return "Yesterday";
+  return fmtTime(stamp).replace(/,.*$/, "");
 }
 
 // ------------------------------------------------------------------ uploads
@@ -35,14 +54,37 @@ function askConflict(name, folder) {
         h("p.muted", "Saving it as a new version keeps every earlier version, so nothing is lost."),
         h(
           "div.form-actions",
-          h("button.btn", { type: "button", onclick: pick("skip") }, "Don't upload"),
-          h("button.btn", { type: "button", onclick: pick("rename") }, "Keep both"),
-          h("button.btn.primary", { type: "button", onclick: pick("version") }, "Save as new version"),
+          button("Don't upload", { onclick: pick("skip") }),
+          button("Keep both", { onclick: pick("rename") }),
+          button("Save as new version", { variant: "primary", onclick: pick("version") }),
         ),
       ),
     );
     dlg.addEventListener("close", () => resolve(answer));
   });
+}
+
+function uploadRow(name) {
+  const fill = h("span.docs-progress-fill", { style: { width: "0%" } });
+  const bar = h("span.docs-progress", { role: "progressbar", "aria-label": `Uploading ${name}`, "aria-valuemin": "0", "aria-valuemax": "100" }, fill);
+  const status = h("span.upload-status", "Waiting…");
+  const row = h("li.upload-row", icon("upload", { size: 15, class: "upload-icon" }), h("span.upload-name", name), bar, status);
+  return {
+    row,
+    status,
+    set(f) {
+      const pct = Math.round(f * 100);
+      fill.style.width = pct + "%";
+      bar.setAttribute("aria-valuenow", String(pct));
+      status.textContent = pct < 100 ? `${pct}%` : "Saving…";
+    },
+    finish(text, ok) {
+      status.textContent = text;
+      fill.style.width = "100%";
+      row.classList.add(ok ? "done" : "failed");
+      if (ok) setTimeout(() => row.remove(), 4000);
+    },
+  };
 }
 
 /**
@@ -54,32 +96,14 @@ export async function uploadFiles(matterId, files, folder, box, existing = []) {
   const { maxBytes } = await facets();
   const saved = [];
   for (const file of files) {
-    const bar = h("span.progress-fill", { style: { width: "0%" } });
-    const status = h("span.upload-status.muted.small", "Waiting…");
-    const row = h(
-      "li.upload-row",
-      h("span.upload-name", file.name),
-      h("span.progress-bar", { role: "progressbar", "aria-label": `Uploading ${file.name}`, "aria-valuemin": "0", "aria-valuemax": "100" }, bar),
-      status,
-    );
-    box?.append(row);
-    const setPct = (f) => {
-      const pct = Math.round(f * 100);
-      bar.style.width = pct + "%";
-      bar.parentElement.setAttribute("aria-valuenow", String(pct));
-      status.textContent = pct < 100 ? `${pct}%` : "Saving…";
-    };
-    const finish = (text, ok) => {
-      status.textContent = text;
-      row.classList.add(ok ? "done" : "failed");
-      if (ok) setTimeout(() => row.remove(), 4000);
-    };
+    const r = uploadRow(file.name);
+    box?.append(r.row);
     if (file.size > maxBytes) {
-      finish(`Too large (limit ${fmtSize(maxBytes)})`, false);
+      r.finish(`Too large (limit ${fmtSize(maxBytes)})`, false);
       continue;
     }
     if (file.size === 0) {
-      finish("The file is empty", false);
+      r.finish("The file is empty", false);
       continue;
     }
     let mode = "error";
@@ -87,26 +111,26 @@ export async function uploadFiles(matterId, files, folder, box, existing = []) {
     if (clash) {
       mode = await askConflict(file.name, folder);
       if (mode === "skip") {
-        finish("Not uploaded", true);
+        r.finish("Not uploaded", true);
         continue;
       }
     }
     for (;;) {
       try {
-        const doc = await sendFile(`/matters/${matterId}/documents/upload`, file, { folder, onConflict: mode }, { onProgress: setPct });
+        const doc = await sendFile(`/matters/${matterId}/documents/upload`, file, { folder, onConflict: mode }, { onProgress: r.set });
         saved.push(doc);
-        finish(doc.version > 1 ? `Saved as version ${doc.version}` : "Uploaded", true);
+        r.finish(doc.version > 1 ? `Saved as version ${doc.version}` : "Uploaded", true);
         break;
       } catch (err) {
         if (err.status === 409 && mode === "error") {
           mode = await askConflict(file.name, folder);
           if (mode === "skip") {
-            finish("Not uploaded", true);
+            r.finish("Not uploaded", true);
             break;
           }
           continue;
         }
-        finish(err.message, false);
+        r.finish(err.message, false);
         break;
       }
     }
@@ -189,12 +213,19 @@ function dropTarget(el, { onFiles, onDoc }) {
 
 // ------------------------------------------------------------- matter card
 
-/** The Documents card on a matter page: recent documents, upload, create from template. */
-export function matterDocumentsCard(matterId) {
-  const card = h("section.card.docs-card", { "aria-labelledby": "docs-card-title" });
-  const list = h("div");
+/**
+ * The Documents card on a matter page: the most recent documents, Upload and Create from
+ * template; files dropped on it are uploaded to the matter's top level.
+ * opts.limit: how many documents to list (default 5). Use matterDocumentsTab (below) to show
+ * it as a matter tab instead.
+ */
+export function matterDocumentsCard(matterId, { limit = 5 } = {}) {
+  useStyles("documents");
+  const list = h("div.docs-card-list", loadingBlock("Loading documents", "lines", 3));
   const progress = h("ul.upload-list", { "aria-live": "polite" });
   const picker = filePicker((files) => doUpload(files));
+  const footer = h("div.docs-card-foot");
+  const subtitle = h("span", "Loading…");
   let known = [];
 
   async function doUpload(files) {
@@ -209,42 +240,78 @@ export function matterDocumentsCard(matterId) {
     try {
       const { documents } = await get(`/matters/${matterId}/documents`);
       known = documents;
-      const recent = documents.slice().sort((a, b) => (b.updatedAt > a.updatedAt ? 1 : -1)).slice(0, 5);
-      replace(list, 
+      const recent = documents.slice().sort((a, b) => (b.updatedAt > a.updatedAt ? 1 : -1)).slice(0, limit);
+      subtitle.textContent = documents.length ? `${plural(documents.length, "document")} · drop files here to upload` : "Drop files here to upload";
+      replace(
+        list,
         documents.length
           ? h(
               "ul.plain.doc-mini",
               recent.map((d) =>
                 h(
                   "li",
-                  h("a.doc-mini-name", { href: `#/matters/${matterId}/documents/${d.id}` }, d.name),
-                  h("span.muted.small", [kindOf(d.mime), d.folder ? folderLabel(d.folder) : null, fmtTime(d.updatedAt)].filter(Boolean).join(" · ")),
+                  docIcon(d.mime),
+                  h(
+                    "div.doc-mini-text",
+                    h("a.doc-mini-name", { href: `#/matters/${matterId}/documents/${d.id}`, title: d.name }, d.name),
+                    h("span.doc-mini-sub", [kindOf(d.mime), d.folder ? folderLabel(d.folder) : null, d.version > 1 ? `version ${d.version}` : null].filter(Boolean).join(" · ")),
+                  ),
+                  h("span.doc-mini-when", when(d.updatedAt)),
                 ),
               ),
             )
-          : h("p.muted", "No documents yet. Drop files here or use Upload."),
-        h("a.docs-all", { href: `#/matters/${matterId}/documents` }, documents.length ? `All ${plural(documents.length, "document")} →` : "Open documents →"),
+          : emptyState({ icon: "folder-open", title: "No documents yet", body: "Drag files onto this card, or use Upload.", compact: true }),
+      );
+      replace(
+        footer,
+        h(
+          "a.docs-all.card-footer-link",
+          { href: `#/matters/${matterId}/documents` },
+          documents.length > recent.length ? `View all ${plural(documents.length, "document")}` : "Open documents and folders",
+          icon("arrow-right", { size: 14 }),
+        ),
       );
     } catch (err) {
-      replace(list, h("p.error-text", err.message));
+      replace(list, callout({ tone: "danger", title: "Couldn't load documents", body: err.message, action: button("Try again", { size: "sm", onclick: load }) }));
     }
   }
 
-  card.append(
-    h("h2#docs-card-title", "Documents"),
-    list,
-    progress,
-    h(
-      "div.docs-card-actions",
-      h("button.btn.small", { type: "button", onclick: () => picker.click() }, "Upload"),
-      h("button.btn.small", { type: "button", onclick: () => templateDialog(matterId, {}) }, "Create from template"),
+  const el = card({
+    title: "Documents",
+    subtitle,
+    icon: "documents",
+    className: "docs-card",
+    flush: true,
+    actions: [
+      button("Create from template", { size: "sm", variant: "ghost", icon: "file-plus", onclick: () => templateDialog(matterId, {}) }),
+      button("Upload", { size: "sm", icon: "upload", onclick: () => picker.click() }),
       picker,
-    ),
-  );
-  dropTarget(card, { onFiles: doUpload });
+    ],
+    body: [progress, list],
+    footer,
+  });
+  dropTarget(el, { onFiles: doUpload });
   load();
-  return card;
+  return el;
 }
+
+/** Render the Documents panel into `container` (a matter tab, or any other slot). */
+export function renderMatterDocuments(container, matterId, opts = {}) {
+  container.replaceChildren(matterDocumentsCard(matterId, { limit: 25, ...opts }));
+  return container;
+}
+
+/**
+ * Ready to pass to registerMatterTab() from ui/matter-slots.js. Its id is "docs" because
+ * #/matters/:id/documents is the full Documents page.
+ */
+export const matterDocumentsTab = {
+  id: "docs",
+  label: "Documents",
+  icon: "documents",
+  order: 30,
+  render: (ctx) => matterDocumentsCard(ctx.matterId, { limit: 25 }),
+};
 
 // ---------------------------------------------------------- folder tree
 
@@ -270,6 +337,7 @@ const inFolder = (doc, folder) => !folder || doc.folder === folder || doc.folder
 // ------------------------------------------------------- matter documents page
 
 export async function matterDocumentsView([idStr, sub]) {
+  useStyles("documents");
   const matterId = Number(idStr);
   const docId = sub && sub !== "trash" ? Number(sub) : null;
   const showTrash = sub === "trash";
@@ -287,13 +355,13 @@ export async function matterDocumentsView([idStr, sub]) {
   try {
     folder = sessionStorage.getItem(key) || "";
   } catch {}
-  let sort = "name";
+  let query = "";
 
   const page = h("div.page.docs-page");
   const treeBox = h("nav.card.docs-tree", { "aria-label": "Folders" });
   const mainBox = h("div.docs-main");
   const progress = h("ul.upload-list", { "aria-live": "polite" });
-  const picker = filePicker((files) => doUpload(files, folder));
+  const picker = filePicker((files) => doUpload(files, docId || showTrash ? "" : folder));
 
   async function reload() {
     const [a, b] = await Promise.all([get(`/matters/${matterId}/documents`), get(`/matters/${matterId}/documents?deleted=only`)]);
@@ -326,6 +394,7 @@ export async function matterDocumentsView([idStr, sub]) {
 
   function setFolder(f) {
     folder = f;
+    query = "";
     try {
       sessionStorage.setItem(key, f);
     } catch {}
@@ -335,21 +404,17 @@ export async function matterDocumentsView([idStr, sub]) {
 
   // ---------------------------------------------------------- header
   const matter = m.matter;
-  const head = h(
-    "div",
-    h("a.back", { href: `#/matters/${matterId}` }, "← ", matter.name),
-    h(
-      "div.page-head",
-      h("div", h("h1", "Documents"), h("p.sub", [matter.number, matter.name, matter.client_name].filter(Boolean).join(" · "))),
-      h(
-        "div.head-actions",
-        h("button.btn", { type: "button", onclick: () => templateDialog(matterId, { folder }) }, "Create from template"),
-        h("button.btn", { type: "button", onclick: newFolder }, "New folder"),
-        h("button.btn.primary", { type: "button", onclick: () => picker.click() }, "Upload files"),
-        picker,
-      ),
-    ),
-  );
+  const head = pageHeader({
+    title: "Documents",
+    breadcrumbs: [{ label: "Matters", href: "#/matters" }, { label: matter.number || matter.name, href: `#/matters/${matterId}` }, { label: "Documents" }],
+    subtitle: [matter.name, matter.client_name].filter(Boolean).join(" · "),
+    actions: [
+      button("Create from template", { icon: "file-plus", onclick: () => templateDialog(matterId, { folder }) }),
+      button("New folder", { icon: "folder-plus", onclick: newFolder }),
+      button("Upload files", { variant: "primary", icon: "upload", onclick: () => picker.click() }),
+      picker,
+    ],
+  });
 
   // ---------------------------------------------------------- tree
   function drawTree() {
@@ -362,22 +427,25 @@ export async function matterDocumentsView([idStr, sub]) {
         {
           type: "button",
           "aria-current": current ? "true" : null,
-          style: { paddingLeft: `${10 + depth * 14}px` },
+          style: { paddingLeft: `${10 + depth * 16}px` },
           dataset: { folder: node.path },
           onclick: () => setFolder(node.path),
         },
+        icon(depth === 0 ? "folder-open" : "folder", { size: 15, class: "tree-icon" }),
         h("span.tree-name", node.name),
         h("span.tree-count", String(count(node.path))),
       );
       dropTarget(btn, { onFiles: (files) => doUpload(files, node.path), onDoc: (id) => moveDoc(id, node.path) });
       return h("li", btn, node.children.length ? h("ul.tree", node.children.map((c) => item(c, depth + 1))) : null);
     };
-    replace(treeBox, 
-      h("h2.visually-hidden", "Folders"),
+    replace(
+      treeBox,
+      h("h2.docs-tree-title", "Folders"),
       h("ul.tree", item(root, 0)),
       h(
         "a.tree-item.trash-link" + (showTrash ? ".current" : ""),
         { href: `#/matters/${matterId}/documents/trash`, "aria-current": showTrash ? "true" : null },
+        icon("trash-2", { size: 15, class: "tree-icon" }),
         h("span.tree-name", "Deleted documents"),
         h("span.tree-count", String(trashed.length)),
       ),
@@ -385,131 +453,154 @@ export async function matterDocumentsView([idStr, sub]) {
   }
 
   // ---------------------------------------------------------- list
+  function nameCell(d, { link = true, showFolder = false } = {}) {
+    return h(
+      "div.doc-name-cell",
+      docIcon(d.mime),
+      h(
+        "div.cell-stack",
+        link ? h("a.doc-name.cell-title", { href: `#/matters/${matterId}/documents/${d.id}` }, d.name) : h("span.doc-name.cell-title", d.name),
+        h(
+          "span.cell-sub",
+          [kindOf(d.mime), showFolder ? folderLabel(d.folder) : null].filter(Boolean).join(" · "),
+          // On phones the other columns are hidden, so the essentials go on this line.
+          link ? h("span.doc-phone-meta", [d.category, when(d.updatedAt)].filter(Boolean).map((x) => ` · ${x}`).join("")) : null,
+        ),
+      ),
+      link && d.tags.length ? h("span.doc-tags.doc-phone-meta", d.tags.map((t) => h("span.doc-tag", t))) : null,
+    );
+  }
+
   function drawList() {
     const here = docs.filter((d) => inFolder(d, folder));
-    const sorters = {
-      name: (a, b) => a.name.localeCompare(b.name),
-      updated: (a, b) => (b.updatedAt > a.updatedAt ? 1 : -1),
-    };
-    here.sort(sorters[sort]);
-    const sortSel = select(
-      [
-        { value: "name", label: "Sort by name" },
-        { value: "updated", label: "Newest first" },
-      ],
-      sort,
-      { "aria-label": "Sort", onchange: (e) => ((sort = e.target.value), draw()) },
-    );
+    const title = folder ? folder.slice(folder.lastIndexOf("/") + 1) : "All documents";
     const folderTools = folder
-      ? h(
-          "span.folder-tools",
-          h("button.btn.small", { type: "button", onclick: renameFolder }, "Rename folder"),
-          h("button.btn.small", { type: "button", onclick: deleteFolder }, "Remove folder"),
-        )
+      ? [button("Rename", { size: "sm", variant: "ghost", icon: "pencil", "aria-label": "Rename folder", onclick: renameFolder }), button("Remove", { size: "sm", variant: "ghost", icon: "trash-2", "aria-label": "Remove folder", onclick: deleteFolder })]
       : null;
     const drop = h(
       "div.dropzone",
-      h("p", h("b", "Drag files here"), ` to upload them to ${folderLabel(folder)}, or `, h("button.linkish", { type: "button", onclick: () => picker.click() }, "choose files"), "."),
-      h("p.muted.small", `Up to ${fmtSize(facetsCache.maxBytes)} each. You can also drag a document onto a folder to move it.`),
+      icon("upload", { size: 18, class: "dropzone-icon" }),
+      h(
+        "div",
+        h("p", h("b", "Drag files here"), ` to add them to ${folderLabel(folder)}, or `, h("button.linkish", { type: "button", onclick: () => picker.click() }, "choose files"), "."),
+        h("p.dropzone-sub", `Up to ${fmtSize(facetsCache.maxBytes)} each. Drag a document onto a folder to move it.`),
+      ),
     );
     dropTarget(drop, { onFiles: (files) => doUpload(files, folder) });
-    const rows = here.map((d) => {
-      const tr = h(
-        "tr.doc-row",
-        { draggable: "true", dataset: { id: String(d.id) } },
-        h(
-          "td.doc-name-cell",
-          { "data-label": "Name" },
-          typeBadge(d.mime),
-          h("a.doc-name", { href: `#/matters/${matterId}/documents/${d.id}` }, d.name),
-          d.folder !== folder ? h("span.muted.small.doc-sub", folderLabel(d.folder)) : null,
-        ),
-        h("td", { "data-label": "Category" }, d.category || "", d.tags.length ? h("span.doc-tags", d.tags.map((t) => h("span.tag", t))) : null),
-        h("td.num-cell", { "data-label": "Version" }, `v${d.version}`),
-        h("td.num-cell", { "data-label": "Size" }, fmtSize(d.size)),
-        h("td", { "data-label": "Updated" }, fmtTime(d.updatedAt)),
-        h(
-          "td.row-actions",
-          h("a.btn.small", { href: fileUrl(d.id), download: d.name, "aria-label": `Download ${d.name}` }, "Download"),
-        ),
-      );
-      tr.addEventListener("dragstart", (e) => {
-        e.dataTransfer.setData("application/x-lawdesk-doc", String(d.id));
-        e.dataTransfer.effectAllowed = "move";
-      });
-      return tr;
+    const table = dataTable({
+      label: "Documents",
+      tableClass: "docs-table",
+      rows: here,
+      rowClass: () => "doc-row",
+      rowAttrs: (d) => ({
+        draggable: "true",
+        ondragstart: (e) => {
+          e.dataTransfer.setData("application/x-lawdesk-doc", String(d.id));
+          e.dataTransfer.effectAllowed = "move";
+        },
+      }),
+      rowHref: (d) => `#/matters/${matterId}/documents/${d.id}`,
+      search: { placeholder: "Search this folder", initial: query, text: (d) => [d.name, d.category, d.folder, ...d.tags] },
+      noun: ["document", "documents"],
+      prefsKey: "docs.list",
+      sort: { key: "name", dir: "asc" },
+      columns: [
+        { key: "name", label: "Name", primary: true, sort: (d) => d.name, render: (d) => nameCell(d, { showFolder: d.folder !== folder }) },
+        {
+          key: "category",
+          label: "Category and tags",
+          hideOnPhone: true,
+          sort: (d) => d.category || "",
+          render: (d) =>
+            d.category || d.tags.length ? h("div.doc-cat", d.category ? h("span", d.category) : null, d.tags.length ? h("span.doc-tags", d.tags.map((t) => h("span.doc-tag", t))) : null) : h("span.muted", "—"),
+        },
+        { key: "version", label: "Version", phoneLabel: "", className: "doc-version", align: "right", sort: (d) => d.version, render: (d) => `v${d.version}` },
+        { key: "size", label: "Size", align: "right", hideOnPhone: true, sort: (d) => d.size, render: (d) => fmtSize(d.size) },
+        { key: "updated", label: "Updated", className: "nowrap", hideOnPhone: true, sort: (d) => d.updatedAt, defaultDir: "desc", render: (d) => h("span", { title: fmtTime(d.updatedAt) }, when(d.updatedAt)) },
+        {
+          key: "actions",
+          label: "",
+          sortable: false,
+          className: "row-actions",
+          render: (d) => h("a.icon-btn.sm", { href: fileUrl(d.id), download: d.name, "aria-label": `Download ${d.name}`, title: "Download" }, icon("download", { size: 15 })),
+        },
+      ],
+      empty: ({ searching }) =>
+        searching
+          ? emptyState({ icon: "search", title: "No matches", body: "No document in this folder matches. Try another word.", compact: true })
+          : emptyState({ icon: "folder-open", title: "No documents in this folder yet", body: "Drag files here, upload them, or create one from a template.", compact: true }),
     });
-    replace(mainBox, 
-      h("div.docs-toolbar", h("h2", folderLabel(folder) === "Top level" ? "All documents" : folderLabel(folder)), h("span.muted", plural(here.length, "document")), folderTools, h("span.spacer"), sortSel),
-      progress,
-      drop,
-      here.length
-        ? h(
-            "div.card.table-card",
-            h(
-              "table.docs-table",
-              h("thead", h("tr", h("th", "Name"), h("th", "Category and tags"), h("th.num-cell", "Version"), h("th.num-cell", "Size"), h("th", "Updated"), h("th", h("span.visually-hidden", "Actions")))),
-              h("tbody", rows),
-            ),
-          )
-        : h("div.card.empty-big", h("p", "No documents in this folder yet."), h("p", "Upload files, or create one from a template.")),
+    table.searchInput?.addEventListener("input", (e) => (query = e.target.value));
+    replace(
+      mainBox,
+      card({
+        title,
+        subtitle: folder && folder.includes("/") ? folderLabel(folder) : plural(here.length, "document"),
+        icon: folder ? "folder" : "folder-open",
+        className: "docs-list-card",
+        flush: true,
+        actions: folderTools,
+        body: [h("div.docs-drop-wrap", progress, drop), table],
+      }),
     );
   }
 
   // ---------------------------------------------------------- trash
   function drawTrash() {
-    replace(mainBox, 
-      h("div.docs-toolbar", h("h2", "Deleted documents"), h("span.muted", plural(trashed.length, "document"))),
-      h("p.muted", "Deleted documents keep all their versions. Restore one to put it back in its folder."),
-      trashed.length
-        ? h(
-            "div.card.table-card",
-            h(
-              "table.docs-table",
-              h("thead", h("tr", h("th", "Name"), h("th", "Folder"), h("th", "Deleted"), h("th", h("span.visually-hidden", "Actions")))),
-              h(
-                "tbody",
-                trashed.map((d) =>
-                  h(
-                    "tr",
-                    h("td.doc-name-cell", { "data-label": "Name" }, typeBadge(d.mime), h("span.doc-name", d.name)),
-                    h("td", { "data-label": "Folder" }, folderLabel(d.folder)),
-                    h("td", { "data-label": "Deleted" }, fmtTime(d.deletedAt)),
-                    h(
-                      "td.row-actions",
-                      h(
-                        "button.btn.small",
-                        {
-                          type: "button",
-                          onclick: async () => {
-                            try {
-                              const r = await post(`/documents/${d.id}/restore`);
-                              toast(r.name !== d.name ? `Restored as “${r.name}” (the old name is in use)` : `Restored “${r.name}”`);
-                              await reload();
-                            } catch (err) {
-                              fail(err);
-                            }
-                          },
-                        },
-                        "Restore",
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          )
-        : h("div.card.empty-big", h("p", "Nothing has been deleted.")),
+    const table = dataTable({
+      label: "Deleted documents",
+      tableClass: "docs-table",
+      rows: trashed,
+      noun: ["deleted document", "deleted documents"],
+      toolbar: trashed.length > 0,
+      sort: { key: "deleted", dir: "desc" },
+      columns: [
+        { key: "name", label: "Name", primary: true, sort: (d) => d.name, render: (d) => nameCell(d, { link: false }) },
+        { key: "folder", label: "Folder", sort: (d) => d.folder, render: (d) => folderLabel(d.folder) },
+        { key: "deleted", label: "Deleted", className: "nowrap", sort: (d) => d.deletedAt, render: (d) => fmtTime(d.deletedAt) },
+        {
+          key: "actions",
+          label: "",
+          sortable: false,
+          className: "row-actions",
+          render: (d) =>
+            button("Restore", {
+              size: "sm",
+              icon: "rotate-ccw",
+              onclick: async () => {
+                try {
+                  const r = await post(`/documents/${d.id}/restore`);
+                  toast(r.name !== d.name ? `Restored as “${r.name}” (the old name is in use)` : `Restored “${r.name}”`);
+                  await reload();
+                } catch (err) {
+                  fail(err);
+                }
+              },
+            }),
+        },
+      ],
+      empty: emptyState({ icon: "trash-2", title: "Nothing has been deleted", body: "Deleted documents appear here with all their versions, ready to restore.", compact: true }),
+    });
+    replace(
+      mainBox,
+      card({
+        title: "Deleted documents",
+        subtitle: "Deleted documents keep all their versions. Restore one to put it back in its folder.",
+        icon: "trash-2",
+        flush: true,
+        body: table,
+      }),
     );
   }
 
   // ---------------------------------------------------------- detail
   async function drawDetail() {
+    replace(mainBox, loadingBlock("Loading document", "lines", 4));
     let d;
     try {
       d = await get(`/documents/${docId}`);
     } catch (err) {
-      replace(mainBox, h("p.error-text", err.message), h("a", { href: `#/matters/${matterId}/documents` }, "Back to documents"));
+      replace(mainBox, callout({ tone: "danger", title: "Couldn't open this document", body: err.message, action: button("Back to documents", { size: "sm", href: `#/matters/${matterId}/documents` }) }));
       return;
     }
     if (d.matterId !== matterId) {
@@ -517,48 +608,62 @@ export async function matterDocumentsView([idStr, sub]) {
       return;
     }
     const versions = await get(`/documents/${docId}/versions`);
+    const backLabel = folderLabel(d.folder) === "Top level" ? "All documents" : folderLabel(d.folder);
+    const back = h("a.back", { href: `#/matters/${matterId}/documents` }, icon("chevron-left", { size: 15 }), backLabel);
     if (d.deletedAt) {
-      replace(mainBox, 
-        h("a.back", { href: `#/matters/${matterId}/documents` }, "← All documents"),
-        h("div.card", h("h2", d.name), h("p", "This document has been deleted."), h("a.btn", { href: `#/matters/${matterId}/documents/trash` }, "Go to deleted documents")),
+      replace(
+        mainBox,
+        back,
+        card({
+          body: emptyState({ icon: "trash-2", title: `“${d.name}” has been deleted`, body: "You can restore it from Deleted documents.", action: button("Go to deleted documents", { href: `#/matters/${matterId}/documents/trash` }) }),
+        }),
       );
       return;
     }
     const preview = h("div.doc-preview");
     const kind = previewKind(d.mime);
+    const note = (text) => (text ? h("p.doc-preview-note", text) : null);
     if (kind === "pdf")
       preview.append(
         h("iframe.doc-frame", { src: fileUrl(d.id, { inline: true }), title: `Preview of ${d.name}` }),
-        h("p.muted.small", "If the preview stays blank, your browser can't show PDFs here; use Download."),
+        note("If the preview stays blank, your browser can't show PDFs here; use Download."),
       );
-    else if (kind === "image") preview.append(h("img.doc-image", { src: fileUrl(d.id, { inline: true }), alt: `Preview of ${d.name}` }));
+    else if (kind === "image") preview.append(h("div.doc-image-wrap", h("img.doc-image", { src: fileUrl(d.id, { inline: true }), alt: `Preview of ${d.name}` })));
     else if (kind === "text") {
-      preview.append(h("p.muted", "Loading preview…"));
+      preview.append(loadingBlock("Loading preview", "lines", 6));
       get(`/documents/${d.id}/text`)
         .then((t) =>
-          replace(preview, 
+          replace(
+            preview,
             t.text
-              ? h("div.doc-paper", { tabindex: "0", "aria-label": `Text of ${d.name}` }, t.text)
-              : h("div.doc-nopreview", h("p", "There's no text to show for this file.")),
-            h("p.muted.small", kindOf(d.mime) === "Word" ? "Text only. Download the file to see its formatting." : t.truncated ? "Only the start of the file is shown." : ""),
+              ? h("div.doc-paper-wrap", h("div.doc-paper", { tabindex: "0", "aria-label": `Text of ${d.name}` }, t.text))
+              : emptyState({ icon: "file", title: "There's no text to show for this file", compact: true }),
+            note(kindOf(d.mime) === "Word" ? "Text only. Download the file to see its formatting." : t.truncated ? "Only the start of the file is shown." : ""),
           ),
         )
-        .catch((err) => replace(preview, h("p.error-text", err.message)));
-    } else preview.append(h("div.doc-nopreview", h("p", `${kindOf(d.mime)} files can't be shown here.`), h("a.btn.primary", { href: fileUrl(d.id), download: d.name }, "Download to open")));
+        .catch((err) => replace(preview, callout({ tone: "danger", title: "Couldn't show a preview", body: err.message })));
+    } else
+      preview.append(
+        emptyState({
+          icon: KIND_ICON[kindOf(d.mime)] || "file",
+          title: `${kindOf(d.mime)} files can't be shown here`,
+          body: "Download the file to open it on your computer.",
+          action: button("Download to open", { variant: "primary", icon: "download", href: fileUrl(d.id), download: d.name }),
+        }),
+      );
 
     async function uploadVersion(file) {
-        const bar = h("span.progress-fill", { style: { width: "0%" } });
-        const row = h("li.upload-row", h("span.upload-name", file.name), h("span.progress-bar", bar), h("span.upload-status.muted.small", ""));
-        progress.append(row);
-        try {
-          const r = await sendFile(`/documents/${d.id}/versions/upload`, file, {}, { onProgress: (f) => (bar.style.width = Math.round(f * 100) + "%") });
-          row.remove();
-          toast(`Saved version ${r.version} of “${r.name}”`);
-          await reload();
-        } catch (err) {
-          row.remove();
-          fail(err);
-        }
+      const r = uploadRow(file.name);
+      progress.append(r.row);
+      try {
+        const res = await sendFile(`/documents/${d.id}/versions/upload`, file, {}, { onProgress: r.set });
+        r.row.remove();
+        toast(`Saved version ${res.version} of “${res.name}”`);
+        await reload();
+      } catch (err) {
+        r.row.remove();
+        fail(err);
+      }
     }
     const versionPicker = filePicker((files) => uploadVersion(files[0]), { multiple: false });
 
@@ -566,9 +671,10 @@ export async function matterDocumentsView([idStr, sub]) {
     const name = h("input", { value: d.name, maxlength: 200, required: true });
     const { paths } = buildTree(folders);
     const folderSel = select([{ value: "", label: "Top level" }, ...paths.map((p) => ({ value: p, label: folderLabel(p) }))], d.folder);
-    const category = h("input", { value: d.category || "", maxlength: 100, list: "doc-categories" });
-    const tags = h("input", { value: d.tags.join(", "), maxlength: 1000, placeholder: "e.g. draft, signed", "aria-describedby": "tags-help" });
+    const category = h("input", { value: d.category || "", maxlength: 100, list: "doc-categories", placeholder: "e.g. Correspondence" });
+    const tags = h("input", { value: d.tags.join(", "), maxlength: 1000, placeholder: "e.g. draft, signed" });
     const err = h("p.error-text", { role: "alert" });
+    const saveBtn = button("Save changes", { variant: "primary", type: "submit" });
     const form = h(
       "form.form-grid.doc-form",
       {
@@ -590,13 +696,13 @@ export async function matterDocumentsView([idStr, sub]) {
           }
         },
       },
-      h("label", "Name", name),
-      h("label", "Folder", folderSel),
-      h("label", "Category", category),
-      h("label", "Tags", tags, h("span#tags-help.muted.small", "Separate tags with commas.")),
+      field("Name", name),
+      field("Folder", folderSel),
+      field("Category", category),
+      field("Tags", tags, { hint: "Separate tags with commas." }),
       h("datalist#doc-categories", (facetsCache.categories || []).map((c) => h("option", { value: c }))),
       err,
-      h("div.form-actions", h("button.btn.primary", { type: "submit" }, "Save changes")),
+      h("div.form-actions", saveBtn),
     );
 
     const versionRows = versions.map((v) =>
@@ -604,31 +710,27 @@ export async function matterDocumentsView([idStr, sub]) {
         "li.version" + (v.version === d.version ? ".current" : ""),
         h(
           "div.version-main",
-          h("span.version-n", `Version ${v.version}`),
-          v.version === d.version ? h("span.tag.good", "Current") : null,
-          h("span.muted.small", [fmtTime(v.uploadedAt), v.uploadedByName, fmtSize(v.size), v.filename !== d.name ? v.filename : null].filter(Boolean).join(" · ")),
-          v.note ? h("span.small.version-note", v.note) : null,
+          h("div.version-line", h("span.version-n", `Version ${v.version}`), v.version === d.version ? pill("Current", "brand", { dot: false }) : null),
+          h("span.version-meta", [fmtTime(v.uploadedAt), v.uploadedByName, fmtSize(v.size)].filter(Boolean).join(" · ")),
+          v.filename !== d.name ? h("span.version-meta", v.filename) : null,
+          v.note ? h("span.version-note", v.note) : null,
         ),
         h(
           "div.version-actions",
-          h("a.btn.small", { href: fileUrl(d.id, { version: v.version }), download: "", "aria-label": `Download version ${v.version}` }, "Download"),
+          h("a.icon-btn.sm", { href: fileUrl(d.id, { version: v.version }), download: "", "aria-label": `Download version ${v.version}`, title: "Download" }, icon("download", { size: 15 })),
           v.version !== d.version
-            ? h(
-                "button.btn.small",
-                {
-                  type: "button",
-                  onclick: async () => {
-                    try {
-                      const r = await post(`/documents/${d.id}/versions/${v.version}/restore`);
-                      toast(`Version ${v.version} is current again (saved as version ${r.version})`);
-                      await reload();
-                    } catch (ex) {
-                      fail(ex);
-                    }
-                  },
+            ? button("Make current", {
+                size: "sm",
+                onclick: async () => {
+                  try {
+                    const r = await post(`/documents/${d.id}/versions/${v.version}/restore`);
+                    toast(`Version ${v.version} is current again (saved as version ${r.version})`);
+                    await reload();
+                  } catch (ex) {
+                    fail(ex);
+                  }
                 },
-                "Make current",
-              )
+              })
             : null,
         ),
       ),
@@ -649,27 +751,30 @@ export async function matterDocumentsView([idStr, sub]) {
       }
     }
 
-    replace(mainBox, 
-      h("a.back", { href: `#/matters/${matterId}/documents` }, "← ", folderLabel(d.folder) === "Top level" ? "All documents" : folderLabel(d.folder)),
+    const meta = [kindOf(d.mime), d.category, `Version ${d.version}`, fmtSize(d.size), `Updated ${fmtTime(d.updatedAt)}`, d.templateId ? "Made from a template" : null].filter(Boolean);
+    replace(
+      mainBox,
+      back,
       h(
         "div.doc-title",
-        h("div", h("h2", typeBadge(d.mime), " ", d.name), h("p.muted.small", [`Version ${d.version}`, fmtSize(d.size), `updated ${fmtTime(d.updatedAt)}`, d.templateId ? "made from a template" : null].filter(Boolean).join(" · "))),
+        docIcon(d.mime, "lg"),
+        h("div.doc-title-text", h("h2", d.name), h("p.doc-title-meta", meta.join(" · ")), d.tags.length ? h("div.doc-tags", d.tags.map((t) => h("span.doc-tag", t))) : null),
         h(
           "div.head-actions",
-          h("a.btn.primary", { href: fileUrl(d.id), download: d.name }, "Download"),
-          h("button.btn", { type: "button", onclick: () => versionPicker.click() }, "Upload new version"),
-          h("button.btn.danger-text", { type: "button", onclick: trashIt }, "Delete"),
+          button("Download", { variant: "primary", icon: "download", href: fileUrl(d.id), download: d.name }),
+          button("Upload new version", { icon: "upload", onclick: () => versionPicker.click() }),
+          button("Delete", { variant: "ghost", icon: "trash-2", class: "danger-text", onclick: trashIt }),
           versionPicker,
         ),
       ),
       progress,
       h(
         "div.doc-detail",
-        h("section.card.doc-preview-card", h("h3.visually-hidden", "Preview"), preview),
+        card({ title: "Preview", headingLevel: 3, className: "doc-preview-card", flush: true, subtitle: "Drop a file here to save it as the next version", body: preview }),
         h(
           "div.doc-side",
-          h("section.card", h("h2", "Details"), form),
-          h("section.card", h("h2", "Versions"), h("ol.plain.versions", versionRows)),
+          card({ title: "Details", icon: "pencil", body: form }),
+          card({ title: "Versions", icon: "history", subtitle: plural(versions.length, "version"), flush: true, body: h("ol.plain.versions", versionRows) }),
         ),
       ),
     );
@@ -696,9 +801,9 @@ export async function matterDocumentsView([idStr, sub]) {
             }
           },
         },
-        h("label", label, input),
+        field(label, input),
         err,
-        h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Save")),
+        h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), button("Save", { variant: "primary", type: "submit" })),
       ),
     );
     input.focus();
@@ -764,18 +869,19 @@ function snippet(r) {
 }
 
 export async function documentsSearchView() {
+  useStyles("documents");
   const f = await facets(true);
   const params = new URLSearchParams();
   let saved = {};
   try {
     saved = JSON.parse(sessionStorage.getItem("lawdesk.docs.search") || "{}");
   } catch {}
-  const q = h("input.search", { type: "search", placeholder: "Search names, tags and the text inside documents", "aria-label": "Search documents", "data-search": "", value: saved.q || "" });
+  const q = h("input.search", { type: "search", placeholder: "Search names, tags and the words inside documents", "aria-label": "Search documents", "data-search": "", value: saved.q || "" });
   const matter = select([{ value: "", label: "All matters" }, ...f.matters.map((m) => ({ value: m.id, label: [m.number, m.name].filter(Boolean).join(" ") }))], saved.matter || "", { "aria-label": "Matter" });
   const category = select([{ value: "", label: "Any category" }, ...f.categories.map((c) => ({ value: c, label: c }))], saved.category || "", { "aria-label": "Category" });
   const tag = select([{ value: "", label: "Any tag" }, ...f.tags.map((t) => ({ value: t, label: t }))], saved.tag || "", { "aria-label": "Tag" });
-  const count = h("p.result-count.muted", { "aria-live": "polite" });
-  const results = h("div.search-results");
+  const count = h("span.dt-count.result-count", { "aria-live": "polite" });
+  const results = h("div.search-results", loadingBlock("Searching", "lines", 4));
   let seq = 0;
   let timer = null;
 
@@ -794,36 +900,41 @@ export async function documentsSearchView() {
     try {
       r = await get(`/documents/search?${params}`);
     } catch (err) {
-      if (my === seq) replace(results, h("p.error-text", err.message));
+      if (my === seq) replace(results, h("div.docs-search-error", callout({ tone: "danger", title: "The search didn't run", body: err.message, action: button("Try again", { size: "sm", onclick: run }) })));
       return;
     }
     if (my !== seq) return;
     const searching = !!q.value.trim();
-    count.textContent = searching
-      ? `${plural(r.results.length, "document")} found${r.results.length === 100 ? " (showing the first 100)" : ""}`
-      : `${plural(r.results.length, "recent document")}`;
-    replace(results, 
+    const filtered = searching || matter.value || category.value || tag.value;
+    count.textContent = searching ? `${plural(r.results.length, "document")} found${r.results.length === 100 ? " (first 100)" : ""}` : filtered ? plural(r.results.length, "document") : `${plural(r.results.length, "recent document")}`;
+    replace(
+      results,
       r.results.length
         ? h(
             "ol.plain.result-list",
             r.results.map((d) =>
               h(
-                "li.card.result",
+                "li.result",
+                docIcon(d.mime),
                 h(
-                  "div.result-head",
-                  typeBadge(d.mime),
-                  h("a.doc-name", { href: `#/matters/${d.matterId}/documents/${d.id}` }, d.name),
-                  d.tags.map((t) => h("span.tag", t)),
+                  "div.result-main",
+                  h("div.result-head", h("a.doc-name", { href: `#/matters/${d.matterId}/documents/${d.id}` }, d.name), d.tags.length ? h("span.doc-tags", d.tags.map((t) => h("span.doc-tag", t))) : null),
+                  h(
+                    "p.result-meta",
+                    d.matterNumber ? h("span.matter-num", d.matterNumber) : null,
+                    h("a.result-matter", { href: `#/matters/${d.matterId}/documents` }, d.matterName),
+                    h("span", [folderLabel(d.folder), d.category && d.category !== folderLabel(d.folder) ? d.category : null, `updated ${fmtTime(d.updatedAt)}`].filter(Boolean).join(" · ")),
+                  ),
+                  snippet(d),
                 ),
-                h(
-                  "p.muted.small.result-meta",
-                  [[d.matterNumber, d.matterName].filter(Boolean).join(" "), folderLabel(d.folder), d.category, `updated ${fmtTime(d.updatedAt)}`].filter(Boolean).join(" · "),
-                ),
-                snippet(d),
               ),
             ),
           )
-        : h("div.card.empty-big", h("p", searching ? "No documents match." : "No documents yet."), searching ? h("p", "Try fewer words, or clear the filters.") : null),
+        : emptyState(
+            searching || filtered
+              ? { icon: "search", title: "No documents match", body: "Try fewer words, or clear the filters." }
+              : { icon: "documents", title: "No documents yet", body: "Documents uploaded to a matter, or made from a template, appear here." },
+          ),
     );
   }
   const soon = () => {
@@ -835,10 +946,12 @@ export async function documentsSearchView() {
 
   const page = h(
     "div.page.docs-search",
-    h("div.page-head", h("div", h("h1", "Documents"), h("p.sub", "Every matter's documents. Search looks at names, tags and the words inside Word and text files."))),
-    h("div.filters", q, matter, category, tag),
-    count,
-    results,
+    pageHeader({ title: "Documents", subtitle: "Every matter's documents. Search looks at names, tags and the words inside Word and text files." }),
+    card({
+      flush: true,
+      className: "docs-search-card",
+      body: [h("div.dt-toolbar.docs-search-bar", h("div.dt-search", icon("search", { size: 16, class: "dt-search-icon" }), q), h("div.dt-filters", matter, category, tag), h("div.dt-toolbar-end", count)), results],
+    }),
   );
   await run();
   return page;

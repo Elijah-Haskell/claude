@@ -4,6 +4,8 @@
 
 import { h, select, modal, toast, fmtTime, plural } from "../dom.js";
 import { get, post, del, ApiError } from "../api.js";
+import { icon } from "../ui/icons.js";
+import { card, button, emptyState, field, pill, segmented, callout, kv, useStyles, loadingBlock } from "../ui/components.js";
 
 const KIND_LABEL = {
   "email:out": "Email sent",
@@ -14,6 +16,25 @@ const KIND_LABEL = {
 };
 
 const STATUS_LABEL = { queued: "Waiting to send", sending: "Sending", sent: "Sent", failed: "Not sent", cancelled: "Cancelled" };
+const STATUS_TONE = { queued: "warning", sending: "info", failed: "danger", cancelled: "neutral" };
+
+function iconFor(e) {
+  if (e.kind === "email") return e.direction === "out" ? "send" : "mail-open";
+  return { phone: "phone-call", meeting: "users", note: "sticky-note" }[e.kind] || "message-square";
+}
+
+/** "Today 2:15 PM", "Yesterday", "Nov 3": when something happened, short. */
+function shortWhen(stamp) {
+  const d = new Date(stamp);
+  if (Number.isNaN(d.getTime())) return "";
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const day = (x) => x.toDateString();
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  if (day(d) === day(new Date())) return `Today ${time}`;
+  if (day(d) === day(y)) return `Yesterday ${time}`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+}
 
 function labelFor(e) {
   return e.kind === "email" ? KIND_LABEL[`email:${e.direction || "in"}`] : KIND_LABEL[e.kind] || e.kind;
@@ -34,19 +55,27 @@ function localNow() {
   return d.toISOString().slice(0, 16);
 }
 
-/** Build the card. `onChange` runs after anything is added (the matter page refreshes its activity). */
-export function communicationsCard(matterId, { onChange } = {}) {
-  const card = h("section.card.comms#communications", { "aria-labelledby": "comms-title" });
-  const list = h("div.comms-list");
+
+/**
+ * The Communications card. `onChange` runs after anything is added (the matter page refreshes
+ * its activity). opts.limit: how many entries to show before "Show all" (default 6).
+ * Use renderCommunications / communicationsTab (below) to show it in a matter tab.
+ */
+export function communicationsCard(matterId, { onChange, limit = 6 } = {}) {
+  useStyles("email");
+  const list = h("div.comms-list", loadingBlock("Loading communications", "lines", 3));
+  const filterBox = h("div.comms-toolbar");
+  const subtitle = h("span", "Emails, calls, meetings and notes");
   let data = { entries: [], recipients: [], templates: [] };
   let filter = "all";
+  let showAll = false;
   const fail = (err) => toast(err.message, { error: true });
 
   async function load() {
     try {
       data = await get(`/matters/${matterId}/communications`);
     } catch (err) {
-      list.replaceChildren(h("p.error-text", err.message));
+      list.replaceChildren(h("div.comms-pad", callout({ tone: "danger", title: "Couldn't load communications", body: err.message, action: button("Try again", { size: "sm", onclick: load }) })));
       return;
     }
     draw();
@@ -58,11 +87,33 @@ export function communicationsCard(matterId, { onChange } = {}) {
 
   // ---------------------------------------------------------------- list
   function draw() {
+    const emails = data.entries.filter((e) => e.kind === "email").length;
+    const other = data.entries.length - emails;
+    subtitle.textContent = data.entries.length ? `${plural(emails, "email")} · ${plural(other, "call or note", "calls and notes")}` : "Emails, calls, meetings and notes";
+    filterBox.replaceChildren(
+      segmented(
+        [
+          { value: "all", label: "All", count: data.entries.length },
+          { value: "email", label: "Emails", count: emails },
+          { value: "other", label: "Calls & notes", count: other },
+        ],
+        filter,
+        (v) => ((filter = v), (showAll = false), draw()),
+        { label: "Show" },
+      ),
+    );
+    filterBox.classList.toggle("is-empty", !data.entries.length);
     const shown = data.entries.filter((e) => filter === "all" || (filter === "email" ? e.kind === "email" : e.kind !== "email"));
+    const visible = showAll ? shown : shown.slice(0, limit);
     list.replaceChildren(
+      ...[
       shown.length
-        ? h("ol.comms-entries", shown.map(entryRow))
-        : h("p.empty", data.entries.length ? "Nothing of this kind yet." : "No emails, calls or meetings recorded on this matter yet."),
+        ? h("ol.comms-entries", visible.map(entryRow))
+        : data.entries.length
+          ? emptyState({ icon: "inbox", title: "Nothing of this kind yet", compact: true })
+          : emptyState({ icon: "email", title: "No communications yet", body: "Emails sent from here, saved emails you file, and calls or meetings you log appear here.", compact: true }),
+      shown.length > visible.length ? h("div.comms-more", button(`Show all ${shown.length}`, { size: "sm", variant: "ghost", iconRight: "chevron-down", onclick: () => ((showAll = true), draw()) })) : null,
+      ].filter(Boolean),
     );
   }
 
@@ -75,10 +126,15 @@ export function communicationsCard(matterId, { onChange } = {}) {
         : [e.participants, e.duration_minutes ? `${e.duration_minutes} min` : null].filter(Boolean).join(" · ");
     const status =
       e.kind === "email" && e.direction === "out" && e.send_status && e.send_status !== "sent"
-        ? h("span.tag.comms-status" + (e.send_status === "failed" ? ".bad" : ""), { title: e.send_error || "" }, STATUS_LABEL[e.send_status] || e.send_status)
+        ? pill(STATUS_LABEL[e.send_status] || e.send_status, STATUS_TONE[e.send_status] || "neutral", { title: e.send_error || null })
         : null;
+    if (status) status.classList.add("comms-status");
+    // A call or note without a subject is titled by its kind, so the kind isn't repeated below.
+    const titled = e.subject || e.kind === "email";
+    const subject = e.subject || (e.kind === "email" ? "(no subject)" : labelFor(e));
+    const sub = titled ? [h("span.comms-kind", labelFor(e)), who ? ` · ${who}` : ""] : who || (e.direction === "in" ? "They called us" : e.direction === "out" ? "We called them" : "");
     const body = h("div.comms-body", { hidden: true });
-    const row = h(
+    return h(
       "li.comms-entry",
       { dataset: { kind: e.kind } },
       h(
@@ -92,6 +148,7 @@ export function communicationsCard(matterId, { onChange } = {}) {
             btn.setAttribute("aria-expanded", String(!open));
             body.hidden = open;
             if (!open && !body.dataset.loaded) {
+              body.replaceChildren(loadingBlock("Loading", "lines", 2));
               try {
                 const full = await get(`/communications/${e.id}`);
                 body.dataset.loaded = "1";
@@ -102,15 +159,13 @@ export function communicationsCard(matterId, { onChange } = {}) {
             }
           },
         },
-        h("span.comms-kind", labelFor(e)),
-        h("span.comms-when", fmtTime(e.occurred_at)),
-        h("span.comms-subject", e.subject || (e.kind === "email" ? "(no subject)" : "")),
-        h("span.comms-who", who),
-        status,
+        h("span.comms-icon", { "aria-hidden": "true" }, icon(iconFor(e), { size: 15 })),
+        h("span.comms-main", h("span.comms-subject", subject), sub ? h("span.comms-who", sub) : null),
+        h("span.comms-side", status, h("span.comms-when", { title: fmtTime(e.occurred_at) }, shortWhen(e.occurred_at))),
+        icon("chevron-down", { size: 15, class: "comms-chevron" }),
       ),
       body,
     );
-    return row;
   }
 
   function detail(full) {
@@ -119,35 +174,35 @@ export function communicationsCard(matterId, { onChange } = {}) {
       full.to_addrs ? ["To", full.to_addrs] : null,
       full.cc_addrs ? ["Cc", full.cc_addrs] : null,
       full.participants ? ["With", full.participants] : null,
+      ["When", fmtTime(full.occurred_at)],
       full.duration_minutes ? ["Length", `${full.duration_minutes} minutes`] : null,
       full.created_by_name ? ["Recorded by", full.created_by_name] : null,
-      full.send_error && full.send_status !== "sent" ? ["Problem", full.send_error] : null,
+      full.send_error && full.send_status !== "sent" ? ["Problem", h("span.comms-problem", full.send_error)] : null,
     ].filter(Boolean);
     return [
-      h("dl.comms-meta", meta.map(([k, v]) => [h("dt", k), h("dd", v)])),
-      full.body ? h("div.comms-text", full.body) : h("p.muted", "No notes."),
-      full.attachments?.length ? h("p.comms-attach", "Attachments saved to Documents: ", full.attachments.map((a) => a.name).join(", ")) : null,
-      full.document_id ? h("p.muted.small", "The original email is saved in this matter's Documents, in the Correspondence folder.") : null,
+      kv(meta, { inline: true }),
+      full.body ? h("div.comms-text", full.body) : h("p.comms-note", "No notes."),
+      full.attachments?.length ? h("p.comms-attach", icon("paperclip", { size: 14 }), h("span", "Attachments saved to Documents: ", full.attachments.map((a) => a.name).join(", "))) : null,
+      full.document_id ? h("p.comms-note", "The original email is saved in this matter's Documents, in the Correspondence folder.") : null,
       full.kind !== "email"
         ? h(
-            "div.form-actions",
-            h(
-              "button.btn.small",
-              {
-                type: "button",
-                onclick: async () => {
-                  if (!confirm("Remove this entry from the log?")) return;
-                  try {
-                    await del(`/communications/${full.id}`);
-                    toast("Entry removed");
-                    changed();
-                  } catch (err) {
-                    fail(err);
-                  }
-                },
+            "div.comms-entry-actions",
+            button("Remove from log", {
+              size: "sm",
+              variant: "ghost",
+              icon: "trash-2",
+              class: "danger-text",
+              onclick: async () => {
+                if (!confirm("Remove this entry from the log?")) return;
+                try {
+                  await del(`/communications/${full.id}`);
+                  toast("Entry removed");
+                  changed();
+                } catch (err) {
+                  fail(err);
+                }
               },
-              "Remove",
-            ),
+            }),
           )
         : null,
     ];
@@ -169,7 +224,6 @@ export function communicationsCard(matterId, { onChange } = {}) {
     const body = h("textarea.comms-compose-body", { rows: 12, required: true, maxlength: 200000, "aria-label": "Message" });
     const attach = docs.map((d) => [d, h("input", { type: "checkbox" })]);
     const err = h("p.error-text", { role: "alert" });
-    const hint = h("p.muted.small", "Merge fields such as {{client.name}}, {{matter.name}}, {{matter.number}} and {{user.name}} are filled in when you choose a template or send.");
 
     const toList = () => [...picks.filter(([, c]) => c.checked).map(([r]) => `${r.name} <${r.email}>`), ...(extraTo.value.trim() ? [extraTo.value] : [])];
 
@@ -187,8 +241,8 @@ export function communicationsCard(matterId, { onChange } = {}) {
       }
     });
 
-    const send = async (allowEmptyFields) => {
-      const r = await post(`/matters/${matterId}/communications/email`, {
+    const send = (allowEmptyFields) =>
+      post(`/matters/${matterId}/communications/email`, {
         to: toList(),
         cc: cc.value || null,
         subject: subject.value,
@@ -196,16 +250,14 @@ export function communicationsCard(matterId, { onChange } = {}) {
         documentIds: attach.filter(([, c]) => c.checked).map(([d]) => d.id),
         allowEmptyFields,
       });
-      return r;
-    };
 
+    const sendBtn = button("Send", { variant: "primary", type: "submit", icon: "send" });
     const form = h(
       "form.modal-body.form-grid.comms-compose",
       {
         onsubmit: async (e) => {
           e.preventDefault();
           err.textContent = "";
-          const sendBtn = form.querySelector("button[type=submit]");
           sendBtn.disabled = true;
           try {
             try {
@@ -229,22 +281,29 @@ export function communicationsCard(matterId, { onChange } = {}) {
         "fieldset.comms-to",
         h("legend", "To"),
         picks.length
-          ? picks.map(([r, c]) => h("label.check-line", c, " ", h("span", r.name, r.isClient ? h("span.muted", " (client)") : null, h("span.muted", ` ${r.email}`))))
-          : h("p.muted.small", "No contacts have an email address yet. Type one below."),
+          ? h(
+              "div.comms-recipients",
+              picks.map(([r, c]) =>
+                h("label.check-line", c, h("span.comms-recipient", h("span.comms-recipient-name", r.name, r.isClient ? h("span.muted", " (client)") : null), h("span.comms-recipient-email", r.email))),
+              ),
+            )
+          : h("p.comms-note", "No contacts on this matter have an email address yet. Type one below."),
         extraTo,
       ),
-      h("label", "Cc", cc),
-      h("label", "Template", tpl),
-      h("label", "Subject", subject),
-      h("label", "Message", body),
-      hint,
+      h("div.form-row", field("Cc", cc, { optional: true }), field("Template", tpl)),
+      field("Subject", subject),
+      field("Message", body, { hint: "Merge fields such as {{client.name}}, {{matter.name}}, {{matter.number}} and {{user.name}} are filled in when you choose a template or send." }),
       attach.length
-        ? h("details.comms-attach-pick", h("summary", `Attach documents from this matter (${attach.length})`), attach.map(([d, c]) => h("label.check-line", c, " ", d.folder ? `${d.folder}/${d.name}` : d.name)))
+        ? h(
+            "details.comms-attach-pick",
+            h("summary", icon("paperclip", { size: 14 }), `Attach documents from this matter (${attach.length})`),
+            h("div.comms-attach-list", attach.map(([d, c]) => h("label.check-line", c, h("span", d.folder ? `${d.folder} › ${d.name}` : d.name)))),
+          )
         : null,
       err,
-      h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Send")),
+      h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), sendBtn),
     );
-    const dlg = modal("Write an email", form, { wide: true });
+    const dlg = modal("Write an email", form, { wide: true, subtitle: "Sent from the firm's address and saved to this matter." });
     subject.focus();
   }
 
@@ -274,7 +333,7 @@ export function communicationsCard(matterId, { onChange } = {}) {
     const subject = h("input", { maxlength: 300, "aria-label": "Subject" });
     const notes = h("textarea", { rows: 5, maxlength: 200000, "aria-label": "Notes" });
     const err = h("p.error-text", { role: "alert" });
-    const dirLabel = h("label", "Who called", direction);
+    const dirLabel = field("Who called", direction);
     kind.addEventListener("change", () => (dirLabel.hidden = kind.value !== "phone"));
     const form = h(
       "form.modal-body.form-grid",
@@ -299,12 +358,12 @@ export function communicationsCard(matterId, { onChange } = {}) {
           }
         },
       },
-      h("div.form-row", h("label", "Kind", kind), dirLabel, h("label", "Length (minutes)", minutes)),
-      h("div.form-row.two", h("label", "When", when), h("label", "With", who)),
-      h("label", "Subject", subject),
-      h("label", "Notes", notes),
+      h("div.form-row", field("Kind", kind), dirLabel, field("Length (minutes)", minutes, { optional: true })),
+      h("div.form-row.two", field("When", when), field("With", who)),
+      field("Subject", subject, { optional: true }),
+      field("Notes", notes, { optional: true }),
       err,
-      h("div.form-actions", h("button.btn", { type: "button", onclick: () => dlg.close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Add to log")),
+      h("div.form-actions", button("Cancel", { onclick: () => dlg.close() }), button("Add to log", { variant: "primary", type: "submit" })),
     );
     const dlg = modal("Log a call or meeting", form, { wide: true });
     who.focus();
@@ -331,10 +390,11 @@ export function communicationsCard(matterId, { onChange } = {}) {
     if (ok) changed();
   }
 
-  const fileInput = h("input.comms-file-input", {
+  const fileInput = h("input.comms-file-input.visually-hidden", {
     type: "file",
     accept: ".eml,message/rfc822",
     multiple: true,
+    tabindex: "-1",
     "aria-label": "Choose saved emails to file",
     onchange: (e) => {
       importFiles(e.target.files);
@@ -343,49 +403,58 @@ export function communicationsCard(matterId, { onChange } = {}) {
   });
   const drop = h(
     "div.comms-drop",
-    h("span", "Drag a saved email (.eml) here to file it to this matter, or "),
-    h("button.comms-link", { type: "button", onclick: () => fileInput.click() }, "choose a file"),
-    h("span", "."),
+    icon("mail", { size: 15, class: "comms-drop-icon" }),
+    h(
+      "span",
+      "Drag a saved email (.eml) here to file it to this matter, or ",
+      h("button.linkish.comms-link", { type: "button", onclick: () => fileInput.click() }, "choose a file"),
+      ".",
+    ),
     fileInput,
   );
+
+  const el = card({
+    id: "communications",
+    title: "Communications",
+    subtitle,
+    icon: "email",
+    className: "comms",
+    flush: true,
+    actions: [
+      button("Log a call or meeting", { size: "sm", icon: "phone", onclick: logEntry }),
+      button("Write an email", { size: "sm", icon: "mail", onclick: () => compose().catch(fail) }),
+    ],
+    body: [filterBox, list],
+    footer: drop,
+  });
   for (const [ev, on] of [
     ["dragenter", true],
     ["dragover", true],
     ["dragleave", false],
     ["drop", false],
   ]) {
-    card.addEventListener(ev, (e) => {
+    el.addEventListener(ev, (e) => {
       if (!e.dataTransfer || ![...(e.dataTransfer.types || [])].includes("Files")) return;
       e.preventDefault();
-      card.classList.toggle("dragging", on);
+      el.classList.toggle("dragging", on);
       if (ev === "drop") importFiles(e.dataTransfer.files);
     });
   }
-
-  const filterSel = select(
-    [
-      { value: "all", label: "Everything" },
-      { value: "email", label: "Emails" },
-      { value: "other", label: "Calls, meetings and notes" },
-    ],
-    "all",
-    { "aria-label": "Show", onchange: (e) => ((filter = e.target.value), draw()) },
-  );
-
-  card.append(
-    h(
-      "div.comms-toolbar",
-      h("h2#comms-title", "Communications"),
-      h(
-        "div.comms-actions",
-        filterSel,
-        h("button.btn.small", { type: "button", onclick: logEntry }, "Log a call or meeting"),
-        h("button.btn.small.primary", { type: "button", onclick: () => compose().catch(fail) }, "Write an email"),
-      ),
-    ),
-    list,
-    drop,
-  );
   load();
-  return card;
+  return el;
 }
+
+/** Render the Communications panel into `container` (a matter tab, or any other slot). */
+export function renderCommunications(container, matterId, opts = {}) {
+  container.replaceChildren(communicationsCard(matterId, { limit: 50, ...opts }));
+  return container;
+}
+
+/** Ready to pass to registerMatterTab() from ui/matter-slots.js. */
+export const communicationsTab = {
+  id: "communications",
+  label: "Communications",
+  icon: "email",
+  order: 40,
+  render: (ctx) => communicationsCard(ctx.matterId, { limit: 50, onChange: () => Promise.resolve(ctx.refresh?.()).catch(() => {}) }),
+};
