@@ -16,6 +16,8 @@ import assert from "node:assert/strict";
 import { openDb } from "../../src/db.ts";
 import { createServer } from "../../src/server.ts";
 import { seed } from "../../src/seed.ts";
+import { DEMO_PASSWORD } from "../../src/auth/seed.ts";
+import { createSession } from "../../src/auth/accounts.ts";
 import { today } from "../../src/dates.ts";
 import { addReportsDemo } from "./reports-demo.ts";
 import { buildMessage } from "../../src/email/mime.ts";
@@ -71,9 +73,9 @@ for (const [label, viewport] of [
   const page = await ctx.newPage();
   page.setDefaultTimeout(8000);
   const errors: string[] = [];
+  let expected401 = 0;
   page.on("pageerror", (e: Error) => errors.push(e.message));
   page.on("console", (m: any) => m.type() === "error" && errors.push(m.text()));
-  await page.addInitScript((id: number) => localStorage.setItem("lawdesk.me", String(id)), demo.users.jordan);
 
   const noHorizontalScroll = async () => {
     const over = await page.evaluate(() => {
@@ -86,6 +88,22 @@ for (const [label, viewport] of [
     });
     assert.ok(over.extra <= 1, `page scrolls sideways by ${over.extra}px (${over.wide.join(", ")})`);
   };
+
+  await check(`${label}: sign-in screen refuses a wrong password, then signs in`, async () => {
+    await page.goto(base + "/#/my");
+    await page.waitForSelector(".auth-card");
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `sign-in-${label}.png`, fullPage: true });
+    await page.fill("#signin-email", "jordan@example.com");
+    await page.fill("#signin-password", "not the right password");
+    await page.click(".auth-submit");
+    await page.waitForSelector(".error-box:has-text('match an account')");
+    // The refused sign-in is a 401, which the browser reports as a console error (sometimes a little later).
+    expected401 = 1;
+    await page.fill("#signin-password", DEMO_PASSWORD);
+    await page.click(".auth-submit");
+    await page.waitForSelector(".user-menu-button:has-text('Jordan Reyes')");
+  });
 
   await check(`${label}: My tasks shows buckets and waiting reasons`, async () => {
     await page.goto(base + "/#/my");
@@ -616,10 +634,16 @@ for (const [label, viewport] of [
     await page.goto(base + "/#/my");
     await page.waitForSelector(".task");
     assert.equal(await page.locator(".nav-link", { hasText: "Firm overview" }).count(), 1);
-    await page.locator("#working-as").selectOption(String(demo.users.sam));
-    await page.waitForFunction(() => ![...document.querySelectorAll(".nav-link")].some((a) => a.textContent === "Reports"));
-    await page.locator("#working-as").selectOption(String(demo.users.jordan));
-    await page.waitForFunction(() => [...document.querySelectorAll(".nav-link")].some((a) => a.textContent === "Reports"));
+    // Sam (staff) in a separate browser session: no firm figures in the menu.
+    const samCtx = await browser.newContext({ viewport });
+    const { token } = createSession(db, demo.users.sam);
+    await samCtx.addCookies([{ name: "lawdesk_session", value: token, url: base }]);
+    const sam = await samCtx.newPage();
+    await sam.goto(base + "/#/my");
+    await sam.waitForSelector(".task");
+    assert.equal(await sam.locator(".nav-link", { hasText: "Reports" }).count(), 0);
+    assert.equal(await sam.locator(".nav-link", { hasText: "Firm overview" }).count(), 0);
+    await samCtx.close();
   });
 
   await check(`${label}: matter communications: log a call, write an email, file a saved email`, async () => {
@@ -1204,8 +1228,43 @@ for (const [label, viewport] of [
   });
   await onlinePaymentAndSignatureChecks({ label, page, ctx, base, db, check, noHorizontalScroll, shots, matterId: demo.matters.m1, billing: new Billing(db, { today: () => now }) });
 
+  await check(`${label}: settings lists sign-in accounts for the administrator`, async () => {
+    await page.goto(base + "/#/settings");
+    await page.waitForSelector(".accounts-table tbody tr");
+    assert.ok((await page.locator(".accounts-table tbody tr").count()) >= 4);
+    assert.ok(await page.locator(".accounts-table", { hasText: "riley@example.com" }).count());
+    await page.locator("#s-accounts").scrollIntoViewIfNeeded();
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `settings-accounts-${label}.png` });
+  });
+
+  await check(`${label}: user menu opens My account with password, two-step sign-in and devices`, async () => {
+    await page.locator(".user-menu-button").click();
+    await page.locator(".user-menu-item", { hasText: "My account" }).click();
+    await page.waitForSelector("#a-sessions .session");
+    for (const id of ["a-details", "a-password", "a-2fa", "a-sessions"]) assert.equal(await page.locator("#" + id).count(), 1, id);
+    assert.ok(await page.locator(".session-current").count());
+    await page.locator("#a-2fa button", { hasText: "Turn on" }).click();
+    await page.waitForSelector(".setup-key");
+    assert.match(await page.locator(".setup-key").innerText(), /^[A-Z2-7]{4}( [A-Z2-7]{4}){7}$/);
+    await noHorizontalScroll();
+    await page.screenshot({ path: shots + `account-${label}.png`, fullPage: true });
+    await page.locator("#a-2fa button", { hasText: "Cancel" }).click();
+    await page.waitForSelector("#a-2fa button:has-text('Turn on two-step')");
+  });
+
+  await check(`${label}: sign out returns to the sign-in screen`, async () => {
+    await page.locator(".user-menu-button").click();
+    await page.locator(".user-menu-item", { hasText: "Sign out" }).click();
+    await page.waitForSelector(".auth-card");
+    const res = await page.request.get(base + "/api/matters");
+    assert.equal(res.status(), 401);
+  });
+
   await check(`${label}: no script errors`, async () => {
-    assert.deepEqual(errors, [], errors.slice(0, 3).join(" | "));
+    const i = errors.findIndex((e) => /status of 401/.test(e));
+    if (expected401 && i >= 0) errors.splice(i, 1);
+    assert.deepEqual(errors, [], errors.slice(0, 3).join(" / "));
   });
   await ctx.close();
 }

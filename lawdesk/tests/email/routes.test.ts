@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { authHeaders } from "../auth/http.ts";
 import type { AddressInfo } from "node:net";
 import { readdirSync } from "node:fs";
 import { createServer } from "../../src/server.ts";
@@ -28,7 +29,7 @@ test("routes: settings, test email, prefs, compose, log, import and outbox over 
   const call = async (method: string, path: string, body?: unknown) => {
     const res = await fetch(base + path, {
       method,
-      headers: { "Content-Type": "application/json", "X-Lawdesk-User": String(s.avery) },
+      headers: { "Content-Type": "application/json", ...authHeaders(s.db, s.avery) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     return { status: res.status, data: (await res.json()) as any };

@@ -28,6 +28,8 @@ import { routes as paymentsRoutes } from "./payments/routes.ts";
 import { SCHEMA as PAYMENTS_SCHEMA } from "./payments/schema.ts";
 import { routes as esignRoutes } from "./esign/routes.ts";
 import { SCHEMA as ESIGN_SCHEMA } from "./esign/schema.ts";
+import { routes as authRoutes } from "./auth/routes.ts";
+import { SCHEMA as AUTH_SCHEMA } from "./auth/schema.ts";
 
 export interface Module {
   name: string;
@@ -53,4 +55,6 @@ export const modules: Module[] = [
   // After billing and documents: their tables are referenced.
   { name: "payments", routes: paymentsRoutes, schema: PAYMENTS_SCHEMA },
   { name: "esign", routes: esignRoutes, schema: ESIGN_SCHEMA },
+  // Sign-in, accounts and matter access. The server checks permissions before every route (src/auth/guard.ts).
+  { name: "auth", routes: authRoutes, schema: AUTH_SCHEMA },
 ];

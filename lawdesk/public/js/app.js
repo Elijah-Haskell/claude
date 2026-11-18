@@ -1,7 +1,9 @@
-// App shell: navigation, the "working as" picker, routing and keyboard shortcuts.
+// App shell: navigation, the signed-in person's menu, routing and keyboard shortcuts.
 
 import { h, replace, select, modal, toast } from "./dom.js";
-import { state, loadSetup, setMe } from "./state.js";
+import { state, loadSetup } from "./state.js";
+import { checkSignIn, renderUserMenu } from "./auth.js";
+import { accountView } from "./views/account.js";
 import { closePopover } from "./tasks.js";
 import { myTasksView } from "./views/my.js";
 import { firmTasksView } from "./views/firm.js";
@@ -44,12 +46,11 @@ const NAV = [
   { href: "#/reports", label: "Reports", key: "r", section: "Finance", icon: "reports", audience: "firm" },
 ];
 
-const FIRM_ROLES = /^(attorney|lawyer|partner|admin|administrator|owner|office manager)$/i;
-
 function canSee(n) {
   if (n.audience !== "firm") return true;
-  const me = state.setup?.users?.find((u) => u.id === state.me);
-  return !me || !me.default_role || FIRM_ROLES.test(me.default_role);
+  // A convenience, not a permission: the server decides what each access level may read.
+  const role = state.account?.role;
+  return !role || role === "admin" || role === "attorney";
 }
 
 const ROUTES = [
@@ -87,6 +88,7 @@ const ROUTES = [
   [/^#\/settings\/intake-forms\/(new|\d+)$/, () => intakeFormEditView],
   [/^#\/settings\/booking$/, () => bookingSettingsView],
   [/^#\/settings\/import-clio(?:\?.*)?$/, () => clioImportView],
+  [/^#\/account$/, () => accountView],
 ];
 
 const main = h("main#main", { tabindex: "-1" });
@@ -102,21 +104,7 @@ function drawNav() {
 }
 
 function drawWho() {
-  const users = state.setup?.users ?? [];
-  const sel = select(
-    users.map((u) => ({ value: u.id, label: u.name })),
-    state.me,
-    {
-      id: "working-as",
-      "aria-label": "User",
-      onchange: (e) => {
-        setMe(Number(e.target.value));
-        window.dispatchEvent(new Event("lawdesk:me"));
-        route();
-      },
-    },
-  );
-  replace(whoBox, h("label.who-label", { for: "working-as" }, "User"), sel);
+  replace(whoBox, renderUserMenu());
 }
 
 let renderSeq = 0;
@@ -227,6 +215,12 @@ document.addEventListener("keydown", (e) => {
 
 async function start() {
   const app = document.getElementById("app");
+  try {
+    if (!(await checkSignIn(app))) return;
+  } catch (err) {
+    replace(app, h("div.page", h("h1", "Can't reach the server"), h("p.error-text", err.message)));
+    return;
+  }
   // The skip link can't use a plain #main href: the hash is the router's.
   document.querySelector(".skip")?.addEventListener("click", (e) => {
     e.preventDefault();

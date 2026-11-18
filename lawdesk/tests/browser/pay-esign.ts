@@ -86,7 +86,7 @@ export async function onlinePaymentAndSignatureChecks(o: Opts): Promise<void> {
       async ([id, filename, b64]: [number, string, string]) => {
         const r = await fetch(`/api/matters/${id}/documents`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json", "X-Lawdesk-User": localStorage.getItem("lawdesk.me") || "" },
+          headers: { "Content-Type": "application/json", Accept: "application/json", "X-Requested-With": "lawdesk" },
           body: JSON.stringify({ filename, contentBase64: b64, onConflict: "rename" }),
         });
         return { ok: r.ok, text: await r.text() };

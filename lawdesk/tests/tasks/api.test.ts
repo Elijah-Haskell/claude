@@ -8,6 +8,7 @@ import { createServer } from "../../src/server.ts";
 import { modules } from "../../src/modules.ts";
 import { seed } from "../../src/seed.ts";
 import { EngineError } from "../../src/engine.ts";
+import { signedInAs } from "../auth/helpers.ts";
 
 const servers: any[] = [];
 after(() => servers.forEach((s) => s.close()));
@@ -20,11 +21,13 @@ async function start(opts: { today?: string; modules?: any[] } = {}) {
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   servers.push(server);
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  let as: number | null = null;
+  // Every API call needs a signed-in account: start as a "Test admin" (one extra person in
+  // the users table), and actAs(id) signs in as that person instead.
+  const session = signedInAs(db);
+  let cookie = session.cookie;
   async function call(method: string, path: string, body?: unknown, raw?: string) {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { Cookie: cookie, "X-Requested-With": "lawdesk" };
     if (body !== undefined || raw !== undefined) headers["Content-Type"] = "application/json";
-    if (as) headers["X-Lawdesk-User"] = String(as);
     const res = await fetch(base + path, { method, headers, body: raw ?? (body === undefined ? undefined : JSON.stringify(body)) });
     const text = await res.text();
     let data: any = text;
@@ -38,7 +41,7 @@ async function start(opts: { today?: string; modules?: any[] } = {}) {
     assert.equal(r.status, 200, `${method} ${path} -> ${r.status} ${JSON.stringify(r.data)}`);
     return r.data;
   };
-  return { db, base, call, ok, errors, setToday: (d: string) => (now = d), actAs: (id: number | null) => (as = id) };
+  return { db, base, call, ok, errors, setToday: (d: string) => (now = d), actAs: (id: number | null) => (cookie = id == null ? session.cookie : signedInAs(db, id).cookie) };
 }
 
 async function firm(s: Awaited<ReturnType<typeof start>>) {
@@ -128,7 +131,7 @@ test("main flow: set up, open a matter, checklist tasks, finish one, see what it
   const f = await firm(s);
   s.actAs(f.atty);
   const setup = await s.ok("GET", "/api/setup");
-  assert.equal(setup.users.length, 2);
+  assert.equal(setup.users.length, 3); // two people plus the test admin
   assert.deepEqual(setup.practiceAreas[0].stages.map((x: any) => x.name), ["Intake", "Drafting", "Done"]);
 
   const m = await s.ok("POST", "/api/matters", {
@@ -310,8 +313,8 @@ test("settings: people, stages, date fields, closed days", async () => {
   const u = await s.ok("PATCH", `/api/users/${f.para}`, { name: "Pat Paralegal", active: false });
   assert.equal(u.active, 0);
   const setup = await s.ok("GET", "/api/setup");
-  assert.equal(setup.users.length, 1);
-  assert.equal(setup.allUsers.length, 2);
+  assert.equal(setup.users.length, 2); // with the test admin
+  assert.equal(setup.allUsers.length, 3);
 
   const st = await s.ok("POST", `/api/practice-areas/${f.area.id}/stages`, { name: "Archived" });
   const order = [st.id, ...f.area.stageIds];

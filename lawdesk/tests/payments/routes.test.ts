@@ -3,6 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { authHeaders } from "../auth/http.ts";
 import type { AddressInfo } from "node:net";
 import { routes, configurePayments } from "../../src/payments/routes.ts";
 import { openDb } from "../../src/db.ts";
@@ -47,7 +48,7 @@ test("over HTTP: link, test checkout, signed Stripe webhook verified on the raw 
     const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
       const res = await fetch(base + "/api" + path, {
         method,
-        headers: { "Content-Type": "application/json", "X-Lawdesk-User": String(user), ...headers },
+        headers: { "Content-Type": "application/json", ...authHeaders(db, user), ...headers },
         body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
       });
       return { status: res.status, data: await res.json() };

@@ -12,7 +12,7 @@ async function call(method, path, body) {
   try {
     res = await fetch("/api" + path, {
       method,
-      headers: body ? { "Content-Type": "application/json", Accept: "application/json" } : { Accept: "application/json" },
+      headers: body ? { "Content-Type": "application/json", Accept: "application/json", "X-Requested-With": "lawdesk" } : { Accept: "application/json" },
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {

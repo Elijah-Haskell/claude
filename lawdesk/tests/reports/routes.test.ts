@@ -3,10 +3,16 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { createServer } from "../../src/server.ts";
 import { fixture, TODAY } from "./fixture.ts";
+import { authHeaders } from "../auth/http.ts";
+
+// Every call goes out signed in as the fixture's first person.
+let auth: Record<string, string> = {};
+const fetch = (url: string, init: RequestInit = {}) => globalThis.fetch(url, { ...init, headers: { ...auth, ...(init.headers as Record<string, string> | undefined) } });
 
 async function withServer(fn: (base: string) => Promise<void>) {
   const f = fixture();
   const server = createServer(f.db, { today: () => TODAY, log: () => {} });
+  auth = authHeaders(f.db);
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   try {
     await fn(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api`);

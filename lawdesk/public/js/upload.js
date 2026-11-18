@@ -18,7 +18,7 @@ export function sendFile(path, file, fields = {}, { onProgress, name } = {}) {
     xhr.setRequestHeader("Accept", "application/json");
     if (file.type) xhr.setRequestHeader("Content-Type", file.type);
     else xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    if (state.me) xhr.setRequestHeader("X-Lawdesk-User", String(state.me));
+    xhr.setRequestHeader("X-Requested-With", "lawdesk"); // the server refuses writes without it (CSRF check)
     xhr.responseType = "text";
     if (onProgress) {
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);

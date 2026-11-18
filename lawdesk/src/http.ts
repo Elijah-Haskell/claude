@@ -13,7 +13,7 @@ export interface Ctx {
   query: URLSearchParams;
   /** Parsed JSON body (or {} when there is none). */
   body: any;
-  /** The signed-in user's id, or null until sign-in exists. */
+  /** The signed-in user's id (from the session cookie), or null on a public route with nobody signed in. */
   userId: number | null;
   /** The underlying request: headers, client IP and user agent (e-signature audit trails); on `raw: true` routes its body is still unread, to stream it. */
   req?: IncomingMessage;
@@ -21,6 +21,12 @@ export interface Ctx {
   ip?: string | null;
   /** The request body exactly as received (webhook signatures are computed over it). */
   rawBody?: string;
+  /** The signed-in account's access level: admin, attorney, staff or client (see src/auth/access.ts). */
+  role?: string | null;
+  /** The current session's id, for "sign out" and "this device" (auth routes use it). */
+  sessionId?: number | null;
+  /** About the request: caller's address, browser, whether it came over https. */
+  client?: { ip: string | null; userAgent: string | null; secure: boolean };
 }
 
 export interface Route {
@@ -34,6 +40,18 @@ export interface Route {
    * (file uploads) and ctx.body is {}. Default false: the body is parsed as JSON.
    */
   raw?: boolean;
+  /**
+   * Open without signing in. Only for sign-in screens and URLs whose token is their own
+   * secret (the calendar .ics feed). Everything else needs a signed-in staff account.
+   */
+  public?: boolean;
+  /** Only these access levels may call it, e.g. ADMIN or ATTORNEYS from src/auth/access.ts. Default: admin, attorney, staff. */
+  roles?: string[];
+  /**
+   * false skips the X-Requested-With check on POST/PATCH/PUT/DELETE. Only for public
+   * machine-to-machine routes (a payment processor's webhook) that verify a signature.
+   */
+  csrf?: false;
 }
 
 export function matchPath(pattern: string, path: string): Record<string, string> | null {

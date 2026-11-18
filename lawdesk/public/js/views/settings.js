@@ -6,6 +6,7 @@ import { get, post, patch, put, del } from "../api.js";
 import { state, loadSetup, today } from "../state.js";
 import { emailSettingsSection } from "./email-settings.js";
 import { paymentSettingsSection, esignSettingsSection } from "./pay-esign.js";
+import { accountsSection } from "./accounts.js";
 
 export async function settingsView() {
   const page = h("div.page.settings");
@@ -35,6 +36,7 @@ export async function settingsView() {
     { "aria-label": "Settings sections" },
     [
       ["s-people", "People"],
+      ["s-accounts", "Sign-in and access"],
       ["s-clients", "Clients"],
       ["s-areas", "Practice areas"],
       ["s-dates", "Matter dates"],
@@ -53,7 +55,8 @@ export async function settingsView() {
 
   function draw() {
     const s = state.setup;
-    body.replaceChildren(people(s), clients(s), areas(s), dateFields(s), closedDays(s), automations(s), emailSection, paymentSettingsSection(), esignSettingsSection());
+    const note = state.account?.role === "admin" ? null : h("p.settings-note", "Only an administrator can change these settings.");
+    body.replaceChildren(...[note, people(s), accountsSection(), clients(s), areas(s), dateFields(s), closedDays(s), automations(s), emailSection, paymentSettingsSection(), esignSettingsSection()].filter(Boolean));
   }
 
   // ---------------------------------------------------------------- people

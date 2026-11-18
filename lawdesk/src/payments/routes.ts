@@ -109,6 +109,6 @@ export const routes: PublicRoute[] = [
   },
 
   // ------------------------------------------- public: processor webhooks
-  { method: "POST", path: "/pay/webhooks/stripe", public: true, handler: webhook("operating") },
-  { method: "POST", path: "/pay/webhooks/stripe-trust", public: true, handler: webhook("trust") },
+  { method: "POST", path: "/pay/webhooks/stripe", public: true, csrf: false, handler: webhook("operating") },
+  { method: "POST", path: "/pay/webhooks/stripe-trust", public: true, csrf: false, handler: webhook("trust") },
 ];

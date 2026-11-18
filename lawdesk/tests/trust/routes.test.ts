@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { authHeaders } from "../auth/http.ts";
 import type { AddressInfo } from "node:net";
 import { openDb } from "../../src/db.ts";
 import { createServer } from "../../src/server.ts";
@@ -25,7 +26,7 @@ test("routes: account, deposit, payment, reconciliation and printable reports ov
   const call = async (method: string, path: string, body?: unknown) => {
     const res = await fetch(base + path, {
       method,
-      headers: { "Content-Type": "application/json", "X-Lawdesk-User": String(atty) },
+      headers: { "Content-Type": "application/json", ...authHeaders(db, atty) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const type = res.headers.get("content-type") ?? "";

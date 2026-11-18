@@ -1,5 +1,6 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
+import { authHeaders } from "../auth/http.ts";
 import type { AddressInfo } from "node:net";
 import { openDb } from "../../src/db.ts";
 import { createServer } from "../../src/server.ts";
@@ -17,7 +18,7 @@ async function start() {
   closers.push(() => new Promise((r) => server.close(() => r())));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
   const call = async (method: string, path: string, body?: unknown) => {
-    const res = await fetch(base + path, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), redirect: "manual" });
+    const res = await fetch(base + path, { method, headers: { "Content-Type": "application/json", ...authHeaders(db) }, body: body === undefined ? undefined : JSON.stringify(body), redirect: "manual" });
     const text = await res.text();
     let json: any = null;
     try {

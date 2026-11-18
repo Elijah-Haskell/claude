@@ -2,10 +2,9 @@
 //
 //   PORT=3000 LAWDESK_DB=lawdesk.db npm start
 //
-// There is no sign-in yet. The app sends the person it is "working as" in the
-// X-Lawdesk-User header so the activity log can say who did what; that is attribution,
-// not security, and the server must not be exposed beyond the firm's own machine until
-// real sign-in exists.
+// Every /api route needs a signed-in account (session cookie) unless the route is marked
+// `public: true`; src/auth/guard.ts checks the session, the CSRF header and the route's
+// roles before the handler runs. ctx.userId is the signed-in person.
 
 import http from "node:http";
 import { readFile, stat } from "node:fs/promises";
@@ -17,6 +16,8 @@ import { matchPath, type Ctx, type Route } from "./http.ts";
 import type { ISODate } from "./dates.ts";
 import { modules, type Module } from "./modules.ts";
 import { startEmailWorker } from "./email/worker.ts";
+import { authenticate, authorize, clientIp, isSecure } from "./auth/guard.ts";
+import { SCHEMA as AUTH_SCHEMA } from "./auth/schema.ts";
 
 const PUBLIC_DIR = resolve(fileURLToPath(new URL("../public", import.meta.url)));
 // The older base64 JSON document upload (25 MiB decoded) needs about 34 MiB. Binary uploads go
@@ -66,6 +67,7 @@ export function createServer(
 ) {
   const mods = opts.modules ?? modules;
   for (const m of mods) if (m.schema) db.exec(m.schema);
+  db.exec(AUTH_SCHEMA); // the permission check needs these tables even if a test leaves the auth module out
   const engine = new Engine(db, opts.today ? { today: opts.today } : {});
   const log = opts.log ?? ((...a: unknown[]) => console.error(...a));
   const routes: Mounted[] = mods.flatMap((m) => m.routes.map((r) => ({ ...r, module: m.name })));
@@ -88,10 +90,18 @@ export function createServer(
       }
     }
     if (!route) throw new HttpError(pathMatched ? 405 : 404, pathMatched ? "Method not allowed" : "No such API route");
+    // Check the session before reading the body, so strangers can't upload 34 MB.
+    const who = authenticate(db, req);
+    authorize(route, who, req);
     // A raw route (file upload) streams the body itself and enforces its own size limit.
     const body = route.raw ? {} : req.method === "GET" || req.method === "DELETE" ? await readBody(req, true) : await readBody(req, false);
-    const ctx: Ctx = { db, engine, params: params!, query: url.searchParams, body, userId: actingUser(db, req), rawBody: rawBodies.get(req) ?? "", req };
-    ctx.ip = req.socket.remoteAddress ?? null; // for per-address limits on public routes (intake)
+    const client = { ip: clientIp(req), userAgent: (req.headers["user-agent"] as string | undefined) ?? null, secure: isSecure(req) };
+    const ctx: Ctx = {
+      db, engine, params: params!, query: url.searchParams, body,
+      userId: who?.userId ?? null, role: who?.role ?? null, sessionId: who?.sessionId ?? null, client,
+      rawBody: rawBodies.get(req) ?? "", req,
+      ip: client.ip, // for per-address limits on public routes (intake)
+    };
     const out: any = await route.handler(ctx);
     if (out && typeof out === "object" && out.__raw === true) return sendRaw(res, out);
     sendJson(res, 200, out === undefined ? { ok: true } : out);
@@ -127,13 +137,6 @@ function statusOf(err: any): number | null {
   // intParam() in http.ts throws a plain Error with a 400 status.
   if (err && typeof err.status === "number" && err.status >= 400 && err.status < 500) return err.status;
   return null;
-}
-
-function actingUser(db: DB, req: http.IncomingMessage): number | null {
-  const raw = req.headers["x-lawdesk-user"];
-  const id = Number(Array.isArray(raw) ? raw[0] : raw);
-  if (!Number.isInteger(id) || id <= 0) return null;
-  return db.prepare("SELECT id FROM users WHERE id = ?").get(id) ? id : null;
 }
 
 /** Raw request text, kept for routes that verify a signature over the exact bytes (payment webhooks). */
@@ -235,7 +238,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const dbPath = process.env.LAWDESK_DB ?? "lawdesk.db";
   const db = openDatabase(dbPath);
   const server = createServer(db);
-  // Local machine only by default: there is no sign-in yet.
+  // Local machine only by default. Before opening it to the network, put it behind https
+  // and set LAWDESK_SECURE_COOKIES=1 (and LAWDESK_TRUST_PROXY=1 behind a reverse proxy).
   const host = process.env.HOST ?? "127.0.0.1";
   server.listen(port, host, () => {
     console.log(`Lawdesk on http://localhost:${port}  (database: ${dbPath})`);

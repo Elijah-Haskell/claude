@@ -2,6 +2,7 @@
 // printable conflict report, driven over HTTP through the real server.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { authHeaders } from "../auth/http.ts";
 import type { AddressInfo } from "node:net";
 import { openDb } from "../../src/db.ts";
 import { createServer } from "../../src/server.ts";
@@ -22,7 +23,7 @@ async function start({ withSeed = false } = {}) {
   async function call(method: string, path: string, body?: unknown, user?: number) {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers["Content-Type"] = "application/json";
-    if (user) headers["X-Lawdesk-User"] = String(user);
+    Object.assign(headers, authHeaders(db, user));
     const res = await fetch(base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     const text = await res.text();
     let data: any = text;

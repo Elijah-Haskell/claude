@@ -59,7 +59,7 @@ test("form and booking public routes over HTTP, with the caller's address", asyn
     const def = await (await fetch(`${base}/intake/public/forms/${form.token}`)).json();
     assert.equal(def.title, "Website");
     // Sent too soon after loading.
-    const fast = await fetch(`${base}/intake/public/forms/${form.token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stamp: def.stamp, answers: {} }) });
+    const fast = await fetch(`${base}/intake/public/forms/${form.token}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "lawdesk" }, body: JSON.stringify({ stamp: def.stamp, answers: {} }) });
     assert.equal(fast.status, 400);
     const missing = await fetch(`${base}/intake/public/forms/nope-nope-nope`);
     assert.equal(missing.status, 404);

@@ -7,7 +7,7 @@ export async function call(method, path, body) {
   try {
     res = await fetch("/api" + path, {
       method,
-      headers: body === undefined ? { Accept: "application/json" } : { Accept: "application/json", "Content-Type": "application/json" },
+      headers: body === undefined ? { Accept: "application/json" } : { Accept: "application/json", "Content-Type": "application/json", "X-Requested-With": "lawdesk" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {

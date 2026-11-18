@@ -3,6 +3,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { authHeaders } from "../auth/http.ts";
+
+// Every call goes out signed in (session cookie plus the X-Requested-With header writes need).
+let auth: Record<string, string> = {};
+const fetch = (url: string, init: RequestInit = {}) => globalThis.fetch(url, { ...init, headers: { ...auth, ...(init.headers as Record<string, string> | undefined) } });
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { createServer } from "../../src/server.ts";
@@ -20,7 +25,8 @@ async function serve(opts: Parameters<typeof setup>[0] = {}) {
   const server = createServer(s.db, { today: () => "2026-11-18", log: () => {} });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
-  const headers = { "X-Lawdesk-User": String(s.atty) };
+  const headers = authHeaders(s.db, s.atty);
+  auth = headers;
   const close = () => {
     server.close();
     server.closeAllConnections?.();
@@ -163,7 +169,7 @@ test("transfer: the upload limit is configurable and refused with 413", async ()
     // Without a Content-Length the stream is cut off as it passes the limit.
     const status = await new Promise<number>((resolve, reject) => {
       const u = new URL(`${s.base}/matters/${s.matterId}/documents/upload?name=big.txt`);
-      const req = http.request({ host: u.hostname, port: u.port, path: u.pathname + u.search, method: "POST", headers: { "Transfer-Encoding": "chunked" } }, (res) => {
+      const req = http.request({ host: u.hostname, port: u.port, path: u.pathname + u.search, method: "POST", headers: { ...s.headers, "Transfer-Encoding": "chunked" } }, (res) => {
         res.resume();
         resolve(res.statusCode!);
       });
