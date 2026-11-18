@@ -50,7 +50,7 @@ export function seedIntake(db: DB, opts: { today: ISODate; users: { jordan: numb
   const formation = area("Business formation");
   const contracts = area("Contracts");
 
-  it.updateSettings({ firmName: "Reyes & Chen, Attorneys at Law (demo)", defaultOwnerId: jordan, bookingIntro: "Initial consultations are free and last about half an hour." }, jordan);
+  it.updateSettings({ firmName: "Reyes & Chen, Attorneys at Law", defaultOwnerId: jordan, bookingIntro: "Initial consultations are free and last about half an hour." }, jordan);
   setAvailability(it, jordan, { consultMinutes: 30, location: "Main office, 2nd floor conference room", windows: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, start: "09:00", end: "12:00" })) }, jordan);
   setAvailability(it, riley, { consultMinutes: 45, location: "Main office or by phone", windows: [2, 4].map((weekday) => ({ weekday, start: "13:00", end: "16:00" })) }, jordan);
 
@@ -77,28 +77,28 @@ export function seedIntake(db: DB, opts: { today: ISODate; users: { jordan: numb
 
   // New
   const harper = it.createLead(
-    { name: "Harper Quinn (demo)", email: "harper.quinn@example.com", phone: "785-555-0131", source: "Web search", practiceAreaId: contracts,
-      summary: "Supplier stopped delivering under a two-year agreement; wants to know options.", opposing: ["Sunflower Coffee Roasters LLC (demo)"], ownerId: jordan, formId: form.id,
-      answers: [{ label: "Your name", value: "Harper Quinn (demo)" }, { label: "Briefly, how can we help?", value: "Supplier stopped delivering under a two-year agreement." }],
+    { name: "Harper Quinn", email: "harper.quinn@example.com", phone: "785-555-0131", source: "Web search", practiceAreaId: contracts,
+      summary: "Supplier stopped delivering under a two-year agreement; wants to know options.", opposing: ["Sunflower Coffee Roasters LLC"], ownerId: jordan, formId: form.id,
+      answers: [{ label: "Your name", value: "Harper Quinn" }, { label: "Briefly, how can we help?", value: "Supplier stopped delivering under a two-year agreement." }],
       via: "Sent the “Business and contracts inquiry” form on the website" },
     null,
   );
   backdate(harper.id, 0);
   const bakery = it.createLead(
-    { name: "Prairie Sky Bakery LLC (demo)", kind: "company", email: "owner@prairiesky.example.com", source: "Referral from a client", practiceAreaId: formation,
+    { name: "Prairie Sky Bakery LLC", kind: "company", email: "owner@prairiesky.example.com", source: "Referral from a client", practiceAreaId: formation,
       summary: "Two owners want an operating agreement before taking on an investor.", ownerId: riley },
     sam,
   );
   backdate(bakery.id, 1);
 
   // Contacted
-  const devon = it.createLead({ name: "Devon Marsh (demo)", phone: "316-555-0177", source: "Referral from another lawyer", practiceAreaId: contracts, summary: "Commercial lease renewal for a retail shop.", opposing: ["Bluestem Holdings LLC (demo)"], ownerId: riley }, sam);
+  const devon = it.createLead({ name: "Devon Marsh", phone: "316-555-0177", source: "Referral from another lawyer", practiceAreaId: contracts, summary: "Commercial lease renewal for a retail shop.", opposing: ["Bluestem Holdings LLC"], ownerId: riley }, sam);
   backdate(devon.id, 4);
   it.setStatus(devon.id, "contacted", {}, riley);
   it.addNote(devon.id, "Called back; Devon will send the current lease. Possible conflict with Bluestem flagged for Riley.", riley);
 
   // Consultation scheduled
-  const elena = it.createLead({ name: "Elena Ruiz (demo)", email: "elena.ruiz@example.com", phone: "913-555-0108", source: "Firm website", practiceAreaId: formation, summary: "Starting a landscaping company with her brother.", ownerId: jordan }, null);
+  const elena = it.createLead({ name: "Elena Ruiz", email: "elena.ruiz@example.com", phone: "913-555-0108", source: "Firm website", practiceAreaId: formation, summary: "Starting a landscaping company with her brother.", ownerId: jordan }, null);
   backdate(elena.id, 3);
   it.setStatus(elena.id, "contacted", {}, jordan);
   it.decideConflict(elena.id, "cleared", null, jordan);
@@ -106,7 +106,7 @@ export function seedIntake(db: DB, opts: { today: ISODate; users: { jordan: numb
   if (slot) book(it, elena.id, { userId: jordan, start: slot.start, via: "staff" }, jordan);
 
   // Engagement sent
-  const owen = it.createLead({ name: "Owen Tate (demo)", email: "owen.tate@example.com", source: "Returning client", practiceAreaId: formation, summary: "Convert a sole proprietorship into an LLC.", ownerId: jordan }, jordan);
+  const owen = it.createLead({ name: "Owen Tate", email: "owen.tate@example.com", source: "Returning client", practiceAreaId: formation, summary: "Convert a sole proprietorship into an LLC.", ownerId: jordan }, jordan);
   backdate(owen.id, 9);
   it.decideConflict(owen.id, "cleared", null, jordan);
   it.setStatus(owen.id, "consult_scheduled", {}, jordan);
@@ -119,7 +119,7 @@ export function seedIntake(db: DB, opts: { today: ISODate; users: { jordan: numb
   const m5 = db.prepare("SELECT id, client_id FROM matters WHERE number = 'D-1006'").get() as { id: number; client_id: number } | undefined;
   let grace: { id: number } | null = null;
   if (m5) {
-    grace = it.createLead({ name: "Taylor Brooks (demo)", email: "taylor@example.com", source: "Referral from a client", practiceAreaId: formation, summary: "Single-member LLC for a consulting business.", ownerId: jordan }, sam);
+    grace = it.createLead({ name: "Taylor Brooks", email: "taylor@example.com", source: "Referral from a client", practiceAreaId: formation, summary: "Single-member LLC for a consulting business.", ownerId: jordan }, sam);
     backdate(grace.id, 6);
     it.setStatus(grace.id, "contacted", {}, jordan);
     it.decideConflict(grace.id, "cleared", null, jordan);
@@ -130,7 +130,7 @@ export function seedIntake(db: DB, opts: { today: ISODate; users: { jordan: numb
   }
 
   // Not hired
-  const marcus = it.createLead({ name: "Marcus Bell (demo)", email: "marcus.bell@example.com", source: "Social media", practiceAreaId: contracts, summary: "Dispute with a contractor over a home remodel.", ownerId: jordan }, null);
+  const marcus = it.createLead({ name: "Marcus Bell", email: "marcus.bell@example.com", source: "Social media", practiceAreaId: contracts, summary: "Dispute with a contractor over a home remodel.", ownerId: jordan }, null);
   backdate(marcus.id, 15);
   it.setStatus(marcus.id, "not_hired", { reason: "Not a matter we handle", note: "Referred to the county bar's lawyer referral service" }, jordan);
 

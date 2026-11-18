@@ -11,8 +11,9 @@ test("the demo seed has a made-up lead in every stage, a form and booking hours"
     const n = (db.prepare("SELECT COUNT(*) AS n FROM intake_leads WHERE status = ?").get(s) as any).n;
     assert.ok(n >= 1, `a lead in ${s}`);
   }
-  const names = db.prepare("SELECT name FROM intake_leads").all() as any[];
-  assert.ok(names.every((r) => /\(demo\)/.test(r.name)), "every lead is marked demo");
+  // Made-up leads: any email address is on a reserved example domain.
+  const emails = db.prepare("SELECT email FROM intake_leads WHERE email IS NOT NULL").all() as any[];
+  assert.ok(emails.every((r) => /example\.(com|net|org)$/.test(r.email)), "every lead email is an example address");
   assert.equal((db.prepare("SELECT COUNT(*) AS n FROM intake_forms").get() as any).n, 1);
   assert.ok((db.prepare("SELECT COUNT(*) AS n FROM intake_availability").get() as any).n >= 5);
   const hired = db.prepare("SELECT * FROM intake_leads WHERE status = 'hired'").get() as any;

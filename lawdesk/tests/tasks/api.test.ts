@@ -347,15 +347,17 @@ test("the demo seed loads through the engine and serves sensible screens", async
   const s = await start({ today: "2026-11-17" });
   const r = seed(s.db, "2026-11-17");
   const matters = await s.ok("GET", "/api/matters");
-  assert.equal(matters.length, 5);
+  assert.equal(matters.length, 15);
   assert.ok(matters.every((m: any) => m.stage_name), "every open matter has a stage");
+  assert.ok(matters.every((m: any) => m.attorney_name), "every open matter has a responsible attorney");
   const closed = await s.ok("GET", "/api/matters?status=closed");
-  assert.equal(closed.length, 1);
-  assert.equal(closed[0].stage_name, "Signed", "the finished checklist's automation moved it");
+  assert.equal(closed.length, 3);
+  assert.equal(closed.find((m: any) => m.number === "D-1001").stage_name, "Signed", "the finished checklist's automation moved it");
   const jordan = await s.ok("GET", `/api/my-tasks?userId=${r.users.jordan}`);
   assert.ok(jordan.overdue.length > 0 && jordan.waiting.length > 0);
   const contacts = await s.ok("GET", "/api/contacts");
-  assert.ok(contacts.every((c: any) => /demo/i.test(c.name) && /Fictional/.test(c.notes)));
+  // Every demo client is marked in its notes (the app shows a "Demo data" banner from this).
+  assert.ok(contacts.every((c: any) => /Fictional demo data/.test(c.notes)));
   // A non-empty database is refused by the CLI; here we just check seeding twice would clash.
   assert.throws(() => seed(s.db, "2026-11-17"));
 });

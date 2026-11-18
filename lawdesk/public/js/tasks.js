@@ -4,9 +4,12 @@
 
 import { h, append, clear, replace, fmtDate, relDate, daysBetween, addDays, weekday, toast, plural } from "./dom.js";
 import { post, patch, del } from "./api.js";
-import { state, today, users, dateFieldLabel, initials, loadMatters } from "./state.js";
+import { state, today, users, dateFieldLabel, loadMatters } from "./state.js";
 import { parseQuickAdd } from "./quickadd.js";
 import { logTimeDialog } from "./billing/ui.js";
+import { icon } from "./ui/icons.js";
+import { avatar } from "./ui/components.js";
+import { popover, closePopover, menu } from "./ui/popover.js";
 
 // --------------------------------------------------------------- explaining dates
 
@@ -140,49 +143,8 @@ async function deleteTask(t, refresh) {
 
 // ----------------------------------------------------------------- popovers
 
-let openPop = null;
-
-export function closePopover() {
-  if (openPop) {
-    const { el, anchor } = openPop;
-    openPop = null;
-    el.remove();
-    if (anchor && document.contains(anchor)) anchor.focus();
-  }
-}
-
-/** Small floating panel under an element. Esc or a click outside closes it. */
-export function popover(anchor, content, label) {
-  closePopover();
-  const el = h("div.popover", { role: "dialog", "aria-label": label }, content);
-  document.body.append(el);
-  const r = anchor.getBoundingClientRect();
-  const w = el.offsetWidth;
-  const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
-  let top = r.bottom + 4 + window.scrollY;
-  if (r.bottom + el.offsetHeight + 8 > window.innerHeight && r.top > el.offsetHeight + 8) top = r.top - el.offsetHeight - 4 + window.scrollY;
-  el.style.left = left + window.scrollX + "px";
-  el.style.top = top + "px";
-  openPop = { el, anchor };
-  el.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      closePopover();
-    }
-  });
-  const first = el.querySelector("input, button, select");
-  if (first) first.focus();
-  return el;
-}
-
-document.addEventListener("mousedown", (e) => {
-  if (openPop && !openPop.el.contains(e.target) && !openPop.anchor.contains(e.target)) {
-    const p = openPop;
-    openPop = null;
-    p.el.remove();
-  }
-});
+// The popover lives in ui/popover.js; re-exported here for older imports.
+export { popover, closePopover };
 
 function nextWeekday(from, target) {
   const n = (target - weekday(from) + 7) % 7 || 7;
@@ -215,20 +177,21 @@ export function editDue(t, anchor, refresh, depTitles = []) {
           else closePopover();
         },
       },
-      h("label.pop-label", "Due date", input),
+      h("div.pop-title", "Due date"),
+      h("label.pop-label", h("span.visually-hidden", "Due date"), input),
       h(
         "div.pop-quick",
         quick.map(([label, d]) => h("button.btn.small", { type: "button", onclick: () => save(d, `Due ${fmtDate(d, now)}`) }, label)),
       ),
-      h("p.pop-note", dueExplain(t, depTitles)),
+      h("p.pop-note", icon("info", { size: 14 }), h("span", dueExplain(t, depTitles))),
       h(
         "div.pop-actions",
-        h("button.btn.primary.small", { type: "submit" }, "Save"),
         t.due_locked && rule
-          ? h("button.btn.small", { type: "button", onclick: () => save(null, "Due date follows the checklist schedule again") }, "Use checklist schedule")
+          ? h("button.btn.small.ghost", { type: "button", onclick: () => save(null, "Due date follows the checklist schedule again") }, "Use checklist schedule")
           : !rule && t.due_date
-            ? h("button.btn.small", { type: "button", onclick: () => save(null, "Due date cleared") }, "No date")
-            : null,
+            ? h("button.btn.small.ghost", { type: "button", onclick: () => save(null, "Due date cleared") }, "No date")
+            : h("span"),
+        h("button.btn.primary.small", { type: "submit" }, "Save"),
       ),
     ),
     "Change due date",
@@ -245,16 +208,18 @@ export function editAssignee(t, anchor, refresh) {
   const list = h(
     "div.pop-list",
     { role: "listbox", "aria-label": "Assign to" },
+    h("div.menu-heading", "Assign to"),
     users().map((u) =>
       h(
         "button.pop-item" + (u.id === t.assignee_id ? ".current" : ""),
         { type: "button", role: "option", "aria-selected": u.id === t.assignee_id ? "true" : "false", onclick: () => pick(u.id) },
-        h("span.avatar", initials(u.name)),
-        h("span", u.name, u.id === state.me ? " (you)" : ""),
-        u.default_role ? h("span.muted", u.default_role) : null,
+        avatar(u.name, { size: "xs" }),
+        h("span.menu-label", u.name, u.id === state.me ? h("span.muted", " (you)") : ""),
+        u.default_role ? h("span.menu-hint.cap", u.default_role) : null,
       ),
     ),
-    h("button.pop-item", { type: "button", role: "option", onclick: () => pick(null) }, h("span.avatar.empty", "–"), "Unassigned"),
+    h("div.menu-sep", { role: "separator" }),
+    h("button.pop-item", { type: "button", role: "option", onclick: () => pick(null) }, avatar(null, { size: "xs" }), h("span.menu-label", "Unassigned")),
   );
   list.addEventListener("keydown", (e) => {
     const items = [...list.querySelectorAll("button")];
@@ -280,6 +245,7 @@ function renameInline(t, titleEl, refresh) {
     if (e.key === "Enter") e.preventDefault(), finish(true);
     if (e.key === "Escape") e.preventDefault(), e.stopPropagation(), finish(false), titleEl.closest(".task")?.focus();
   });
+  input.addEventListener("click", (e) => e.stopPropagation());
   input.addEventListener("blur", () => finish(true));
   replace(titleEl, input);
   input.focus();
@@ -288,20 +254,21 @@ function renameInline(t, titleEl, refresh) {
 
 function moreMenu(t, anchor, refresh, titleEl) {
   const finished = t.status === "done" || t.status === "skipped";
-  const item = (label, fn, cls = "") => h("button.pop-item" + cls, { type: "button", onclick: () => (closePopover(), fn()) }, label);
-  popover(
+  menu(
     anchor,
-    h(
-      "div.pop-list",
-      item("Rename", () => renameInline(t, titleEl, refresh)),
-      ["high", "normal", "low"]
+    [
+      { label: "Rename", icon: "pencil", onSelect: () => renameInline(t, titleEl, refresh) },
+      ...["high", "normal", "low"]
         .filter((p) => p !== t.priority)
-        .map((p) => item(`Priority: ${p}`, () => updateTask(t, { priority: p }, refresh, `Priority set to ${p}`))),
-      finished ? item("Reopen", () => completeTask(t, refresh)) : item("Skip (not needed)", () => skipTask(t, refresh)),
-      t.matter_id ? h("a.pop-item", { href: `#/matters/${t.matter_id}` }, "Open matter") : null,
-      t.matter_id ? item("Log time", () => logTimeDialog({ matterId: t.matter_id, taskId: t.id, taskTitle: t.title, description: t.title })) : null,
-      item("Delete", () => deleteTask(t, refresh), ".danger"),
-    ),
+        .map((p) => ({ label: `Priority: ${p}`, icon: "flag", onSelect: () => updateTask(t, { priority: p }, refresh, `Priority set to ${p}`) })),
+      finished
+        ? { label: "Reopen", icon: "rotate-ccw", onSelect: () => completeTask(t, refresh) }
+        : { label: "Skip (not needed)", icon: "arrow-right", onSelect: () => skipTask(t, refresh) },
+      t.matter_id ? { label: "Open matter", icon: "briefcase", href: `#/matters/${t.matter_id}` } : null,
+      t.matter_id ? { label: "Log time", icon: "clock", onSelect: () => logTimeDialog({ matterId: t.matter_id, taskId: t.id, taskTitle: t.title, description: t.title }) } : null,
+      "-",
+      { label: "Delete", icon: "trash-2", danger: true, onSelect: () => deleteTask(t, refresh) },
+    ],
     "Task actions",
   );
 }
@@ -309,9 +276,12 @@ function moreMenu(t, anchor, refresh, titleEl) {
 // -------------------------------------------------------------------- the row
 
 /**
- * opts: { refresh, showMatter = true, byId: Map of the matter's tasks (for dependency titles) }
+ * The pieces of a task row, so a list row (taskRow) and a table row (Firm tasks) share
+ * the same controls and keyboard behaviour.
+ * opts: { refresh, showMatter = true, byId: Map of the matter's tasks (for dependency titles),
+ *         showDeps, showRole, showDescription }
  */
-export function taskRow(t, opts) {
+export function taskParts(t, opts) {
   const now = today();
   const refresh = opts.refresh;
   const finished = t.status === "done" || t.status === "skipped";
@@ -327,53 +297,64 @@ export function taskRow(t, opts) {
       "aria-label": finished ? `Reopen: ${t.title}` : waiting ? `Waiting: ${t.title}` : `Mark done: ${t.title}`,
       title: finished ? "Reopen" : waiting ? "Waiting on other tasks" : "Mark done",
       "aria-pressed": finished ? "true" : "false",
-      onclick: () => {
+      onclick: (e) => {
         if (waiting) {
           toast(`Waiting on ${(t.waiting_on || []).map((w) => `“${w.title}”`).join(", ")}. Finish or skip that first.`, { error: true });
           return;
         }
-        row.classList.add("completing");
+        e.currentTarget.closest(".task")?.classList.add("completing");
         completeTask(t, refresh);
       },
     },
-    h("span.check-mark", { "aria-hidden": "true" }),
+    h("span.check-mark", { "aria-hidden": "true" }, icon("check", { size: 12, strokeWidth: 3 })),
   );
 
+  const dc = dueClass(t);
   const dueBtn = h(
-    "button.chip.due" + (dueClass(t) ? "." + dueClass(t) : "") + (t.due_locked ? ".locked" : ""),
+    "button.chip.due" + (dc ? "." + dc : "") + (t.due_locked ? ".locked" : "") + (!t.due_date && !finished ? ".nodate" : ""),
     {
       type: "button",
-      title: dueExplain(t, depTitles) + (finished ? "" : " Click to change (d)."),
+      title: dueExplain(t, depTitles) + (finished ? "" : " Click to change."),
       "aria-label": `Due: ${t.due_date ? fmtDate(t.due_date, now) : "no date"}. Change`,
       disabled: finished,
       onclick: (e) => editDue(t, e.currentTarget, refresh, depTitles),
     },
-    finished
-      ? `${t.status === "skipped" ? "Skipped" : "Done"}${t.completed_on ? " " + (t.completed_on === now ? "today" : fmtDate(t.completed_on, now).slice(4)) : ""}`
-      : relDate(t.due_date, now),
+    icon(finished ? "circle-check" : dc === "late" ? "clock" : "calendar", { size: 13 }),
+    h(
+      "span",
+      finished
+        ? `${t.status === "skipped" ? "Skipped" : "Done"}${t.completed_on ? " " + (t.completed_on === now ? "today" : fmtDate(t.completed_on, now).slice(4)) : ""}`
+        : relDate(t.due_date, now),
+    ),
   );
   const whoName = t.assignee_id === state.me ? "Me" : t.assignee_name;
   const whoBtn = h(
     "button.chip.who" + (t.assignee_id ? "" : ".none"),
     {
       type: "button",
-      title: t.assignee_name ? `Assigned to ${t.assignee_name}. Click to change (a).` : "Unassigned. Click to assign.",
+      title: t.assignee_name ? `Assigned to ${t.assignee_name}. Click to change.` : "Unassigned. Click to assign.",
       "aria-label": `Assigned to ${t.assignee_name || "nobody"}. Change`,
       disabled: finished,
       onclick: (e) => editAssignee(t, e.currentTarget, refresh),
     },
-    h("span.avatar", t.assignee_id ? initials(t.assignee_name) : "?"),
+    avatar(t.assignee_id ? t.assignee_name : null, { size: "xs" }),
     h("span.who-name", whoName || "Unassigned"),
   );
-  const moreBtn = h("button.icon-btn.more", { type: "button", "aria-label": `More actions for ${t.title}`, title: "More", onclick: (e) => moreMenu(t, e.currentTarget, refresh, titleEl) }, "⋯");
+  const moreBtn = h(
+    "button.icon-btn.sm.more",
+    { type: "button", "aria-label": `More actions for ${t.title}`, title: "More actions", "aria-haspopup": "menu", onclick: (e) => moreMenu(t, e.currentTarget, refresh, titleEl) },
+    icon("ellipsis", { size: 16 }),
+  );
 
+  const matterLink =
+    t.matter_id
+      ? h("a.matter-link", { href: `#/matters/${t.matter_id}` }, t.matter_number ? h("span.matter-num", t.matter_number) : null, h("span.matter-name", t.matter_name))
+      : h("span.muted", "No matter");
   const meta = [];
-  if (opts.showMatter !== false && t.matter_id) {
-    meta.push(h("a.matter-link", { href: `#/matters/${t.matter_id}` }, t.matter_number ? `${t.matter_number} · ` : "", t.matter_name));
-  } else if (opts.showMatter !== false && !t.matter_id) meta.push(h("span.muted", "No matter"));
-  if (t.priority === "high") meta.push(h("span.tag.high", "High"));
+  if (opts.showMatter !== false) meta.push(matterLink);
+  if (t.priority === "high") meta.push(h("span.tag.high", icon("flag", { size: 11 }), "High"));
   if (t.priority === "low") meta.push(h("span.tag.low", "Low"));
-  if (t.role && opts.showRole) meta.push(h("span.tag", t.role));
+  if (t.role && opts.showRole) meta.push(h("span.tag.cap", t.role));
   if (!finished && t.blocks && t.blocks.length)
     meta.push(h("span.tag.blocks", { title: "Waiting on this: " + t.blocks.map((b) => b.title).join(", ") }, `${t.blocks.length} waiting on this`));
   if (opts.showDeps && depTitles.length && !waiting)
@@ -383,7 +364,7 @@ export function taskRow(t, opts) {
   if (waiting && (t.waiting_on || []).length) {
     waitBox = h(
       "div.waiting-on",
-      h("span.wait-label", "Waiting on"),
+      h("span.wait-label", icon("hourglass", { size: 12 }), "Waiting on"),
       h(
         "ul",
         t.waiting_on.map((w) => {
@@ -406,20 +387,7 @@ export function taskRow(t, opts) {
     );
   }
 
-  const row = h(
-    "li.task" + "." + t.status + (t.priority === "high" ? ".prio-high" : ""),
-    { tabindex: "0", id: `task-${t.id}`, dataset: { id: t.id }, "aria-label": `${t.title}${t.status !== "open" ? ", " + t.status : ""}` },
-    check,
-    h(
-      "div.task-main",
-      h("div.task-title", titleEl),
-      meta.length ? h("div.task-meta", meta) : null,
-      waitBox,
-      t.description && opts.showDescription ? h("div.task-desc", t.description) : null,
-    ),
-    h("div.task-side", dueBtn, whoBtn, moreBtn),
-  );
-  row.addEventListener("keydown", (e) => {
+  const onKey = (e, row) => {
     if (e.target !== row || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === "x" || e.key === " ") e.preventDefault(), check.click();
     else if (e.key === "d" && !finished) e.preventDefault(), dueBtn.click();
@@ -427,7 +395,27 @@ export function taskRow(t, opts) {
     else if (e.key === "e") e.preventDefault(), renameInline(t, titleEl, refresh);
     else if (e.key === "Enter" && t.matter_id && opts.showMatter !== false) location.hash = `#/matters/${t.matter_id}`;
     else if (e.key === "." || e.key === "m") e.preventDefault(), moreBtn.click();
-  });
+  };
+
+  return { t, check, titleEl, dueBtn, whoBtn, moreBtn, matterLink, meta, waitBox, onKey, finished, waiting, rowClass: "task " + t.status + (t.priority === "high" ? " prio-high" : "") };
+}
+
+export function taskRow(t, opts) {
+  const p = taskParts(t, opts);
+  const row = h(
+    "li.task" + "." + t.status + (t.priority === "high" ? ".prio-high" : ""),
+    { tabindex: "0", id: `task-${t.id}`, dataset: { id: t.id }, "aria-label": `${t.title}${t.status !== "open" ? ", " + t.status : ""}` },
+    p.check,
+    h(
+      "div.task-main",
+      h("div.task-title", p.titleEl),
+      p.meta.length ? h("div.task-meta", p.meta) : null,
+      p.waitBox,
+      t.description && opts.showDescription ? h("div.task-desc", t.description) : null,
+    ),
+    h("div.task-side", p.dueBtn, p.whoBtn, p.moreBtn),
+  );
+  row.addEventListener("keydown", (e) => p.onKey(e, row));
   return row;
 }
 
@@ -446,7 +434,7 @@ export function taskGroup(title, tasks, opts, extra = {}) {
   if (!tasks.length && !extra.showEmpty) return null;
   return h(
     "section.task-group" + (extra.tone ? "." + extra.tone : ""),
-    h("h2.group-title", h("span", title), h("span.count", String(tasks.length)), extra.aside || null),
+    h("h2.group-title", extra.icon ? icon(extra.icon, { size: 15, class: "group-icon" }) : null, h("span", title), h("span.count", String(tasks.length)), extra.aside || null),
     tasks.length ? h("ul.task-list", tasks.map((t) => taskRow(t, opts))) : h("p.empty", extra.empty || "Nothing here."),
   );
 }
@@ -499,7 +487,7 @@ export function quickAdd(opts) {
   const draw = () => {
     clear(preview);
     if (!input.value.trim()) {
-      append(preview, h("span.muted", "Type the task and press Enter. Include a date such as “Friday” or “11/20” to set when it is due."));
+      append(preview, h("span.quick-hint", "Type the task and press Enter. Include a date such as “Friday” or “11/20” to set when it is due."));
       return;
     }
     const p = parse();
@@ -507,12 +495,12 @@ export function quickAdd(opts) {
     const who = p.assignee || (opts.defaultMe !== false ? users().find((u) => u.id === state.me) : null);
     append(
       preview,
-      h("span.pv", h("b", p.title || "(no title yet)")),
-      h("span.pv", p.dueDate ? `Due ${fmtDate(p.dueDate, today())}` : "No due date"),
-      h("span.pv", who ? (who.id === state.me ? "You" : who.name) : "Unassigned"),
-      matter ? h("span.pv", matter.number || matter.name) : h("span.pv.muted", "No matter"),
-      p.priority && p.priority !== "normal" ? h("span.pv", `${p.priority} priority`) : null,
-      p.problems.map((x) => h("span.pv.warn", x)),
+      h("span.pv.pv-title", h("b", p.title || "(no title yet)")),
+      h("span.pv", icon("calendar", { size: 12 }), p.dueDate ? `Due ${fmtDate(p.dueDate, today())}` : "No due date"),
+      h("span.pv", icon("user", { size: 12 }), who ? (who.id === state.me ? "You" : who.name) : "Unassigned"),
+      matter ? h("span.pv", icon("briefcase", { size: 12 }), matter.number || matter.name) : h("span.pv.muted", icon("briefcase", { size: 12 }), "No matter"),
+      p.priority && p.priority !== "normal" ? h("span.pv", icon("flag", { size: 12 }), `${p.priority} priority`) : null,
+      p.problems.map((x) => h("span.pv.warn", icon("triangle-alert", { size: 12 }), x)),
     );
   };
 
@@ -552,7 +540,7 @@ export function quickAdd(opts) {
         }
       },
     },
-    h("div.quick-row", h("span.quick-plus", { "aria-hidden": "true" }, "+"), input, btn),
+    h("div.quick-row", h("span.quick-plus", { "aria-hidden": "true" }, icon("plus", { size: 16 })), input, btn),
     preview,
   );
   input.addEventListener("input", draw);

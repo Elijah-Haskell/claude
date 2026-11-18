@@ -96,8 +96,10 @@ spread over several invoices with any remainder kept as client credit, client st
 billing settings. The matter page has a Billing card, and a task's ⋯ menu has "Log time".
 The screens live in `public/js/billing/` with their styles in `public/css/billing.css`.
 
-The demo data (`src/seed.ts`) is made up: every client is marked "(demo)", and its checklists are
-office workflow steps, not statements of law.
+The app opens on Home (`#/home`). The demo data (`src/seed.ts`) is made up: a fictional firm
+("Reyes & Chen, LLC"), its people and matters. Every demo contact carries the note "Fictional demo
+data", which makes the app show a dismissible "Demo data" banner. The checklists are office workflow
+steps, not statements of law.
 
 ## Layout and rules for contributors
 
@@ -110,6 +112,8 @@ office workflow steps, not statements of law.
   `routes.ts` exports `routes: Route[]`. Tests go in `tests/<module>/`.
 - Money is integer cents. Never floats.
 - Every change that matters to a lawyer is written to the `activity` table with who and when.
+- Screens are built from the UI kit in `public/js/ui/` and styled by the tokens in `public/app.css`.
+  Read `docs/design-system.md` before adding a screen; module CSS goes in `public/css/<module>.css`.
 - Never commit real client data.
 - Any statement of law (a statute, a court rule, a bar rule) in code or docs cites its source.
 

@@ -318,7 +318,7 @@ test("seed: demo documents, versions, trash and a Word template, files built in 
     assert.deepEqual(check.unknown, []);
     const letter = all.find((d) => d.templateId === t.id);
     const text = docxToText(docs.download(letter.id).data);
-    assert.match(text, /Dear Bluestem Holdings LLC \(demo\):/);
+    assert.match(text, /Dear Bluestem Holdings LLC:/);
     assert.doesNotMatch(text, /\{\{/);
     assert.equal(docs.search({ q: "indemnification" }).results.length, 1);
   } finally {

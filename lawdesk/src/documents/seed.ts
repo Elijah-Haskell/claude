@@ -184,7 +184,7 @@ export function seedDocuments(docs: Documents, _db: DB, refs: SeedRefs) {
       { text: "Demo Title Company of Kansas - fictional document" },
       { text: " " },
       { text: "Property: Riverside Plaza, a small retail strip (fictional)" },
-      { text: "Proposed insured: Bluestem Holdings LLC (demo)" },
+      { text: "Proposed insured: Bluestem Holdings LLC" },
       { text: " " },
       { text: "Schedule B, Part I - Requirements", bold: true },
       { text: "1. Warranty deed from the current owner to the proposed insured." },
@@ -229,7 +229,7 @@ export function seedDocuments(docs: Documents, _db: DB, refs: SeedRefs) {
     userId: sam,
     data: buildDocx([
       { text: "ARTICLES OF ORGANIZATION (DEMO DRAFT)", bold: true, center: true },
-      "1. The name of the limited liability company is Sunflower Coffee Roasters LLC (demo).",
+      "1. The name of the limited liability company is Sunflower Coffee Roasters LLC.",
       "2. The company will be managed by its members.",
       DEMO,
     ]),
@@ -240,7 +240,7 @@ export function seedDocuments(docs: Documents, _db: DB, refs: SeedRefs) {
     note: "Attorney comments addressed",
     data: buildDocx([
       { text: "ARTICLES OF ORGANIZATION (DEMO DRAFT 2)", bold: true, center: true },
-      "1. The name of the limited liability company is Sunflower Coffee Roasters LLC (demo).",
+      "1. The name of the limited liability company is Sunflower Coffee Roasters LLC.",
       "2. The company will be managed by its members, as set out in the operating agreement.",
       "3. The registered office and resident agent are listed on the attached sheet.",
       DEMO,
@@ -252,7 +252,7 @@ export function seedDocuments(docs: Documents, _db: DB, refs: SeedRefs) {
     folder: "Intake",
     category: "Intake",
     userId: casey,
-    data: Buffer.from(`Formation questionnaire (demo)\n\nOwners: two members, equal shares.\nBusiness: small-batch coffee roasting and wholesale.\nPreferred name: Sunflower Coffee Roasters LLC.\n\n${DEMO}\n`),
+    data: Buffer.from(`Formation questionnaire\n\nOwners: two members, equal shares.\nBusiness: small-batch coffee roasting and wholesale.\nPreferred name: Sunflower Coffee Roasters LLC.\n\n${DEMO}\n`),
   });
   const dup = docs.upload({
     matterId: m1,

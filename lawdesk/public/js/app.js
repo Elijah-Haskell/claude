@@ -1,13 +1,23 @@
-// App shell: navigation, the signed-in person's menu, routing and keyboard shortcuts.
+// App shell wiring: navigation, routing and keyboard shortcuts.
+//
+// To add a screen: add an entry to NAV (it appears in the sidebar under its section) and a
+// route to ROUTES. NAV entries: { href, label, icon, section, key? }
+//   icon:    a name from ui/icons.js (or an alias such as "billing", "documents"); optional
+//   section: "Work" | "Practice" | "Finance" | "Admin" (or a new name); optional
+//   key:     letter for the "g then <key>" shortcut; optional
 
-import { h, replace, select, modal, toast } from "./dom.js";
+import { h, replace, modal, toast } from "./dom.js";
 import { state, loadSetup } from "./state.js";
-import { checkSignIn, renderUserMenu } from "./auth.js";
+import { closePopover } from "./ui/popover.js";
+import { buildShell, drawNav, drawUser, drawDemoBanner, loadFirm, refreshNotifications } from "./ui/shell.js";
+import { emptyState, button } from "./ui/components.js";
+import { homeView } from "./views/home.js";
+import { checkSignIn, signOut } from "./auth.js";
 import { accountView } from "./views/account.js";
-import { closePopover } from "./tasks.js";
+import { setAccountActions } from "./ui/shell.js";
 import { myTasksView } from "./views/my.js";
 import { firmTasksView } from "./views/firm.js";
-import { mattersView } from "./views/matters.js";
+import { mattersView, newMatterDialog } from "./views/matters.js";
 import { matterView } from "./views/matter.js";
 import { checklistsView, checklistEditView } from "./views/checklists.js";
 import { settingsView } from "./views/settings.js";
@@ -26,39 +36,35 @@ import { intakeBoardView, intakeListView, intakeReportsView, leadView } from "./
 import { intakeFormsView, intakeFormEditView, bookingSettingsView } from "./views/intake-settings.js";
 import { clioImportView } from "./views/clio_import.js";
 
-const NAV = [
-  { href: "#/my", label: "My tasks", key: "m" },
-  { href: "#/firm", label: "Firm tasks", key: "f" },
-  { href: "#/matters", label: "Matters", key: "a" },
-  { href: "#/calendar", label: "Calendar", key: "l", section: "Work", icon: "calendar" },
-  { href: "#/deadlines", label: "Deadlines", key: "d", section: "Practice", icon: "deadlines" },
-  { href: "#/documents", label: "Documents", key: "e", section: "Practice", icon: "documents" },
-  { href: "#/intake", label: "Intake", key: "i", section: "Work", icon: "intake" },
-  { href: "#/checklists", label: "Checklists", key: "c" },
-  { href: "#/billing", label: "Billing", key: "b", section: "Finance", icon: "billing" },
-  // Trust: limit to admins and attorneys once sign-in lands.
-  { href: "#/trust", label: "Trust", key: "t", section: "Finance", icon: "trust" },
-  { href: "#/contacts", label: "Contacts", key: "p", section: "Practice", icon: "contacts" },
-  { href: "#/conflicts", label: "Conflict check", key: "k", section: "Practice", icon: "intake" },
-  { href: "#/settings", label: "Settings", key: "s" },
-  // Firm-wide figures: shown to attorneys and administrators (a convenience, not a permission).
-  { href: "#/overview", label: "Firm overview", key: "o", section: "Admin", icon: "overview", audience: "firm" },
-  { href: "#/reports", label: "Reports", key: "r", section: "Finance", icon: "reports", audience: "firm" },
+export const NAV = [
+  { href: "#/home", label: "Home", key: "h", icon: "home", section: "Work" },
+  { href: "#/my", label: "My tasks", key: "m", icon: "my-tasks", section: "Work" },
+  { href: "#/firm", label: "Firm tasks", key: "f", icon: "firm-tasks", section: "Work" },
+  { href: "#/matters", label: "Matters", key: "a", icon: "matters", section: "Practice" },
+  { href: "#/calendar", label: "Calendar", key: "l", icon: "calendar", section: "Work" },
+  { href: "#/intake", label: "Intake", key: "i", icon: "intake", section: "Work" },
+  { href: "#/contacts", label: "Contacts", key: "p", icon: "contacts", section: "Practice" },
+  { href: "#/conflicts", label: "Conflict check", key: "k", icon: "conflicts", section: "Practice" },
+  { href: "#/documents", label: "Documents", key: "e", icon: "documents", section: "Practice" },
+  { href: "#/deadlines", label: "Deadlines", key: "d", icon: "deadlines", section: "Practice" },
+  { href: "#/checklists", label: "Checklists", key: "c", icon: "checklists", section: "Practice" },
+  { href: "#/billing", label: "Billing", key: "b", icon: "billing", section: "Finance" },
+  { href: "#/trust", label: "Trust", key: "t", icon: "trust", section: "Finance" },
+  // Firm-wide figures: shown to attorneys and administrators (a convenience; the server decides).
+  { href: "#/reports", label: "Reports", key: "r", icon: "reports", section: "Finance", audience: "firm" },
+  { href: "#/overview", label: "Firm overview", key: "o", icon: "overview", section: "Admin", audience: "firm" },
+  { href: "#/settings", label: "Settings", key: "s", icon: "settings", section: "Admin" },
 ];
 
-function canSee(n) {
-  if (n.audience !== "firm") return true;
-  // A convenience, not a permission: the server decides what each access level may read.
-  const role = state.account?.role;
-  return !role || role === "admin" || role === "attorney";
-}
-
-const ROUTES = [
+export const ROUTES = [
+  [/^#\/home$/, () => homeView],
   [/^#\/my$/, () => myTasksView],
   [/^#\/firm$/, () => firmTasksView],
   [/^#\/matters$/, () => mattersView],
-  [/^#\/matters\/(\d+)$/, () => matterView],
+  // Before the matter page: its "documents" path is a page of its own, not a tab.
   [/^#\/matters\/(\d+)\/documents(?:\/(\d+|trash))?$/, () => matterDocumentsView],
+  // #/matters/12 and #/matters/12/tasks (the tab is the second group)
+  [/^#\/matters\/(\d+)(?:\/([a-z-]+))?$/, () => matterView],
   [/^#\/documents$/, () => documentsSearchView],
   [/^#\/settings\/templates$/, () => templatesSettingsView],
   [/^#\/checklists$/, () => checklistsView],
@@ -91,60 +97,70 @@ const ROUTES = [
   [/^#\/account$/, () => accountView],
 ];
 
+const DEFAULT_ROUTE = "#/home";
+
 const main = h("main#main", { tabindex: "-1" });
-const nav = h("nav.nav", { "aria-label": "Main" });
-const whoBox = h("div.who-box");
-
-function drawNav() {
-  const cur = location.hash.split("?")[0].split("/").slice(0, 2).join("/");
-  replace(
-    nav,
-    NAV.filter(canSee).map((n) => h("a.nav-link", { href: n.href, "aria-current": cur === n.href ? "page" : null, title: null }, n.label)),
-  );
-}
-
-function drawWho() {
-  replace(whoBox, renderUserMenu());
-}
 
 let renderSeq = 0;
 
 export async function route() {
   closePopover();
+  document.body.classList.remove("drawer-open");
   if (!location.hash || location.hash === "#/" || location.hash === "#") {
-    history.replaceState(null, "", "#/my");
+    history.replaceState(null, "", DEFAULT_ROUTE);
   }
   const hash = location.hash;
   drawNav();
   const seq = ++renderSeq;
+  refreshNotifications();
   for (const [re, view] of ROUTES) {
     const m = re.exec(hash);
     if (!m) continue;
+    main.setAttribute("aria-busy", "true");
     try {
       const content = await view()(m.slice(1), { isCurrent: () => seq === renderSeq });
       if (seq !== renderSeq) return;
       replace(main, content);
+      main.scrollTop = 0;
+      window.scrollTo(0, 0);
     } catch (err) {
       if (seq !== renderSeq) return;
-      replace(main, h("div.page", h("h1", "Couldn't load this page"), h("p.error-text", err.message || String(err)), h("p", h("a", { href: "#/my" }, "Go to My tasks"))));
+      replace(
+        main,
+        h(
+          "div.page",
+          emptyState({
+            icon: "circle-alert",
+            title: "Couldn't load this page",
+            body: err.message || String(err),
+            action: button("Go to Home", { href: DEFAULT_ROUTE, variant: "primary" }),
+          }),
+        ),
+      );
+    } finally {
+      main.removeAttribute("aria-busy");
     }
     return;
   }
-  replace(main, h("div.page", h("h1", "Page not found"), h("p", h("a", { href: "#/my" }, "Go to My tasks"))));
+  replace(
+    main,
+    h("div.page", emptyState({ icon: "search", title: "Page not found", body: "That address doesn't match any screen.", action: button("Go to Home", { href: DEFAULT_ROUTE, variant: "primary" }) })),
+  );
 }
 
 function showHelp() {
   const rows = [
+    ["Ctrl K", "Search matters, contacts and tasks"],
     ["n", "Quick-add a task"],
-    ["/", "Search (matters, firm tasks)"],
-    ["j / k", "Next / previous task"],
+    ["/", "Filter the list on this page"],
+    ["j / k", "Next / previous row"],
     ["x or Space", "Mark the task done (again to reopen)"],
     ["d", "Change its due date"],
     ["a", "Change who it's assigned to"],
     ["e", "Rename it"],
     ["m", "More actions"],
-    ["Enter", "Open the task's matter"],
-    ["g then m / f / a / i / l / d / e / p / k / b / t / c / s / o / r", "Go to My tasks, Firm tasks, Matters, Intake, Calendar, Deadlines, Documents, Contacts, Conflict check, Billing, Trust, Checklists, Settings, Firm overview, Reports"],
+    ["Enter", "Open"],
+    ["g then a letter", "Go to a page: h Home, m My tasks, f Firm tasks, l Calendar, i Intake, a Matters, p Contacts, k Conflict check, e Documents, d Deadlines, c Checklists, b Billing, t Trust, r Reports, o Firm overview, s Settings"],
     ["?", "This list"],
   ];
   modal(
@@ -164,7 +180,7 @@ function typingIn(el) {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
   if (typingIn(e.target) || document.querySelector("dialog[open]")) return;
   if (gPending) {
     gPending = false;
@@ -194,7 +210,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "/") {
-    const s = document.querySelector("[data-search]");
+    const s = document.querySelector("#main [data-search]");
     if (s) {
       e.preventDefault();
       s.focus();
@@ -202,7 +218,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "j" || e.key === "k" || e.key === "ArrowDown" || e.key === "ArrowUp") {
-    const rows = [...document.querySelectorAll("#main .task")];
+    const rows = [...document.querySelectorAll("#main .task")].filter((el) => el.offsetParent !== null);
     if (!rows.length) return;
     if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !(e.target && e.target.classList?.contains("task"))) return;
     e.preventDefault();
@@ -218,39 +234,33 @@ async function start() {
   try {
     if (!(await checkSignIn(app))) return;
   } catch (err) {
-    replace(app, h("div.page", h("h1", "Can't reach the server"), h("p.error-text", err.message)));
+    replace(app, h("div.page", emptyState({ icon: "circle-alert", title: "Can't reach the server", body: err.message })));
     return;
   }
+  setAccountActions({ account: () => (location.hash = "#/account"), signOut });
   // The skip link can't use a plain #main href: the hash is the router's.
   document.querySelector(".skip")?.addEventListener("click", (e) => {
     e.preventDefault();
     main.focus();
   });
-  replace(
-    app,
-    h(
-      "header.top",
-      h("a.brand", { href: "#/my" }, h("span.brand-mark", { "aria-hidden": "true" }, "L"), "Lawdesk"),
-      nav,
-      timerBox(),
-      whoBox,
-      h("button.icon-btn.help-btn", { type: "button", "aria-label": "Keyboard shortcuts", title: "Keyboard shortcuts (?)", onclick: showHelp }, "?"),
-    ),
-    main,
-  );
+  replace(app, buildShell({ nav: NAV, main, routes: ROUTES, topExtras: [timerBox()] }));
+  drawNav();
   try {
     await loadSetup();
   } catch (err) {
-    replace(main, h("div.page", h("h1", "Can't reach the server"), h("p.error-text", err.message)));
+    replace(main, h("div.page", emptyState({ icon: "circle-alert", title: "Can't reach the server", body: err.message })));
     return;
   }
-  drawWho();
+  drawUser();
+  drawDemoBanner();
+  loadFirm();
   window.addEventListener("hashchange", route);
   await route();
 }
 
-// Settings fires this after changing people, so the "Working as" list stays current.
-window.addEventListener("lawdesk:setup", drawWho);
+// Settings fires this after changing people, so the user menu stays current.
+window.addEventListener("lawdesk:setup", () => (drawUser(), drawDemoBanner()));
+window.addEventListener("lawdesk:new-matter", () => newMatterDialog());
 
 window.addEventListener("unhandledrejection", (e) => {
   toast(e.reason?.message || "Something went wrong", { error: true });

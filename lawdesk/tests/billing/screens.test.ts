@@ -114,6 +114,7 @@ test("screens: demo data has a past-due partly paid invoice, an open one and unb
   const ag = aging(b);
   assert.ok(ag.totals.d1_30 > 0 && ag.totals.current > 0);
   assert.ok(b.listTime({ matterId: demo.matters.m2, status: "unbilled" }).length >= 3);
-  for (const c of db.prepare("SELECT name FROM contacts").all() as any[]) assert.match(c.name, /\(demo\)/);
-  assert.match(b.settings().firm_name, /\(demo\)/);
+  // Demo contacts are marked by their note (the app shows a "Demo data" banner), not their names.
+  for (const c of db.prepare("SELECT notes FROM contacts").all() as any[]) assert.match(c.notes ?? "", /Fictional demo data/);
+  assert.match(b.settings().firm_name, /Reyes & Chen/);
 });
