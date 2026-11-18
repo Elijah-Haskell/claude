@@ -12,9 +12,21 @@ Needs Node 22.18 or newer and nothing else: TypeScript runs directly on Node, an
 Node's built-in SQLite. There are no npm dependencies, on purpose.
 
 ```
-npm test        # all tests
-npm start       # web app on http://localhost:3000 (once src/server.ts exists)
+npm test                 # all tests (no dependencies)
+npm run seed             # load fictional demo data into lawdesk.db (-- --reset to wipe it first)
+npm start                # web app on http://localhost:3000
+npm run test:browser     # headless click-through + screenshots (needs Playwright + Chromium installed globally)
 ```
+
+Settings: `PORT` (default 3000), `LAWDESK_DB` (default `lawdesk.db`), `HOST` (default `127.0.0.1`;
+there is no sign-in, so keep it on the local machine). The app's "Working as" picker sends the chosen
+person in an `X-Lawdesk-User` header so the activity log can name them; that is attribution, not security.
+
+In the app, press `?` for keyboard shortcuts. Quick-add understands dates (`fri`, `tomorrow`, `11/20`,
+`in 3 days`, `+5bd`), `@person`, `#matter-number` and `!high`.
+
+The demo data (`src/seed.ts`) is made up: every client is marked "(demo)", and its checklists are
+office workflow steps, not statements of law.
 
 ## Layout and rules for contributors
 
