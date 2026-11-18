@@ -33,6 +33,8 @@ A route marked `raw: true` in `src/http.ts` gets the unread request stream as `c
 Importing from Clio (Settings > Import from Clio): CSV files work with no set-up; reading straight from the
 Clio API needs `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `CLIO_TOKEN_KEY` and optionally `CLIO_REGION`.
 See `docs/clio-import.md`.
+Online payments and e-signatures: see `docs/payments.md` (Stripe keys via `STRIPE_*` environment
+variables, `LAWDESK_PUBLIC_URL`) and `docs/esign.md`. Their client-facing routes are marked `public: true`.
 
 In the app, press `?` for keyboard shortcuts. Quick-add understands dates (`fri`, `tomorrow`, `11/20`,
 `in 3 days`, `+5bd`), `@person`, `#matter-number` and `!high`.

@@ -15,10 +15,12 @@ export interface Ctx {
   body: any;
   /** The signed-in user's id, or null until sign-in exists. */
   userId: number | null;
-  /** Only on routes with `raw: true`: the request with its body still unread, to stream it. */
+  /** The underlying request: headers, client IP and user agent (e-signature audit trails); on `raw: true` routes its body is still unread, to stream it. */
   req?: IncomingMessage;
   /** The caller's network address (no proxy handling), for rate limits on public routes. */
   ip?: string | null;
+  /** The request body exactly as received (webhook signatures are computed over it). */
+  rawBody?: string;
 }
 
 export interface Route {

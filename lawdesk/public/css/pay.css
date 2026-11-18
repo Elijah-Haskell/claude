@@ -1,0 +1,65 @@
+/* Online payments and electronic signatures. Uses the app's tokens (app.css :root) only. */
+
+/* ---------------------------------------------------------- staff screens */
+.share-box { display: grid; gap: 8px; margin: 8px 0 4px; padding: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); }
+.share-url { width: 100%; font-size: 0.9rem; }
+.share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.share-actions a.btn { text-decoration: none; }
+.note { padding: 8px 10px; border-left: 3px solid var(--gold); background: var(--today-soft); color: var(--text); border-radius: var(--radius); font-size: 0.92rem; }
+
+.pay-list > li, .sign-list > li, .pay-attention li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.pay-list > li:last-child, .sign-list > li:last-child { border-bottom: 0; }
+.pay-what, .sign-list .linklike { flex: 1 1 160px; min-width: 0; }
+.pay-attention { margin-top: 10px; }
+.pay-attention h3 { font-size: 0.95rem; margin: 0 0 4px; color: var(--late); }
+.pay-attention li > span { flex: 1 1 200px; font-size: 0.9rem; }
+.pay-trust { margin-top: 10px; }
+.pay-card .btn.small, .sign-card > .btn.small { margin-top: 6px; }
+
+.linklike { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--accent); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.linklike:hover .sign-doc { text-decoration: underline; }
+.linklike:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.pay-status { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.pay-status h3 { font-size: 1rem; margin: 0 0 6px; }
+.pay-status ul { margin: 4px 0 8px; }
+.pay-status code { font-family: var(--font); background: var(--surface-2); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+.audit-table { width: 100%; margin: 8px 0; font-size: 0.88rem; }
+.audit-table td { overflow-wrap: anywhere; vertical-align: top; }
+
+/* ----------------------------------------------- public pages (no app shell) */
+body.public { background: var(--bg); }
+.public-page { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+.public-head { padding: 8px 2px 14px; margin-bottom: 18px; border-bottom: 3px solid var(--gold); }
+.public-firm { font-family: var(--serif); font-size: 1.35rem; font-weight: 600; color: var(--accent); }
+.public-card { padding: 22px 24px; }
+.public-card h1 { margin-bottom: 10px; }
+.public-foot { margin-top: 18px; text-align: center; color: var(--muted); font-size: 0.8rem; }
+.btn.big { font-size: 1.05rem; padding: 10px 18px; margin: 6px 0; }
+.test-banner { padding: 8px 10px; background: var(--today-soft); border: 1px solid var(--border-strong); border-radius: var(--radius); color: var(--today); font-size: 0.92rem; }
+.pay-summary { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 14px 0 18px; }
+.pay-summary dt { color: var(--muted); }
+.pay-summary dd { margin: 0; overflow-wrap: anywhere; }
+.pay-amount { font-family: var(--serif); font-size: 1.6rem; font-weight: 600; color: var(--accent); }
+.test-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.sign-step { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.sign-step h2 { font-size: 1.15rem; margin-bottom: 8px; }
+.sign-message { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--border-strong); color: var(--text); background: var(--surface-2); white-space: pre-wrap; }
+.sign-preview summary { cursor: pointer; color: var(--accent); }
+.sign-text { max-height: 360px; overflow: auto; white-space: pre-wrap; font-family: var(--serif); font-size: 0.95rem; background: var(--surface); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); }
+.consent-text { max-height: 340px; overflow: auto; padding: 4px 14px; margin-bottom: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.93rem; }
+.consent-text h3 { margin: 10px 0 4px; font-size: 1rem; }
+.form-actions.left { justify-content: flex-start; flex-wrap: wrap; }
+.sign-label { display: grid; gap: 4px; margin: 10px 0; font-weight: 500; }
+.sign-label input { max-width: 420px; font-size: 1.05rem; }
+.sig-wrap { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.sig-pad { width: 100%; max-width: 480px; aspect-ratio: 10 / 3; height: auto; background: var(--surface); border: 1px solid var(--border-strong); border-bottom: 2px solid var(--accent); border-radius: var(--radius); touch-action: none; cursor: crosshair; }
+.public .check-line { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
+.public .check-line input { margin-top: 4px; flex: none; }
+
+@media (max-width: 640px) {
+  .public-card { padding: 16px; }
+  .pay-summary { grid-template-columns: 1fr; gap: 2px; }
+  .pay-summary dd { margin-bottom: 8px; }
+}

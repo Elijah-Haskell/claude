@@ -5,6 +5,7 @@ import { h, select, toast, fmtDate, slug } from "../dom.js";
 import { get, post, patch, put, del } from "../api.js";
 import { state, loadSetup, today } from "../state.js";
 import { emailSettingsSection } from "./email-settings.js";
+import { paymentSettingsSection, esignSettingsSection } from "./pay-esign.js";
 
 export async function settingsView() {
   const page = h("div.page.settings");
@@ -40,6 +41,8 @@ export async function settingsView() {
       ["s-closed", "Closed days"],
       ["s-auto", "Automatic steps"],
       ["s-email", "Email"],
+      ["s-pay", "Online payments"],
+      ["s-esign", "Electronic signatures"],
     ].map(([id, label]) => h("a", { href: `#${id}`, onclick: (e) => (e.preventDefault(), document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })) }, label)),
     h("a", { href: "#/settings/templates" }, "Document templates"),
   );
@@ -50,7 +53,7 @@ export async function settingsView() {
 
   function draw() {
     const s = state.setup;
-    body.replaceChildren(people(s), clients(s), areas(s), dateFields(s), closedDays(s), automations(s), emailSection);
+    body.replaceChildren(people(s), clients(s), areas(s), dateFields(s), closedDays(s), automations(s), emailSection, paymentSettingsSection(), esignSettingsSection());
   }
 
   // ---------------------------------------------------------------- people

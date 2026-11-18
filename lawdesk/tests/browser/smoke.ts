@@ -27,6 +27,8 @@ process.env.LAWDESK_FILES ??= join(scratch, "files");
 delete process.env.LAWDESK_MAIL_TRANSPORT;
 import { Documents } from "../../src/documents/documents.ts";
 import { setDocuments } from "../../src/documents/routes.ts";
+import { Billing } from "../../src/billing/billing.ts";
+import { onlinePaymentAndSignatureChecks } from "./pay-esign.ts";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
@@ -36,8 +38,9 @@ mkdirSync(shots, { recursive: true });
 
 const now = today();
 const db = openDb();
-// Document files go to a throwaway folder, not ./files.
+// Document files (uploads, signature certificates) go to a throwaway folder, not ./files.
 const filesDir = mkdtempSync(join(tmpdir(), "lawdesk-smoke-files-"));
+process.env.LAWDESK_FILES = filesDir;
 setDocuments(db, new Documents(db, { dir: filesDir, today: () => now }));
 const demo = seed(db, now);
 addReportsDemo(db, now, demo);
@@ -1199,6 +1202,7 @@ for (const [label, viewport] of [
     await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
     await page.screenshot({ path: shots + `clio-import-${label}.png`, fullPage: true });
   });
+  await onlinePaymentAndSignatureChecks({ label, page, ctx, base, db, check, noHorizontalScroll, shots, matterId: demo.matters.m1, billing: new Billing(db, { today: () => now }) });
 
   await check(`${label}: no script errors`, async () => {
     assert.deepEqual(errors, [], errors.slice(0, 3).join(" | "));

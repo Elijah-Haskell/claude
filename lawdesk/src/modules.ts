@@ -24,6 +24,10 @@ import { routes as intakeRoutes } from "./intake/routes.ts";
 import { SCHEMA as INTAKE_SCHEMA } from "./intake/schema.ts";
 import { routes as clioImportRoutes } from "./clio_import/routes.ts";
 import { SCHEMA as CLIO_IMPORT_SCHEMA } from "./clio_import/schema.ts";
+import { routes as paymentsRoutes } from "./payments/routes.ts";
+import { SCHEMA as PAYMENTS_SCHEMA } from "./payments/schema.ts";
+import { routes as esignRoutes } from "./esign/routes.ts";
+import { SCHEMA as ESIGN_SCHEMA } from "./esign/schema.ts";
 
 export interface Module {
   name: string;
@@ -46,4 +50,7 @@ export const modules: Module[] = [
   { name: "contacts", routes: contactsRoutes, schema: CONTACTS_SCHEMA },
   { name: "intake", routes: intakeRoutes, schema: INTAKE_SCHEMA },
   { name: "clio_import", routes: clioImportRoutes, schema: CLIO_IMPORT_SCHEMA },
+  // After billing and documents: their tables are referenced.
+  { name: "payments", routes: paymentsRoutes, schema: PAYMENTS_SCHEMA },
+  { name: "esign", routes: esignRoutes, schema: ESIGN_SCHEMA },
 ];
