@@ -1,7 +1,6 @@
 // Home: the signed-in person's day at a glance. Their overdue / today / this-week work,
-// the next tasks to do, matters that moved recently, what's on the calendar, and what
-// happened around the firm. Built only on the task engine; the calendar card appears when
-// the calendar module answers.
+// the next tasks to do, matters that moved recently, their calendar for the next two weeks,
+// the firm's coming court dates, and what happened around the firm.
 
 import { h, fmtDate, fmtTime, relDate, addDays, daysBetween, plural } from "../dom.js";
 import { get } from "../api.js";
@@ -10,6 +9,7 @@ import { taskRow, redraw } from "../tasks.js";
 import { icon } from "../ui/icons.js";
 import { pageHeader, card, stat, button, emptyState, avatar, pill, loadingBlock, activityText } from "../ui/components.js";
 import { dataTable } from "../ui/table.js";
+import { kindLabel } from "../cal.js";
 
 function greeting() {
   const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "America/Chicago" }).format(new Date()));
@@ -38,6 +38,7 @@ export async function homeView() {
   const tasksBox = h("div");
   const mattersBox = h("div");
   const agendaBox = h("div");
+  const courtBox = h("div");
   const activityBox = h("div");
 
   const [my, matters, activity] = await Promise.all([
@@ -125,12 +126,13 @@ export async function homeView() {
   // ----------------------------------------------------------- agenda
   agendaBox.append(loadingBlock("Loading calendar", "lines", 3));
   loadAgenda(agendaBox, now, my);
+  loadCourtDates(courtBox, now);
 
   // --------------------------------------------------------- activity
   const feed = activity
     .slice()
     .sort((a, b) => String(b.at).localeCompare(String(a.at)))
-    .slice(0, 9);
+    .slice(0, 6);
   activityBox.append(
     card({
       title: "Recent activity",
@@ -165,7 +167,7 @@ export async function homeView() {
       ],
     }),
     statsBox,
-    h("div.home-grid", h("div.home-main", tasksBox, mattersBox), h("div.home-side", agendaBox, activityBox)),
+    h("div.home-grid", h("div.home-main", tasksBox, mattersBox), h("div.home-side", agendaBox, courtBox, activityBox)),
   );
   return page;
 }
@@ -186,35 +188,80 @@ async function loadAgenda(box, now, my) {
       card({
         title: "Coming up",
         icon: "calendar-days",
+        className: "home-agenda",
         body: dated.length ? agendaList(dated.map((t) => ({ date: t.due_date, title: t.title, sub: t.matter_name, href: t.matter_id ? `#/matters/${t.matter_id}` : "#/my" })), now) : emptyState({ icon: "calendar", title: "Nothing scheduled", compact: true }),
       }),
     );
     return;
   }
+  const todays = items.filter((x) => x.date === now);
+  const later = items.filter((x) => x.date !== now);
+  const row = (ev) => ({
+    date: ev.date,
+    title: ev.title,
+    time: ev.allDay ? "All day" : timeOf(ev.start),
+    sub: [ev.matter?.number, ev.location].filter(Boolean).join(" · ") || null,
+    kind: ev.kind,
+    conflict: ev.conflict,
+    href: ev.matter ? `#/matters/${ev.matter.id}` : "#/calendar",
+  });
   box.replaceChildren(
     card({
-      title: "Upcoming",
-      subtitle: "Your next two weeks",
+      title: "Your calendar",
+      subtitle: "The next two weeks",
       icon: "calendar-days",
+      className: "home-agenda",
       actions: button("Calendar", { href: "#/calendar", variant: "ghost", size: "sm", iconRight: "arrow-right" }),
       body: items.length
-        ? agendaList(
-            items.slice(0, 6).map((ev) => ({
-              date: ev.date,
-              title: ev.title,
-              time: ev.allDay ? "All day" : timeOf(ev.start),
-              sub: [ev.matter?.number, ev.location].filter(Boolean).join(" · ") || null,
-              kind: ev.kind,
-              href: ev.matter ? `#/matters/${ev.matter.id}` : "#/calendar",
-            })),
-            now,
-          )
+        ? [
+            h(
+              "div.agenda-section",
+              h("h3.agenda-heading", "Today"),
+              todays.length ? agendaList(todays.map(row), now) : h("p.muted.small", "Nothing on your calendar today."),
+            ),
+            later.length ? h("div.agenda-section", h("h3.agenda-heading", "Coming up"), agendaList(later.slice(0, Math.max(3, 6 - todays.length)).map(row), now)) : null,
+          ]
         : emptyState({ icon: "calendar", title: "Nothing on your calendar", body: "Hearings, meetings and deadlines for the next two weeks show here.", compact: true }),
     }),
   );
 }
 
-const KIND_TONE = { court_deadline: "danger", hearing: "brand", statute_of_limitations: "danger", meeting: "info", reminder: "neutral", other: "neutral" };
+const COURT_KINDS = new Set(["hearing", "court_deadline", "statute_of_limitations"]);
+
+/** The firm's next hearings, court deadlines and limitation dates, whoever is attending. */
+async function loadCourtDates(box, now) {
+  let items;
+  try {
+    const a = await get(`/calendar/agenda?from=${now}&to=${addDays(now, 45)}&tasks=0&scope=firm`);
+    items = (a.items || []).filter((x) => x.type === "event" && COURT_KINDS.has(x.kind));
+  } catch {
+    return; // No calendar: leave the space empty rather than show an error on Home.
+  }
+  box.replaceChildren(
+    card({
+      title: "Court dates",
+      subtitle: "Hearings and deadlines, firm-wide",
+      icon: "court",
+      className: "home-agenda home-court",
+      actions: button("Calculator", { href: "#/deadlines", variant: "ghost", size: "sm", iconRight: "arrow-right" }),
+      body: items.length
+        ? agendaList(
+            items.slice(0, 5).map((ev) => ({
+              date: ev.date,
+              title: ev.title,
+              time: ev.allDay ? null : timeOf(ev.start),
+              sub: ev.matter?.number || null,
+              kind: ev.kind,
+              tag: kindLabel(ev.kind),
+              href: ev.matter ? `#/matters/${ev.matter.id}` : "#/calendar",
+            })),
+            now,
+          )
+        : emptyState({ icon: "court", title: "No court dates coming up", body: "Hearings and court deadlines added to the calendar, or from the deadline calculator, show here.", compact: true }),
+      footer: items.length > 5 ? h("a.card-footer-link", { href: "#/calendar" }, `${plural(items.length - 5, "more court date")} in the calendar`, icon("arrow-right", { size: 14 })) : null,
+    }),
+  );
+}
 
 function agendaList(items, now) {
   return h(
@@ -222,11 +269,12 @@ function agendaList(items, now) {
     items.map((it) => {
       const d = new Date(it.date + "T12:00:00Z");
       const n = daysBetween(now, it.date);
+      const day = n === 0 ? "Today" : n === 1 ? "Tomorrow" : d.toLocaleDateString("en-US", { weekday: n < 7 ? "long" : "short", timeZone: "UTC" });
       return h(
         "li",
         h(
           "a.agenda-item",
-          { href: it.href },
+          { href: it.href, title: it.title },
           h(
             "span.agenda-date" + (n === 0 ? ".is-today" : ""),
             h("span.agenda-mon", d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })),
@@ -234,8 +282,17 @@ function agendaList(items, now) {
           ),
           h(
             "span.agenda-text",
-            h("span.agenda-title", it.kind ? h("span.kind-dot.tone-" + (KIND_TONE[it.kind] || "neutral"), { "aria-hidden": "true" }) : null, it.title),
-            h("span.agenda-sub", [n === 0 ? "Today" : n === 1 ? "Tomorrow" : d.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }), it.time, it.sub].filter(Boolean).join(" · ")),
+            h(
+              "span.agenda-title",
+              it.kind ? h("span.cal-kdot.k-" + it.kind, { "aria-hidden": "true" }) : null,
+              h("span.agenda-title-text", it.title),
+            ),
+            h(
+              "span.agenda-sub",
+              [day, it.time, it.sub].filter(Boolean).join(" · "),
+              it.conflict ? [" · ", h("span.late-text", "Double-booked")] : null,
+              it.tag ? [" · ", it.tag] : null,
+            ),
           ),
         ),
       );

@@ -117,7 +117,7 @@ test("demo seed has hearings, meetings and a weekly staff meeting", () => {
   const events = cal.listEvents();
   const staff = events.find((e) => e.title === "Staff meeting")!;
   assert.match(staff.rrule, /^FREQ=WEEKLY;BYDAY=TU/);
-  assert.equal(staff.attendees.length, 4);
+  assert.equal(staff.attendees.length, Object.keys(demo.users).length, "everyone at the firm");
   assert.equal(staff.exceptions.filter((x: any) => x.cancelled).length, 1);
   assert.ok(events.filter((e) => e.kind === "hearing").length >= 2);
   assert.ok(events.every((e) => e.title && !/@(?!example)/.test(e.notes ?? "")));

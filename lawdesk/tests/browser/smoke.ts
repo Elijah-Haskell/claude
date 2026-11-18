@@ -541,29 +541,32 @@ for (const [label, viewport] of [
 
   await check(`${label}: week and list views; cancel one date of a series`, async () => {
     await page.locator(".segmented button", { hasText: "Week" }).click();
-    await page.waitForSelector(label === "desktop" ? ".cal-week .cal-block" : ".cal-list-day");
+    await page.waitForSelector(label === "desktop" ? ".cal-body[data-view=week] .cal-week .cal-block" : ".cal-body[data-view=week] .cal-list-day");
     await noHorizontalScroll();
     await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
     await page.screenshot({ path: shots + `calendar-week-${label}.png`, fullPage: true });
     await page.locator(".segmented button", { hasText: "List" }).click();
-    await page.waitForSelector(".cal-list .cal-line");
+    await page.waitForSelector(".cal-body[data-view=list] .cal-list .cal-line");
     await noHorizontalScroll();
-    await page.locator(".cal-line", { hasText: `Case strategy ${label}` }).first().waitFor();
-    const before = await page.locator(".cal-line", { hasText: `Case strategy ${label}` }).count();
+    const series = page.locator(".cal-body[data-view=list] .cal-line", { hasText: `Case strategy ${label}` });
+    await series.first().waitFor();
+    const before = await series.count();
     assert.ok(before >= 1, "the new series is listed");
-    await page.locator(".cal-line", { hasText: `Case strategy ${label}` }).first().locator("button").click();
+    await series.first().locator("button").click();
     page.once("dialog", (d: any) => d.accept());
     await page.locator("dialog.cal-dialog button", { hasText: "Cancel this date" }).click();
     await page.waitForSelector(".toast:has-text('Cancelled that date')");
     await page.waitForFunction(
-      ([t, n]: [string, number]) => [...document.querySelectorAll(".cal-line")].filter((e) => e.textContent!.includes(t)).length === n - 1,
+      ([t, n]: [string, number]) =>
+        [...document.querySelectorAll(".cal-body[data-view=list] .cal-line")].filter((e) => e.textContent!.includes(t)).length === n - 1,
       [`Case strategy ${label}`, before] as [string, number],
     );
     await page.screenshot({ path: shots + `calendar-list-${label}.png`, fullPage: true });
   });
 
   await check(`${label}: import an .ics file`, async () => {
-    await page.locator(".page-head button", { hasText: "Import a calendar file" }).click();
+    await page.locator(".page-head button", { hasText: "Import or subscribe" }).click();
+    await page.locator(".pop-item", { hasText: "Import a calendar file" }).click();
     const dlg = page.locator("dialog.cal-dialog");
     const ics = [
       "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Demo//EN", "BEGIN:VEVENT", `UID:smoke-${label}@example.com`,
@@ -578,7 +581,8 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: subscribe link: make, read, turn off`, async () => {
-    await page.locator(".page-head button", { hasText: "Subscribe" }).click();
+    await page.locator(".page-head button", { hasText: "Import or subscribe" }).click();
+    await page.locator(".pop-item", { hasText: "Subscribe in Outlook, Google or Apple" }).click();
     const dlg = page.locator("dialog.cal-dialog");
     await dlg.locator(".cal-steps li").first().waitFor();
     await dlg.locator(".cal-app-tabs button", { hasText: "Google Calendar" }).click();
@@ -629,7 +633,7 @@ for (const [label, viewport] of [
     assert.ok(await page.locator(".dl-disclaimer").isVisible(), "disclaimer still visible");
     await page.goto(base + `/#/matters/${demo.matters.m2}`);
     await page.waitForSelector(`.cal-upcoming .cal-line:has-text("Interrogatory answers due ${label}")`);
-    const task = page.locator(".task", { hasText: `Interrogatory answers due ${label}` });
+    const task = page.locator("#tab-panel-overview .task", { hasText: `Interrogatory answers due ${label}` });
     await task.waitFor();
     assert.ok(await task.evaluate((e) => e.classList.contains("prio-high")), "high-priority task");
     await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());

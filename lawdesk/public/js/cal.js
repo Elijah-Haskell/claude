@@ -4,6 +4,7 @@
 import { h, replace, select, modal, toast, addDays, weekday, fmtDate, plural } from "./dom.js";
 import { get, post, patch, del } from "./api.js";
 import { state, today, users, userName, loadMatters } from "./state.js";
+import { card, button, pill, loadingBlock } from "./ui/components.js";
 
 export const FIRM_TZ = "America/Chicago";
 
@@ -532,7 +533,7 @@ export function itemDialog(item, onChanged = () => {}) {
       ];
   const names = item.attendees.map((u) => userName(u)).filter(Boolean);
   const dlg = modal(
-    kindLabel(item.kind),
+    item.kind === "other" ? "Event" : kindLabel(item.kind),
     h(
       "div.modal-body",
       h("p.cal-detail-title", item.title),
@@ -558,66 +559,104 @@ export function itemDialog(item, onChanged = () => {}) {
 
 // ------------------------------------------------- compact lists elsewhere
 
+/** Pill tone per kind of event, the same everywhere (Calendar, Home, matter page). */
+export const KIND_TONE = { meeting: "info", hearing: "brand", court_deadline: "danger", statute_of_limitations: "danger", reminder: "warning", other: "neutral" };
+/** Kinds worth naming next to the title; a plain meeting needs no label. */
+const NAMED_KINDS = new Set(["hearing", "court_deadline", "statute_of_limitations", "reminder"]);
+
 /** One line of an event or task for compact lists. */
-export function itemLine(item, onChanged, { showMatter = true, showDate = false } = {}) {
+export function itemLine(item, onChanged, { showMatter = true, showDate = false, taskOwner = false } = {}) {
   const isTask = item.type === "task";
+  // taskOwner: in a list of tasks under their own heading, the first column names who has the task.
+  const sub = [
+    showMatter && item.matter ? matterLabel(item.matter) : null,
+    !isTask && item.location ? item.location : null,
+    isTask && !taskOwner && item.assigneeName ? item.assigneeName : null,
+  ].filter(Boolean);
   return h(
     "li.cal-line" + (isTask ? ".is-task" : `.k-${item.kind}`) + (item.conflict ? ".is-conflict" : ""),
     h(
       "button.cal-line-btn",
       { type: "button", onclick: () => itemDialog(item, onChanged) },
-      h("span.cal-line-when", showDate ? `${fmtDate(item.date, today())} · ` : "", isTask ? "Task due" : whenText(item)),
-      h("span.cal-line-title", item.title),
-      showMatter && item.matter ? h("span.cal-line-matter", matterLabel(item.matter)) : null,
-      !isTask && item.location ? h("span.cal-line-loc", item.location) : null,
-      item.conflict ? h("span.tag.cal-dbl", "Double-booked") : null,
-      !isTask && item.kind !== "meeting" ? h("span.tag.cal-kind", kindLabel(item.kind)) : null,
+      h(
+        "span.cal-line-when",
+        showDate ? h("span.cal-line-date", fmtDate(item.date, today())) : null,
+        h("span.cal-line-time", isTask ? (taskOwner ? item.assigneeName || "Unassigned" : "Task due") : whenText(item)),
+      ),
+      h("span.cal-line-mark", { "aria-hidden": "true" }),
+      h("span.cal-line-main", h("span.cal-line-title", item.title), sub.length ? h("span.cal-line-sub", sub.join(" · ")) : null),
+      item.conflict || (!isTask && NAMED_KINDS.has(item.kind))
+        ? h(
+            "span.cal-line-tags",
+            item.conflict ? pill("Double-booked", "danger") : null,
+            !isTask && NAMED_KINDS.has(item.kind) ? pill(kindLabel(item.kind), KIND_TONE[item.kind], { dot: false }) : null,
+          )
+        : null,
     ),
   );
 }
 
 /** My tasks: the signed-in person's events today. */
 export function todayStrip(userId) {
-  const box = h("section.card.cal-today", { "aria-label": "Today's calendar" });
+  const box = h("div.cal-today-slot");
+  const frame = (body) =>
+    card({
+      title: "Today's calendar",
+      subtitle: longDate(today()),
+      icon: "calendar",
+      className: "cal-today",
+      flush: true,
+      actions: button("Calendar", { href: "#/calendar", variant: "ghost", size: "sm", iconRight: "arrow-right" }),
+      body,
+    });
   const load = async () => {
     try {
       const d = await get(`/calendar/agenda?from=${today()}&to=${today()}&user=${userId}&tasks=0`);
       const items = d.items.filter((i) => i.type === "event");
-      replace(box,
-        h("div.cal-today-head", h("h2", "Today's calendar"), h("a.small", { href: "#/calendar" }, "Open the calendar")),
-        items.length ? h("ul.cal-today-list", items.map((i) => itemLine(i, load))) : h("p.muted", "Nothing on your calendar today."),
-      );
+      replace(box, frame(items.length ? h("ul.cal-lines.cal-today-list", items.map((i) => itemLine(i, load))) : h("p.muted.cal-none", "Nothing on your calendar today.")));
     } catch (ex) {
-      replace(box, h("h2", "Today's calendar"), h("p.error-text", ex.message));
+      replace(box, frame(h("p.error-text.cal-none", `The calendar could not be loaded: ${ex.message}`)));
     }
   };
-  box.append(h("h2", "Today's calendar"), h("p.muted", "Loading…"));
+  box.append(frame(loadingBlock("Loading today's calendar", "lines", 2)));
   load();
   return box;
 }
 
 /** Matter page: the matter's next events. */
 export function upcomingCard(matterId) {
-  const box = h("section.card.cal-upcoming");
+  const box = h("div.cal-upcoming-slot");
+  const frame = (body, footer = null) =>
+    card({
+      title: "Upcoming",
+      subtitle: "Hearings, deadlines and meetings on this matter",
+      icon: "calendar-days",
+      className: "cal-upcoming",
+      flush: true,
+      actions: [
+        button("Court deadline", { href: `#/deadlines/${matterId}`, variant: "ghost", size: "sm", icon: "deadlines" }),
+        button("Add event", { size: "sm", icon: "plus", onclick: () => eventDialog(null, { matterId, attendees: state.me ? [state.me] : [] }, load) }),
+      ],
+      body,
+      footer,
+    });
   const load = async () => {
     try {
       const d = await get(`/calendar/agenda?scope=firm&matter=${matterId}&from=${today()}&to=${addDays(today(), 365)}&tasks=0`);
       const items = d.items.slice(0, 6);
       replace(box,
-        h("h2", "Upcoming"),
-        items.length ? h("ul.cal-upcoming-list", items.map((i) => itemLine(i, load, { showMatter: false, showDate: true }))) : h("p.muted", "Nothing on the calendar for this matter."),
-        d.items.length > items.length ? h("p.muted.small", `${d.items.length - items.length} more later in the year.`) : null,
-        h(
-          "div.cal-card-actions",
-          h("button.btn.small", { type: "button", onclick: () => eventDialog(null, { matterId, attendees: state.me ? [state.me] : [] }, load) }, "Add event"),
-          h("a.btn.small", { href: `#/deadlines/${matterId}` }, "Court deadline"),
+        frame(
+          items.length
+            ? h("ul.cal-lines.cal-upcoming-list", items.map((i) => itemLine(i, load, { showMatter: false, showDate: true })))
+            : h("p.muted.cal-none", "Nothing on the calendar for this matter."),
+          d.items.length > items.length ? h("span.muted", `${d.items.length - items.length} more later in the year.`) : null,
         ),
       );
     } catch (ex) {
-      replace(box, h("h2", "Upcoming"), h("p.error-text", ex.message));
+      replace(box, frame(h("p.error-text.cal-none", ex.message)));
     }
   };
-  box.append(h("h2", "Upcoming"), h("p.muted", "Loading…"));
+  box.append(frame(loadingBlock("Loading upcoming events", "lines", 2)));
   load();
   return box;
 }

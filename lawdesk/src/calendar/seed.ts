@@ -9,8 +9,8 @@ import { SCHEMA } from "./schema.ts";
 import { WEEKDAYS } from "./rrule.ts";
 
 export interface CalendarSeedIds {
-  users: { jordan: number; riley: number; sam: number; casey: number };
-  matters: { m1: number; m2: number; m3: number; m4: number; m5: number; m6: number };
+  users: { jordan: number; riley: number; sam: number; casey: number; avery?: number; dana?: number; priya?: number };
+  matters: { m1: number; m2: number; m3: number; m4: number; m5: number; m6: number; m7?: number; m10?: number; m12?: number; m14?: number; m17?: number };
 }
 
 const dow = (d: ISODate) => new Date(d + "T00:00:00Z").getUTCDay();
@@ -33,11 +33,11 @@ export function seedCalendar(db: DB, ids: CalendarSeedIds, today: ISODate, close
   const near = (n: number) => weekdayNear(today, n, closed);
   db.exec(SCHEMA);
   const cal = new Calendar(db);
-  const { jordan, riley, sam, casey } = ids.users;
+  const { jordan, riley, sam, casey, avery, dana, priya } = ids.users;
   // In src/seed.ts: m1 Sunflower Coffee (D-1003), m2 Supply agreement (D-1004), m3 Office lease (D-1005),
   // m4 Riverside Plaza (D-1002), m5 Brooks Consulting (D-1006).
   const { m1, m2: supply, m3, m4: riverside, m5 } = ids.matters;
-  const everyone = [jordan, riley, sam, casey];
+  const everyone = [jordan, riley, avery, sam, dana, casey, priya].filter((u): u is number => u != null);
   const add = (input: Parameters<Calendar["createEvent"]>[0], by = casey) => cal.createEvent(input, by).event;
 
   // Weekly staff meeting, Tuesdays 9:00-9:45, running since about eight weeks ago.
@@ -118,6 +118,19 @@ export function seedCalendar(db: DB, ids: CalendarSeedIds, today: ISODate, close
     add({ title: "Call with Riverside Plaza lender's counsel", matterId: riverside, kind: "meeting", start: `${today}T14:00`, end: `${today}T14:30`, attendees: [jordan], location: "Phone" }, casey);
     add({ title: "Lunch CLE: e-filing update", kind: "other", start: `${today}T12:00`, end: `${today}T13:00`, attendees: [riley, sam], location: "Webinar" }, riley);
   }
+
+  // Milestones on the other matters, on the same dates as the matters' key dates in src/seed.ts.
+  const { m7, m10, m12, m14, m17 } = ids.matters;
+  if (m10 != null && dow(today) !== 0 && dow(today) !== 6)
+    add({ title: "Call with Prairie Wind about distributor minimums", matterId: m10, kind: "meeting", start: `${today}T15:30`, end: `${today}T16:00`, attendees: [jordan] }, jordan);
+  if (m7 != null) add({ title: "Client call: Wheatland Analytics DPA questions", matterId: m7, kind: "meeting", start: `${t1}T11:00`, end: `${t1}T11:30`, attendees: avery != null ? [avery, jordan] : [jordan] }, jordan);
+  if (m12 != null) add({ title: "Closing: Warehouse purchase", matterId: m12, kind: "meeting", start: `${near(5)}T14:00`, end: `${near(5)}T15:30`, attendees: [jordan, casey], location: "Title company conference room" }, jordan);
+  if (m17 != null) {
+    add({ title: "Status conference: Granger v. Flint Hills Dental", matterId: m17, kind: "hearing", start: `${near(7)}T13:30`, end: `${near(7)}T14:00`, attendees: [jordan, sam], location: "District Court, Courtroom 3" }, jordan);
+    add({ title: "Mediation: Granger v. Flint Hills Dental", matterId: m17, kind: "hearing", start: `${near(16)}T09:00`, end: `${near(16)}T16:00`, attendees: [jordan], location: "Mediator's office" }, jordan);
+  }
+  if (m14 != null) add({ title: "Harper signing ceremony", matterId: m14, kind: "meeting", start: `${near(8)}T10:00`, end: `${near(8)}T11:30`, attendees: [jordan, priya ?? casey], location: "Our office" }, jordan);
+  add({ title: "Sunflower Coffee operating agreement signing", matterId: m1, kind: "meeting", start: `${near(9)}T14:00`, end: `${near(9)}T15:00`, attendees: [jordan, sam] }, jordan);
 
   // Out of the office (all-day, several days).
   const away = near(12);
