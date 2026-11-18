@@ -11,6 +11,7 @@ import { isISODate } from "../dates.ts";
 import { dashboard } from "./dashboard.ts";
 import { REPORTS, defaultRange, kindLabel, reportInfo, runReport, type Filters } from "./reports.ts";
 import { toCsv } from "./csv.ts";
+import { ATTORNEYS, filterVisible, hiddenMatterIds } from "../auth/access.ts";
 import { all, hasTables, BILLING_TABLES } from "./util.ts";
 
 function qDate(ctx: Ctx, name: string, what: string) {
@@ -55,13 +56,57 @@ function filters(ctx: Ctx, key: string): Filters {
   };
 }
 
+// Matter restrictions (src/auth/access.ts). Reports are for attorneys and administrators.
+// Rows about a matter hidden from this person are left out and the plain sums re-added;
+// a note says so. Ratios in the totals can't be re-derived from the rows, so they go blank.
+const SUMMED = new Set(["int", "cents", "minutes"]);
+function linkedMatter(row: Record<string, any>): number | null {
+  const m = /^#\/matters\/(\d+)/.exec(row?._links?.matter ?? "");
+  return m ? Number(m[1]) : null;
+}
+function visibleReport(ctx: Ctx, r: ReturnType<typeof runReport>) {
+  const hidden = hiddenMatterIds(ctx.db, ctx.userId);
+  if (!hidden.size) return r;
+  const rows = r.rows.filter((row) => {
+    const m = linkedMatter(row) ?? (typeof row.matter_id === "number" ? row.matter_id : null);
+    return m == null || !hidden.has(m);
+  });
+  if (rows.length === r.rows.length) return r;
+  let totals = r.totals;
+  if (totals) {
+    totals = { ...totals };
+    for (const c of r.columns) {
+      if (typeof totals[c.key] !== "number") continue;
+      totals[c.key] = SUMMED.has(c.type) ? rows.reduce((s, row) => s + (Number(row[c.key]) || 0), 0) : null;
+    }
+  }
+  const n = r.rows.length - rows.length;
+  return { ...r, rows, totals: rows.length ? totals : null, notes: [...r.notes, `${n} ${n === 1 ? "row" : "rows"} about restricted matters you can't see ${n === 1 ? "is" : "are"} left out, and the totals cover only the rows shown.`] };
+}
+/** The firm overview keeps its firm-wide figures, but its lists name no hidden matter. */
+function visibleDashboard(ctx: Ctx, d: ReturnType<typeof dashboard>) {
+  const hidden = hiddenMatterIds(ctx.db, ctx.userId);
+  if (!hidden.size) return d;
+  const keep = (list: any, key: string) => (list ? { ...list, items: list.items.filter((i: any) => i[key] == null || !hidden.has(i[key])) } : list);
+  const a: any = d.attention;
+  return {
+    ...d,
+    attention: {
+      ...a,
+      quiet_matters: keep(a.quiet_matters, "id"),
+      past_due_invoices: keep(a.past_due_invoices, "matter_id"),
+      undecided_conflicts: keep(a.undecided_conflicts, "matter_id"),
+    },
+  };
+}
+
 /** `all=1` asks for no default range (every date). */
 function run(ctx: Ctx) {
   const key = ctx.params.key;
-  return runReport({ db: ctx.db, today: ctx.engine.today() }, key, filters(ctx, key), { useDefaults: ctx.query.get("all") !== "1" });
+  return visibleReport(ctx, runReport({ db: ctx.db, today: ctx.engine.today() }, key, filters(ctx, key), { useDefaults: ctx.query.get("all") !== "1" }));
 }
 
-export const routes: Route[] = [
+const reportRoutes: Route[] = [
   {
     method: "GET",
     path: "/reports",
@@ -90,11 +135,11 @@ export const routes: Route[] = [
           ),
         })),
         people: all(ctx.db, "SELECT id, name, active FROM users ORDER BY active DESC, name"),
-        matters: all(ctx.db, "SELECT id, number, name, status FROM matters ORDER BY status DESC, name"),
+        matters: filterVisible(ctx.db, ctx.userId, all(ctx.db, "SELECT id, number, name, status FROM matters ORDER BY status DESC, name"), "id"),
       };
     },
   },
-  { method: "GET", path: "/reports/dashboard", handler: (ctx) => dashboard(ctx.db, ctx.engine.today()) },
+  { method: "GET", path: "/reports/dashboard", handler: (ctx) => visibleDashboard(ctx, dashboard(ctx.db, ctx.engine.today())) },
   { method: "GET", path: "/reports/:key", handler: (ctx) => run(ctx) },
   {
     method: "GET",
@@ -112,3 +157,6 @@ export const routes: Route[] = [
     },
   },
 ];
+
+/** Firm-wide figures (reports and the firm overview) are for attorneys and administrators. */
+export const routes: Route[] = reportRoutes.map((r) => ({ roles: ATTORNEYS, ...r }));

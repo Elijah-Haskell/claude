@@ -60,8 +60,9 @@ const STYLE = `
   }
 `;
 
-export function renderReport(db: DB, id: number): { html: string; filename: string } {
-  const k = getCheck(db, id) as Row;
+/** `prepare` may rewrite the check before it is shown (the route hides restricted matters with it). */
+export function renderReport(db: DB, id: number, prepare: (k: Row) => Row = (k) => k): { html: string; filename: string } {
+  const k = prepare(getCheck(db, id) as Row);
   const hits = (k.results ?? []) as Row[];
   const counts = bandCounts(hits);
   const matter = k.matterId ? (db.prepare("SELECT number, name FROM matters WHERE id = ?").get(k.matterId) as Row | undefined) : undefined;

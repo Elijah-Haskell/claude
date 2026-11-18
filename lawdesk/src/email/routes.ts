@@ -9,6 +9,7 @@ import { loadConfig, publicSettings, saveSettings, transportFor } from "./settin
 import { cancelOutbox, listOutbox, retryOutbox } from "./outbox.ts";
 import { getPrefs, setPrefs } from "./notify.ts";
 import { runEmailJobs } from "./worker.ts";
+import { assertCanSeeRow, filterVisible } from "../auth/access.ts";
 import { PROVIDERS } from "./transport.ts";
 import {
   deleteCommunication,
@@ -29,6 +30,18 @@ function body(ctx: Ctx): Record<string, any> {
   const b = ctx.body;
   if (!b || typeof b !== "object" || Array.isArray(b)) throw new EngineError("Expected a JSON object");
   return b;
+}
+
+// Matter restrictions (src/auth/access.ts): saved communications and outbox rows by id.
+function commId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "email_comm_log", id, "Communication");
+  return id;
+}
+function outboxId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "email_outbox", id, "Message");
+  return id;
 }
 
 export const routes: Route[] = [
@@ -81,7 +94,7 @@ export const routes: Route[] = [
   {
     method: "GET",
     path: "/email/outbox",
-    handler: (ctx) => listOutbox(ctx.db, { status: ctx.query.get("status") || null, limit: Number(ctx.query.get("limit")) || 50 }),
+    handler: (ctx) => filterVisible(ctx.db, ctx.userId, listOutbox(ctx.db, { status: ctx.query.get("status") || null, limit: Number(ctx.query.get("limit")) || 50 })),
   },
   {
     method: "POST",
@@ -95,7 +108,7 @@ export const routes: Route[] = [
     method: "POST",
     path: "/email/outbox/:id/retry",
     handler: (ctx) => {
-      retryOutbox(ctx.db, intParam(ctx, "id"));
+      retryOutbox(ctx.db, outboxId(ctx));
       return { ok: true };
     },
   },
@@ -103,7 +116,7 @@ export const routes: Route[] = [
     method: "POST",
     path: "/email/outbox/:id/cancel",
     handler: (ctx) => {
-      cancelOutbox(ctx.db, intParam(ctx, "id"));
+      cancelOutbox(ctx.db, outboxId(ctx));
       return { ok: true };
     },
   },
@@ -198,12 +211,12 @@ export const routes: Route[] = [
       return importEml(ctx.db, ctx.engine, docs, { matterId: intParam(ctx, "id"), filename: b.filename, data, userId: ctx.userId });
     },
   },
-  { method: "GET", path: "/communications/:id", handler: (ctx) => getCommunication(ctx.db, intParam(ctx, "id")) },
+  { method: "GET", path: "/communications/:id", handler: (ctx) => getCommunication(ctx.db, commId(ctx)) },
   {
     method: "DELETE",
     path: "/communications/:id",
     handler: (ctx) => {
-      deleteCommunication(ctx.db, ctx.engine, intParam(ctx, "id"), ctx.userId);
+      deleteCommunication(ctx.db, ctx.engine, commId(ctx), ctx.userId);
       return { ok: true };
     },
   },

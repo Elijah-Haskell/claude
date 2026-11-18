@@ -84,8 +84,15 @@ const rows = filterVisible(ctx.db, ctx.userId, rows);      // drops rows whose m
 if (!canSeeMatter(ctx.db, ctx.userId, matterId)) { ... }   // plain yes/no
 ```
 
-The tasks routes (matters, tasks, My tasks, Firm tasks, activity) already do this; billing, documents,
-calendar, conflicts and the rest should adopt it.
+The server itself refuses (404) any non-public route that names a hidden matter as a `/matters/:x`
+path segment, a `matterId` or `matter` query parameter, or a `matterId` in the JSON body
+(`assertMatterAccess` in `src/auth/guard.ts`). Rows looked up by their own id use
+`assertCanSeeRow(db, userId, "billing_invoices", id, "Invoice")`, and lists use `filterVisible`.
+Every module does this (tests in `tests/auth/matter-access.test.ts`). Conflict checks still search
+restricted matters, but name them only as "a restricted matter" (`maskHiddenInvolvements`).
+Trust, reports and the firm overview are `roles: ATTORNEYS`. Gaps: trust account-level views
+(journal, balances, reconciliation) stay whole because reconciliation needs every ledger; the
+calendar `.ics` feed and free/busy are not filtered.
 
 Quick-add understands dates (`fri`, `tomorrow`, `11/20`,
 `in 3 days`, `+5bd`), `@person`, `#matter-number` and `!high`.

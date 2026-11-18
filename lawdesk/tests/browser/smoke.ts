@@ -237,6 +237,23 @@ for (const [label, viewport] of [
     assert.ok(await page.locator(".matter-facts .fact").count() >= 4, "key facts in the header");
     await noHorizontalScroll();
     await shot("matter");
+    // Overview is a summary: "Next up" rows are links, and every .task row is in the Tasks tab.
+    await page.waitForSelector(".matter-next .matter-sum-row");
+    assert.equal(await page.locator("#tab-panel-overview .task").count(), 0, "no task rows on Overview");
+    assert.equal(await page.locator(".task").count(), await page.locator("#tab-panel-tasks .task").count());
+    await page.waitForSelector(".matter-money .matter-sum-row");
+    await page.waitForSelector("#tab-panel-overview .cc-status-card");
+    const first = await page.locator(".matter-next .matter-sum-title").first().innerText();
+    await page.locator(".matter-next .matter-sum-row").first().click();
+    await page.waitForSelector("#tab-panel-tasks:not([hidden]) .checklist-group");
+    await page.waitForFunction((t: string) => document.activeElement?.classList.contains("task") && document.activeElement.textContent!.includes(t), first);
+    // Module tabs have their own URLs; "documents" stays the full documents page.
+    for (const [tab, sel] of [["billing", "#matter-billing"], ["files", ".docs-card"], ["calendar", ".cal-upcoming"], ["communications", "#communications"]]) {
+      await page.locator(`.tab[data-tab=${tab}]`).click();
+      await page.waitForSelector(`#tab-panel-${tab}:not([hidden]) ${sel}`);
+      assert.match(page.url(), new RegExp(`/${tab}$`));
+      await noHorizontalScroll();
+    }
     await page.locator(".tab", { hasText: "Tasks" }).click();
     await page.waitForSelector("#tab-panel-tasks:not([hidden]) .checklist-group");
     assert.match(page.url(), /\/tasks$/);
@@ -259,6 +276,21 @@ for (const [label, viewport] of [
     await page.waitForSelector(".stage-bar");
     await page.locator(".stage", { hasText: "Review" }).click();
     await page.waitForSelector("#tab-panel-tasks .checklist-group:has-text('Contract review')");
+  });
+
+  await check(`${label}: who can see this matter: restrict, then let everyone see it`, async () => {
+    await page.goto(base + `/#/matters/${demo.matters.m17}`);
+    await page.locator(".matter-access button", { hasText: "Restrict access" }).click();
+    const dlg = page.locator("dialog[open]");
+    await dlg.locator("label.check-line", { hasText: "Sam Patel" }).locator("input").check();
+    await noHorizontalScroll();
+    await dlg.locator("button[type=submit]").click();
+    await page.waitForSelector(".matter-access .matter-access-list:has-text('Sam Patel')");
+    assert.match(await page.locator(".matter-access").innerText(), /Restricted/);
+    await page.locator(".matter-access button", { hasText: "Change who can see it" }).click();
+    await page.locator("dialog[open] button", { hasText: "Let everyone see it" }).click();
+    await page.waitForSelector(".matter-access:has-text('Everyone at the firm')");
+    await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
   });
 
   await check(`${label}: checklists list`, async () => {
@@ -355,7 +387,7 @@ for (const [label, viewport] of [
 
   let invoiceUrl = "";
   await check(`${label}: billing matter card starts an invoice; edit, write down, discount, finalize`, async () => {
-    await page.goto(base + `/#/matters/${demo.matters.m2}`);
+    await page.goto(base + `/#/matters/${demo.matters.m2}/billing`);
     await page.waitForSelector("#matter-billing .bl-mc-row");
     assert.match(await page.locator("#matter-billing").innerText(), /Unbilled time/);
     await page.click("#mc-start-invoice");
@@ -463,7 +495,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: billing Log time from a task's menu links the task`, async () => {
-    await page.goto(base + `/#/matters/${demo.matters.m2}`);
+    await page.goto(base + `/#/matters/${demo.matters.m2}/tasks`);
     await page.waitForSelector(".task:has-text('indemnity cap')");
     const row = page.locator(".task", { hasText: "Call client about the indemnity cap" });
     await row.locator(".more").click();
@@ -631,11 +663,8 @@ for (const [label, viewport] of [
     await page.locator("#dl-add").click();
     await page.waitForSelector(".dl-added");
     assert.ok(await page.locator(".dl-disclaimer").isVisible(), "disclaimer still visible");
-    await page.goto(base + `/#/matters/${demo.matters.m2}`);
+    await page.goto(base + `/#/matters/${demo.matters.m2}/calendar`);
     await page.waitForSelector(`.cal-upcoming .cal-line:has-text("Interrogatory answers due ${label}")`);
-    const task = page.locator("#tab-panel-overview .task", { hasText: `Interrogatory answers due ${label}` });
-    await task.waitFor();
-    assert.ok(await task.evaluate((e) => e.classList.contains("prio-high")), "high-priority task");
     await page.evaluate(() => document.querySelector(".toasts")?.replaceChildren());
     await page.screenshot({ path: shots + `matter-upcoming-${label}.png`, fullPage: true });
     await page.locator(".cal-upcoming .cal-line", { hasText: `Interrogatory answers due ${label}` }).locator("button").click();
@@ -643,6 +672,10 @@ for (const [label, viewport] of [
     assert.match(notes, /How it was computed/);
     assert.match(notes, /VERIFY THIS DATE/);
     await page.locator("dialog.cal-dialog .modal-head button").click();
+    await page.locator(".tab", { hasText: "Tasks" }).click();
+    const task = page.locator(".task", { hasText: `Interrogatory answers due ${label}` });
+    await task.waitFor();
+    assert.ok(await task.evaluate((e) => e.classList.contains("prio-high")), "high-priority task");
   });
 
   await check(`${label}: firm overview shows figures, charts and lists that link to fixes`, async () => {
@@ -724,11 +757,13 @@ for (const [label, viewport] of [
     await sam.waitForSelector(".task");
     assert.equal(await sam.locator(".nav-link", { hasText: "Reports" }).count(), 0);
     assert.equal(await sam.locator(".nav-link", { hasText: "Firm overview" }).count(), 0);
+    assert.equal(await sam.locator(".nav-link", { hasText: "Trust" }).count(), 0, "staff don't see Trust");
+    assert.equal((await sam.request.get(base + "/api/trust/accounts")).status(), 403, "the server refuses trust to staff");
     await samCtx.close();
   });
 
   await check(`${label}: matter communications: log a call, write an email, file a saved email`, async () => {
-    await page.goto(base + `/#/matters/${demo.matters.m1}`);
+    await page.goto(base + `/#/matters/${demo.matters.m1}/communications`);
     await page.waitForSelector("#communications .comms-toolbar");
     await page.locator("#communications button", { hasText: "Log a call or meeting" }).click();
     await page.locator("dialog[open] input[aria-label='With']").fill(`Client call ${label}`);
@@ -1006,7 +1041,7 @@ for (const [label, viewport] of [
   // ---------------------------------------------------------------- documents
 
   await check(`${label}: matter page shows the Documents card`, async () => {
-    await page.goto(base + `/#/matters/${demo.matters.m4}`);
+    await page.goto(base + `/#/matters/${demo.matters.m4}/files`);
     await page.waitForSelector(".docs-card .doc-mini li");
     assert.ok((await page.locator(".docs-card .doc-mini li").count()) >= 3);
     await page.locator(".docs-card a.docs-all").click();
@@ -1155,7 +1190,7 @@ for (const [label, viewport] of [
   });
 
   await check(`${label}: create from template warns about blanks, then opens the new document`, async () => {
-    await page.goto(base + `/#/matters/${demo.matters.m5}`);
+    await page.goto(base + `/#/matters/${demo.matters.m5}/files`);
     await page.locator(".docs-card button", { hasText: "Create from template" }).click();
     await page.locator("dialog select[aria-label=Template]").selectOption({ label: `Cover note ${label}` });
     await page.waitForSelector("dialog .check-warn:has-text('Filing date')");

@@ -1,0 +1,171 @@
+/* The matter page (case file): Overview summaries, module tabs and the access card.
+   Loaded by views/matter.js with useStyles("matter"). Tokens only. */
+
+/* ------------------------------------------------------------ overview */
+.matter-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+  align-items: start;
+}
+.matter-overview-side {
+  display: grid;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+.matter-overview > * {
+  min-width: 0;
+}
+.matter-overview .card-body:has(> .matter-sum-list),
+.matter-overview .card-body:has(> .matter-sum-body > .matter-sum-list) {
+  padding-top: var(--sp-1);
+  padding-bottom: var(--sp-2);
+}
+
+/* A short summary list: each row is a link to where the work is done. */
+.matter-sum-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.matter-sum-list > li + li {
+  border-top: 1px solid var(--border);
+}
+.matter-sum-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-1);
+  margin: 0 calc(-1 * var(--sp-1));
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-decoration: none;
+  min-width: 0;
+}
+a.matter-sum-row:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+a.matter-sum-row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.matter-sum-lead {
+  flex: none;
+  display: inline-flex;
+  color: var(--muted);
+}
+.matter-sum-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.matter-sum-title {
+  font-size: var(--fs-md);
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.matter-sum-sub {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.matter-sum-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.matter-sum-value {
+  flex: none;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  text-align: right;
+}
+.matter-sum-value.tone-danger {
+  color: var(--danger);
+}
+.matter-sum-value.tone-warning {
+  color: var(--warning);
+}
+.matter-sum-more {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+}
+
+/* ---------------------------------------------------------- module tabs */
+.matter-tab-stack {
+  display: grid;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+.matter-tab-stack > * {
+  min-width: 0;
+  margin: 0;
+}
+.matter-tab-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+  align-items: start;
+}
+.matter-tab-pair > * {
+  min-width: 0;
+  margin: 0;
+}
+.matter-tab-note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------- access (rail) */
+.matter-access-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.matter-access-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 var(--sp-2) !important;
+  font-size: var(--fs-sm);
+}
+.matter-access-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.matter-access-actions {
+  margin-top: var(--sp-3);
+}
+.matter-access-pick {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.matter-access-pick legend {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  margin-bottom: var(--sp-2);
+}
+.matter-access-lift {
+  margin-right: auto;
+}
+
+@media (max-width: 900px) {
+  .matter-overview,
+  .matter-tab-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

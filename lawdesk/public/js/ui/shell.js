@@ -178,10 +178,11 @@ function sortedSections() {
   return names.map((n) => [n, sections.get(n)]);
 }
 
-/** NAV entries with audience "firm" (firm-wide figures) show to attorneys and administrators.
- * A convenience, not a permission: the server decides what each access level may read. */
+/** NAV entries with audience "firm" (firm-wide figures) or "attorneys" (client trust money)
+ * show only to attorneys and administrators, in the sidebar and the search palette.
+ * A convenience, not a permission: the server refuses those routes to staff (roles: ATTORNEYS). */
 function canSee(n) {
-  if (n.audience !== "firm") return true;
+  if (n.audience !== "firm" && n.audience !== "attorneys") return true;
   const role = state.account?.role;
   return !role || role === "admin" || role === "attorney";
 }
@@ -427,7 +428,7 @@ function openPalette() {
     const q = input.value.trim().toLowerCase();
     const words = q.split(/\s+/).filter(Boolean);
     const groups = [];
-    const pages = navItems.filter((n) => !words.length || score(n.label, words)).slice(0, words.length ? 4 : 6);
+    const pages = navItems.filter(canSee).filter((n) => !words.length || score(n.label, words)).slice(0, words.length ? 4 : 6);
     if (pages.length) groups.push(["Go to", pages.map((n) => ({ icon: n.icon || DEFAULT_ICON, title: n.label, sub: null, href: n.href }))]);
     if (paletteData) {
       const pick = (list, text, n) => (words.length ? list.filter((x) => score(text(x), words)) : list).slice(0, n);

@@ -6,6 +6,7 @@ import { EngineError } from "../engine.ts";
 import { Billing } from "./billing.ts";
 import { aging, billedVsCollected, unbilledTime, wip } from "./reports.ts";
 import { renderInvoiceHtml } from "./render.ts";
+import { assertCanSeeRow, filterVisible, hiddenMatterIds } from "../auth/access.ts";
 
 /** Wall clock used for timers and timestamps. Tests replace `clock.now`. */
 export const clock = { now: () => new Date() };
@@ -55,6 +56,69 @@ export function printablePage(html: string) {
 
 const body = (ctx: Ctx) => (ctx.body && typeof ctx.body === "object" ? ctx.body : {});
 
+// Matter restrictions (src/auth/access.ts). The server already refuses a hidden matter named
+// as :matterId, ?matterId= or a body matterId; these cover rows looked up by their own id
+// and lists that span matters.
+const rowId = (table: string, what: string) => (ctx: Ctx) => {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, table, id, what);
+  return id;
+};
+const timeId = rowId("billing_time_entries", "Time entry");
+const expenseId = rowId("billing_expenses", "Expense");
+const invoiceId = rowId("billing_invoices", "Invoice");
+const paymentId = rowId("billing_payments", "Payment");
+const visible = <T extends Record<string, any>>(ctx: Ctx, rows: T[]) => filterVisible(ctx.db, ctx.userId, rows);
+const sumOf = (rows: Record<string, any>[], key: string) => rows.reduce((s, r) => s + (r[key] ?? 0), 0);
+
+/** A payment's allocations name invoices; each must be on a matter this person can see. */
+function checkAllocations(ctx: Ctx) {
+  const allocs = body(ctx).allocations;
+  if (!Array.isArray(allocs)) return;
+  for (const a of allocs) if (Number.isInteger(a?.invoiceId)) assertCanSeeRow(ctx.db, ctx.userId, "billing_invoices", a.invoiceId, "Invoice");
+}
+
+/** Invoice ids on matters hidden from this person (for client-level views that list invoices). */
+function hiddenInvoices(ctx: Ctx): Set<number> {
+  const hidden = hiddenMatterIds(ctx.db, ctx.userId);
+  if (!hidden.size) return new Set();
+  const rows = ctx.db.prepare(`SELECT id FROM billing_invoices WHERE matter_id IN (${[...hidden].map(() => "?").join(",")})`).all(...hidden) as { id: number }[];
+  return new Set(rows.map((r) => r.id));
+}
+
+/** A client's statement keeps every amount (the running balance is the client's), but names no hidden matter. */
+function maskStatement(ctx: Ctx, s: Record<string, any>) {
+  const hidden = hiddenInvoices(ctx);
+  if (!hidden.size) return s;
+  // "Invoice 12 (Matter name)" / "Invoice 12 voided: reason" -> "Invoice 12 (restricted matter)"
+  const mask = (r: Record<string, any>) =>
+    r && hidden.has(r.invoice_id ?? -1) && typeof r.description === "string"
+      ? { ...r, description: r.description.replace(/\s*[(:].*$/s, "") + " (restricted matter)" }
+      : r;
+  const out: Record<string, any> = { ...s };
+  for (const k of Object.keys(out)) if (Array.isArray(out[k])) out[k] = out[k].map(mask);
+  return out;
+}
+
+/** Accounts receivable aging without invoices on hidden matters; client and firm totals follow. */
+function agingFor(ctx: Ctx, a: ReturnType<typeof aging>) {
+  const hidden = hiddenInvoices(ctx);
+  if (!hidden.size) return a;
+  const buckets = ["current", "d1_30", "d31_60", "d61_90", "d90_plus", "total"] as const;
+  const totals: Record<string, number> = Object.fromEntries(buckets.map((k) => [k, 0]));
+  const rows = [];
+  for (const c of a.rows) {
+    const invoices = c.invoices.filter((i: any) => !hidden.has(i.id));
+    if (!invoices.length) continue;
+    const row: Record<string, any> = { ...c, invoices };
+    for (const k of buckets) row[k] = 0;
+    for (const i of invoices) (row[i.bucket] += i.balance_cents), (row.total += i.balance_cents);
+    for (const k of buckets) totals[k] += row[k];
+    rows.push(row);
+  }
+  return { ...a, rows, totals };
+}
+
 export const routes: Route[] = [
   // ------------------------------------------------------------ settings & rates
   { method: "GET", path: "/billing/settings", handler: (ctx) => billing(ctx).settings() },
@@ -89,38 +153,38 @@ export const routes: Route[] = [
     method: "GET",
     path: "/billing/time",
     handler: (ctx) =>
-      billing(ctx).listTime({ matterId: qInt(ctx, "matterId"), userId: qInt(ctx, "userId"), from: qStr(ctx, "from"), to: qStr(ctx, "to"), status: qStatus(ctx) }),
+      visible(ctx, billing(ctx).listTime({ matterId: qInt(ctx, "matterId"), userId: qInt(ctx, "userId"), from: qStr(ctx, "from"), to: qStr(ctx, "to"), status: qStatus(ctx) })),
   },
   { method: "POST", path: "/billing/time", handler: (ctx) => billing(ctx).addTime({ userId: ctx.userId, ...body(ctx) }, ctx.userId) },
-  { method: "GET", path: "/billing/time/:id", handler: (ctx) => billing(ctx).timeEntry(intParam(ctx, "id")) },
-  { method: "PATCH", path: "/billing/time/:id", handler: (ctx) => billing(ctx).updateTime(intParam(ctx, "id"), body(ctx), ctx.userId) },
+  { method: "GET", path: "/billing/time/:id", handler: (ctx) => billing(ctx).timeEntry(timeId(ctx)) },
+  { method: "PATCH", path: "/billing/time/:id", handler: (ctx) => billing(ctx).updateTime(timeId(ctx), body(ctx), ctx.userId) },
   {
     method: "DELETE",
     path: "/billing/time/:id",
     handler: (ctx) => {
-      billing(ctx).deleteTime(intParam(ctx, "id"));
+      billing(ctx).deleteTime(timeId(ctx));
       return { ok: true };
     },
   },
-  { method: "GET", path: "/billing/timers", handler: (ctx) => billing(ctx).runningTimers(qInt(ctx, "userId")) },
+  { method: "GET", path: "/billing/timers", handler: (ctx) => visible(ctx, billing(ctx).runningTimers(qInt(ctx, "userId"))) },
   { method: "POST", path: "/billing/timers", handler: (ctx) => billing(ctx).startTimer({ input: { userId: ctx.userId, ...body(ctx) } }, ctx.userId) },
-  { method: "POST", path: "/billing/time/:id/start", handler: (ctx) => billing(ctx).startTimer({ entryId: intParam(ctx, "id") }, ctx.userId) },
-  { method: "POST", path: "/billing/time/:id/stop", handler: (ctx) => billing(ctx).stopTimer(intParam(ctx, "id")) },
+  { method: "POST", path: "/billing/time/:id/start", handler: (ctx) => billing(ctx).startTimer({ entryId: timeId(ctx) }, ctx.userId) },
+  { method: "POST", path: "/billing/time/:id/stop", handler: (ctx) => billing(ctx).stopTimer(timeId(ctx)) },
 
   // --------------------------------------------------------------- expenses
   {
     method: "GET",
     path: "/billing/expenses",
-    handler: (ctx) => billing(ctx).listExpenses({ matterId: qInt(ctx, "matterId"), from: qStr(ctx, "from"), to: qStr(ctx, "to"), status: qStatus(ctx) }),
+    handler: (ctx) => visible(ctx, billing(ctx).listExpenses({ matterId: qInt(ctx, "matterId"), from: qStr(ctx, "from"), to: qStr(ctx, "to"), status: qStatus(ctx) })),
   },
   { method: "POST", path: "/billing/expenses", handler: (ctx) => billing(ctx).addExpense(body(ctx), ctx.userId) },
-  { method: "GET", path: "/billing/expenses/:id", handler: (ctx) => billing(ctx).expense(intParam(ctx, "id")) },
-  { method: "PATCH", path: "/billing/expenses/:id", handler: (ctx) => billing(ctx).updateExpense(intParam(ctx, "id"), body(ctx)) },
+  { method: "GET", path: "/billing/expenses/:id", handler: (ctx) => billing(ctx).expense(expenseId(ctx)) },
+  { method: "PATCH", path: "/billing/expenses/:id", handler: (ctx) => billing(ctx).updateExpense(expenseId(ctx), body(ctx)) },
   {
     method: "DELETE",
     path: "/billing/expenses/:id",
     handler: (ctx) => {
-      billing(ctx).deleteExpense(intParam(ctx, "id"));
+      billing(ctx).deleteExpense(expenseId(ctx));
       return { ok: true };
     },
   },
@@ -129,16 +193,16 @@ export const routes: Route[] = [
   {
     method: "GET",
     path: "/billing/invoices",
-    handler: (ctx) => billing(ctx).listInvoices({ matterId: qInt(ctx, "matterId"), clientId: qInt(ctx, "clientId"), status: qStr(ctx, "status") }),
+    handler: (ctx) => visible(ctx, billing(ctx).listInvoices({ matterId: qInt(ctx, "matterId"), clientId: qInt(ctx, "clientId"), status: qStr(ctx, "status") })),
   },
   { method: "POST", path: "/billing/invoices", handler: (ctx) => billing(ctx).createDraft(body(ctx), ctx.userId) },
-  { method: "GET", path: "/billing/invoices/:id", handler: (ctx) => billing(ctx).invoice(intParam(ctx, "id")) },
+  { method: "GET", path: "/billing/invoices/:id", handler: (ctx) => billing(ctx).invoice(invoiceId(ctx)) },
   {
     method: "GET",
     path: "/billing/invoices/:id/html",
     handler: (ctx) => {
       const b = billing(ctx);
-      return { html: renderInvoiceHtml(b.invoice(intParam(ctx, "id")), b.settings()) };
+      return { html: renderInvoiceHtml(b.invoice(invoiceId(ctx)), b.settings()) };
     },
   },
   {
@@ -149,58 +213,58 @@ export const routes: Route[] = [
     path: "/billing/invoices/:id/print",
     handler: (ctx) => {
       const b = billing(ctx);
-      return printablePage(renderInvoiceHtml(b.invoice(intParam(ctx, "id")), b.settings()));
+      return printablePage(renderInvoiceHtml(b.invoice(invoiceId(ctx)), b.settings()));
     },
   },
-  { method: "PATCH", path: "/billing/invoices/:id", handler: (ctx) => billing(ctx).updateDraft(intParam(ctx, "id"), body(ctx), ctx.userId) },
+  { method: "PATCH", path: "/billing/invoices/:id", handler: (ctx) => billing(ctx).updateDraft(invoiceId(ctx), body(ctx), ctx.userId) },
   {
     method: "DELETE",
     path: "/billing/invoices/:id",
     handler: (ctx) => {
-      billing(ctx).deleteDraft(intParam(ctx, "id"), ctx.userId);
+      billing(ctx).deleteDraft(invoiceId(ctx), ctx.userId);
       return { ok: true };
     },
   },
-  { method: "POST", path: "/billing/invoices/:id/lines", handler: (ctx) => billing(ctx).addLine(intParam(ctx, "id"), body(ctx)) },
+  { method: "POST", path: "/billing/invoices/:id/lines", handler: (ctx) => billing(ctx).addLine(invoiceId(ctx), body(ctx)) },
   {
     method: "PATCH",
     path: "/billing/invoices/:id/lines/:lineId",
-    handler: (ctx) => billing(ctx).updateLine(intParam(ctx, "id"), intParam(ctx, "lineId"), body(ctx)),
+    handler: (ctx) => billing(ctx).updateLine(invoiceId(ctx), intParam(ctx, "lineId"), body(ctx)),
   },
   {
     method: "DELETE",
     path: "/billing/invoices/:id/lines/:lineId",
     handler: (ctx) => {
-      billing(ctx).removeLine(intParam(ctx, "id"), intParam(ctx, "lineId"));
+      billing(ctx).removeLine(invoiceId(ctx), intParam(ctx, "lineId"));
       return { ok: true };
     },
   },
   {
     method: "POST",
     path: "/billing/invoices/:id/lines/:lineId/write-down",
-    handler: (ctx) => billing(ctx).writeDownLine(intParam(ctx, "id"), intParam(ctx, "lineId"), body(ctx), ctx.userId),
+    handler: (ctx) => billing(ctx).writeDownLine(invoiceId(ctx), intParam(ctx, "lineId"), body(ctx), ctx.userId),
   },
-  { method: "POST", path: "/billing/invoices/:id/finalize", handler: (ctx) => billing(ctx).finalize(intParam(ctx, "id"), ctx.userId) },
-  { method: "POST", path: "/billing/invoices/:id/void", handler: (ctx) => billing(ctx).void(intParam(ctx, "id"), body(ctx).reason, ctx.userId) },
-  { method: "POST", path: "/billing/invoices/:id/payments", handler: (ctx) => billing(ctx).payInvoice(intParam(ctx, "id"), body(ctx), ctx.userId) },
+  { method: "POST", path: "/billing/invoices/:id/finalize", handler: (ctx) => billing(ctx).finalize(invoiceId(ctx), ctx.userId) },
+  { method: "POST", path: "/billing/invoices/:id/void", handler: (ctx) => billing(ctx).void(invoiceId(ctx), body(ctx).reason, ctx.userId) },
+  { method: "POST", path: "/billing/invoices/:id/payments", handler: (ctx) => billing(ctx).payInvoice(invoiceId(ctx), body(ctx), ctx.userId) },
   {
     method: "POST",
     path: "/billing/invoices/:id/apply-credit",
-    handler: (ctx) => billing(ctx).applyCredit(intParam(ctx, "id"), body(ctx).amountCents ?? null, ctx.userId),
+    handler: (ctx) => billing(ctx).applyCredit(invoiceId(ctx), body(ctx).amountCents ?? null, ctx.userId),
   },
-  { method: "POST", path: "/billing/invoices/:id/write-off", handler: (ctx) => billing(ctx).writeOffBalance(intParam(ctx, "id"), body(ctx), ctx.userId) },
+  { method: "POST", path: "/billing/invoices/:id/write-off", handler: (ctx) => billing(ctx).writeOffBalance(invoiceId(ctx), body(ctx), ctx.userId) },
 
   // --------------------------------------------------------------- payments
-  { method: "GET", path: "/billing/payments", handler: (ctx) => billing(ctx).listPayments({ clientId: qInt(ctx, "clientId") }) },
-  { method: "POST", path: "/billing/payments", handler: (ctx) => billing(ctx).recordPayment(body(ctx), ctx.userId) },
-  { method: "GET", path: "/billing/payments/:id", handler: (ctx) => billing(ctx).payment(intParam(ctx, "id")) },
-  { method: "POST", path: "/billing/payments/:id/void", handler: (ctx) => billing(ctx).voidPayment(intParam(ctx, "id"), body(ctx).reason, ctx.userId) },
+  { method: "GET", path: "/billing/payments", handler: (ctx) => visible(ctx, billing(ctx).listPayments({ clientId: qInt(ctx, "clientId") })) },
+  { method: "POST", path: "/billing/payments", handler: (ctx) => (checkAllocations(ctx), billing(ctx).recordPayment(body(ctx), ctx.userId)) },
+  { method: "GET", path: "/billing/payments/:id", handler: (ctx) => billing(ctx).payment(paymentId(ctx)) },
+  { method: "POST", path: "/billing/payments/:id/void", handler: (ctx) => billing(ctx).voidPayment(paymentId(ctx), body(ctx).reason, ctx.userId) },
 
   // ---------------------------------------------------------------- clients
   {
     method: "GET",
     path: "/billing/clients/:clientId/statement",
-    handler: (ctx) => billing(ctx).statement(intParam(ctx, "clientId"), qStr(ctx, "from"), qStr(ctx, "to")),
+    handler: (ctx) => maskStatement(ctx, billing(ctx).statement(intParam(ctx, "clientId"), qStr(ctx, "from"), qStr(ctx, "to"))),
   },
   {
     method: "GET",
@@ -209,14 +273,27 @@ export const routes: Route[] = [
   },
 
   // ---------------------------------------------------------------- reports
-  { method: "GET", path: "/billing/reports/aging", handler: (ctx) => aging(billing(ctx), qStr(ctx, "asOf")) },
+  { method: "GET", path: "/billing/reports/aging", handler: (ctx) => agingFor(ctx, aging(billing(ctx), qStr(ctx, "asOf"))) },
   {
     method: "GET",
     path: "/billing/reports/unbilled",
-    handler: (ctx) =>
-      unbilledTime(billing(ctx), { from: qStr(ctx, "from"), to: qStr(ctx, "to"), matterId: qInt(ctx, "matterId"), userId: qInt(ctx, "userId") }),
+    handler: (ctx) => {
+      const r = unbilledTime(billing(ctx), { from: qStr(ctx, "from"), to: qStr(ctx, "to"), matterId: qInt(ctx, "matterId"), userId: qInt(ctx, "userId") });
+      const rows = visible(ctx, r.rows);
+      if (rows.length === r.rows.length) return r;
+      return { rows, totals: { minutes: sumOf(rows, "minutes"), billed_minutes: sumOf(rows, "billed_minutes"), value_cents: sumOf(rows, "value_cents") } };
+    },
   },
-  { method: "GET", path: "/billing/reports/wip", handler: (ctx) => wip(billing(ctx), { matterId: qInt(ctx, "matterId") }) },
+  {
+    method: "GET",
+    path: "/billing/reports/wip",
+    handler: (ctx) => {
+      const r = wip(billing(ctx), { matterId: qInt(ctx, "matterId") });
+      const rows = visible(ctx, r.rows);
+      if (rows.length === r.rows.length) return r;
+      return { rows, totals: Object.fromEntries(Object.keys(r.totals).map((k) => [k, sumOf(rows, k)])) };
+    },
+  },
   {
     method: "GET",
     path: "/billing/reports/billed-vs-collected",

@@ -6,7 +6,7 @@ import type { DB } from "../db.ts";
 import { EngineError } from "../engine.ts";
 import type { Route } from "../http.ts";
 import { sessionFromToken, LIMITS, type SessionInfo } from "./accounts.ts";
-import { STAFF } from "./access.ts";
+import { STAFF, assertCanSeeMatter, matterIdsInRequest } from "./access.ts";
 
 export const COOKIE = "lawdesk_session";
 /** Non-GET requests must carry this header. A plain HTML form or a cross-site page can't set it. */
@@ -79,4 +79,16 @@ export function authorize(route: Route & { module?: string }, who: Who | null, r
   if (who.mustChangePassword && route.module !== "auth") throw new EngineError("Choose a new password before continuing.", 403);
   const roles = route.roles ?? STAFF;
   if (!roles.includes(who.role)) throw new EngineError("Your account doesn't have access to this. Ask an administrator if you need it.", 403);
+}
+
+/**
+ * Matter restrictions for every module: a non-public route that names a matter in its path
+ * (`/matters/:id/...`, `/billing/matters/:matterId`), its query (`matterId`, `matter`) or its
+ * JSON body (`matterId`) answers 404 "Matter not found" when that matter is hidden from this
+ * person. Rows looked up by their own id (an invoice, a document) and lists still need the
+ * module's own check: assertCanSeeRow / filterVisible in access.ts.
+ */
+export function assertMatterAccess(db: DB, route: Route, who: Who | null, params: Record<string, string>, query: URLSearchParams, body: unknown) {
+  if (route.public || !who) return;
+  for (const id of matterIdsInRequest(route.path, params, query, body)) assertCanSeeMatter(db, who.userId, id);
 }

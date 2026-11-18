@@ -9,6 +9,7 @@ import { openDb } from "../../src/db.ts";
 import { createServer } from "../../src/server.ts";
 import { seed } from "../../src/seed.ts";
 import { today } from "../../src/dates.ts";
+import { createSession } from "../../src/auth/accounts.ts";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
@@ -25,8 +26,10 @@ const ctx = await browser.newContext({ viewport: { width: Number(width), height:
 const page = await ctx.newPage();
 page.on("console", (m: any) => m.type() === "error" && console.log("console:", m.text()));
 page.on("response", (r: any) => r.status() >= 400 && console.log("HTTP", r.status(), r.url()));
-await page.addInitScript((id: number) => localStorage.setItem("lawdesk.me", String(id)), demo.users.jordan);
-await page.goto(base + "/" + hash.replace(/m17/, String(demo.matters.m17)).replace(/m4/, String(demo.matters.m4)));
+// Signed in as Jordan (admin), or LOOK_AS=sam (any demo person) to see another access level.
+await ctx.addCookies([{ name: "lawdesk_session", value: createSession(db, (demo.users as any)[process.env.LOOK_AS || "jordan"]).token, url: base }]);
+// "#/matters/m2" opens the demo matter m2, whatever its id.
+await page.goto(base + "/" + hash.replace(/\/m(\d+)\b/, (_, n) => "/" + String((demo.matters as any)["m" + n])));
 await page.waitForTimeout(900);
 if (action === "palette") {
   await page.keyboard.press("Control+k");

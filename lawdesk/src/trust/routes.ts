@@ -5,6 +5,7 @@ import { type Ctx, type Route, intParam } from "../http.ts";
 import { EngineError } from "../engine.ts";
 import { isISODate } from "../dates.ts";
 import { Trust } from "./trust.ts";
+import { ATTORNEYS, assertCanSeeMatter, assertCanSeeRow, filterVisible } from "../auth/access.ts";
 import { GAPS, RETENTION_YEARS, RULES, SOURCES } from "./rules.ts";
 import { balancesHtml, historyHtml, journalHtml, ledgerStatementHtml, reconciliationHtml, rulesHtml } from "./render.ts";
 
@@ -46,7 +47,26 @@ function html(page: string) {
 
 const matter = (b: any, key = "matterId") => b[key];
 
-export const routes: Route[] = [
+// Matter restrictions (src/auth/access.ts). A matterId in the body is checked by the server;
+// these cover ledgers by id, invoices named in a fee transfer and both sides of a transfer.
+// Account-level views (journal, balances, reconciliation) stay whole: reconciling the
+// account needs every client ledger, and trust is limited to attorneys and administrators.
+function ledgerId(ctx: Ctx): number {
+  const id = intParam(ctx, "id");
+  assertCanSeeRow(ctx.db, ctx.userId, "trust_ledgers", id, "Ledger");
+  return id;
+}
+function invoiceOf(ctx: Ctx) {
+  const id = body(ctx).invoiceId;
+  if (Number.isInteger(id)) assertCanSeeRow(ctx.db, ctx.userId, "billing_invoices", id, "Invoice");
+  return id;
+}
+function seeMatter(ctx: Ctx, id: unknown) {
+  if (Number.isInteger(id)) assertCanSeeMatter(ctx.db, ctx.userId, id as number);
+  return id as number;
+}
+
+const trustRoutes: Route[] = [
   {
     method: "GET",
     path: "/trust/rules",
@@ -67,7 +87,7 @@ export const routes: Route[] = [
   {
     method: "GET",
     path: "/trust/accounts/:id/ledgers",
-    handler: (ctx) => trust(ctx).listLedgers(intParam(ctx, "id"), { includeZero: ctx.query.get("all") === "1" }),
+    handler: (ctx) => filterVisible(ctx.db, ctx.userId, trust(ctx).listLedgers(intParam(ctx, "id"), { includeZero: ctx.query.get("all") === "1" })),
   },
 
   // ------------------------------------------------------------- entries
@@ -84,12 +104,12 @@ export const routes: Route[] = [
   {
     method: "POST",
     path: "/trust/accounts/:id/fee-transfers",
-    handler: (ctx) => trust(ctx).transferFee(intParam(ctx, "id"), body(ctx).invoiceId, body(ctx), ctx.userId),
+    handler: (ctx) => trust(ctx).transferFee(intParam(ctx, "id"), invoiceOf(ctx), body(ctx), ctx.userId),
   },
   {
     method: "POST",
     path: "/trust/accounts/:id/ledger-transfers",
-    handler: (ctx) => trust(ctx).transferBetween(intParam(ctx, "id"), body(ctx).fromMatterId, body(ctx).toMatterId, body(ctx), ctx.userId),
+    handler: (ctx) => trust(ctx).transferBetween(intParam(ctx, "id"), seeMatter(ctx, body(ctx).fromMatterId), seeMatter(ctx, body(ctx).toMatterId), body(ctx), ctx.userId),
   },
   { method: "POST", path: "/trust/accounts/:id/firm-deposits", handler: (ctx) => trust(ctx).firmDeposit(intParam(ctx, "id"), body(ctx), ctx.userId) },
   { method: "POST", path: "/trust/accounts/:id/firm-withdrawals", handler: (ctx) => trust(ctx).firmWithdrawal(intParam(ctx, "id"), body(ctx), ctx.userId) },
@@ -104,13 +124,13 @@ export const routes: Route[] = [
   },
 
   // -------------------------------------------------------------- ledgers
-  { method: "GET", path: "/trust/ledgers/:id", handler: (ctx) => trust(ctx).ledger(intParam(ctx, "id")) },
+  { method: "GET", path: "/trust/ledgers/:id", handler: (ctx) => trust(ctx).ledger(ledgerId(ctx)) },
   {
     method: "GET",
     path: "/trust/ledgers/:id/print",
-    handler: (ctx) => html(ledgerStatementHtml(trust(ctx).ledger(intParam(ctx, "id")), qDate(ctx, "from"), qDate(ctx, "to"), firm(ctx))),
+    handler: (ctx) => html(ledgerStatementHtml(trust(ctx).ledger(ledgerId(ctx)), qDate(ctx, "from"), qDate(ctx, "to"), firm(ctx))),
   },
-  { method: "POST", path: "/trust/ledgers/:id/holds", handler: (ctx) => trust(ctx).placeHold(intParam(ctx, "id"), body(ctx), ctx.userId) },
+  { method: "POST", path: "/trust/ledgers/:id/holds", handler: (ctx) => trust(ctx).placeHold(ledgerId(ctx), body(ctx), ctx.userId) },
   { method: "POST", path: "/trust/holds/:id/release", handler: (ctx) => trust(ctx).releaseHold(intParam(ctx, "id"), body(ctx), ctx.userId) },
   { method: "GET", path: "/trust/matters/:id/ledgers", handler: (ctx) => trust(ctx).matterLedgers(intParam(ctx, "id")) },
 
@@ -205,3 +225,6 @@ export const routes: Route[] = [
     },
   },
 ];
+
+/** Client trust money is for attorneys and administrators only: staff get a 403 on every trust route. */
+export const routes: Route[] = trustRoutes.map((r) => ({ roles: ATTORNEYS, ...r }));
