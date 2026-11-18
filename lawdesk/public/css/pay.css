@@ -1,0 +1,689 @@
+/* Online payments and electronic signatures: staff cards and dialogs, and the client-facing
+   pay and sign pages. Tokens only (app.css :root); see docs/design-system.md. */
+
+/* ---------------------------------------------------------- staff screens */
+.share-box {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding: var(--sp-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.share-url-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.share-lock {
+  position: absolute;
+  left: 11px;
+  color: var(--success);
+  pointer-events: none;
+}
+.share-url {
+  width: 100%;
+  padding-left: 32px !important;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  background: var(--surface);
+}
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.share-actions a.btn {
+  text-decoration: none;
+}
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+}
+.note .icon {
+  margin-top: 2px;
+  flex: none;
+}
+.pay-amount-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.pay-amount-input input {
+  width: 100%;
+  padding-left: 24px !important;
+  font-variant-numeric: tabular-nums;
+}
+.pay-unit {
+  position: absolute;
+  left: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* matter page cards */
+.pay-list,
+.sign-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pay-list > li,
+.sign-list > li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.pay-list > li:last-child,
+.sign-list > li:last-child {
+  border-bottom: 0;
+}
+.pay-what {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.pay-inv {
+  font-weight: 600;
+}
+.pay-due {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.pay-attention {
+  padding: var(--sp-3) var(--sp-5);
+}
+.card-body > .pay-attention:first-child {
+  padding: 0;
+}
+.pay-attention ul {
+  display: grid;
+  gap: var(--sp-2);
+  margin: var(--sp-1) 0 0;
+}
+.pay-attention li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  color: var(--text);
+}
+.pay-attention li > span {
+  flex: 1 1 200px;
+}
+.pay-trust {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.linklike {
+  display: grid;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sign-doc {
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.sign-sub {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.linklike:hover .sign-doc {
+  color: var(--link);
+  text-decoration: underline;
+}
+.linklike:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-xs);
+}
+
+/* settings sections */
+.pay-settings {
+  max-width: 640px;
+}
+.pay-status {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: var(--sp-2);
+}
+.pay-status h3 {
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+.pay-status p,
+.pay-status ul {
+  margin: 0;
+}
+.pay-status ul {
+  display: grid;
+  gap: 6px;
+}
+.pay-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.pay-check .icon {
+  flex: none;
+  margin-top: 2px;
+}
+.pay-check .ok {
+  color: var(--success);
+}
+.pay-check .bad {
+  color: var(--warning);
+}
+.pay-check .off {
+  color: var(--faint);
+}
+.pay-status code {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  background: var(--surface-3);
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  overflow-wrap: anywhere;
+}
+
+/* signature request dialog */
+.sign-req-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.audit-table {
+  width: 100%;
+  margin: var(--sp-3) 0;
+  font-size: var(--fs-sm);
+}
+.audit-table td {
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.sign-chain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.sign-chain.ok .icon {
+  color: var(--success);
+}
+
+/* ----------------------------------------------- public pages (no app shell) */
+body.public {
+  background: var(--bg);
+  min-height: 100vh;
+}
+.public-page {
+  max-width: none;
+  margin: 0;
+  padding: 0 0 var(--sp-12);
+}
+.public-head {
+  background: var(--brand-900);
+  color: var(--side-text-strong);
+  border-bottom: 3px solid var(--accent-500);
+  padding: var(--sp-6) var(--sp-4) 88px;
+}
+.public-head-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+.public-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.public-monogram {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--r-md);
+  border: 1px solid var(--accent-500);
+  color: var(--accent-300);
+  font-weight: 650;
+  font-size: var(--fs-md);
+  letter-spacing: 0.04em;
+}
+.public-brand-text {
+  display: grid;
+  min-width: 0;
+}
+.public-firm {
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--side-text-strong);
+  overflow-wrap: anywhere;
+}
+.public-kind {
+  font-size: var(--fs-sm);
+  color: var(--side-text);
+}
+.public-secure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  background: var(--side-active);
+  color: var(--side-text);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+}
+.public-card {
+  position: relative;
+  max-width: 640px;
+  margin: -64px auto 0;
+  padding: var(--sp-8);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+}
+.public-card h1 {
+  font-size: var(--fs-2xl);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 0 0 var(--sp-2);
+}
+.public-status {
+  display: inline-grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--sp-4);
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--muted);
+}
+.tone-success .public-status {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.tone-warning .public-status {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.tone-danger .public-status {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.public-lead {
+  margin: 0 0 var(--sp-5);
+  font-size: var(--fs-lg);
+  color: var(--text-2);
+}
+.public-fine {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.public-cta {
+  width: 100%;
+  justify-content: center;
+}
+.public-card .error-text:not(:empty) {
+  margin: var(--sp-3) 0 0;
+}
+.public-foot {
+  max-width: 640px;
+  margin: var(--sp-6) auto 0;
+  padding: 0 var(--sp-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+.public-foot-line,
+.public-powered {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.public-powered img {
+  display: block;
+  height: 16px;
+  width: auto;
+}
+.test-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-5);
+  padding: var(--sp-3);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--r-md);
+  color: var(--warning);
+  font-size: var(--fs-sm);
+}
+.test-banner .icon {
+  flex: none;
+  margin-top: 2px;
+}
+.public-head-test {
+  background: var(--gray-800);
+  border-bottom-color: var(--gray-500);
+}
+
+.pay-summary {
+  margin: 0 0 var(--sp-6);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.pay-summary-amount {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-5);
+  background: var(--brand-50);
+}
+.pay-summary-label {
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-600);
+}
+.pay-amount {
+  font-size: 36px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-800);
+}
+.pay-summary-facts {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-5);
+}
+.pay-summary-facts > div {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+.pay-summary-facts > div + div {
+  border-top: 1px solid var(--border);
+}
+.pay-summary-facts dt {
+  color: var(--muted);
+}
+.pay-summary-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+.test-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+/* signing steps */
+.sign-step {
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+.sign-step.upcoming {
+  opacity: 0.55;
+}
+.sign-step-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-lg);
+  font-weight: 650;
+}
+.sign-num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.sign-num.current {
+  border-color: var(--brand-800);
+  background: var(--brand-800);
+  color: var(--primary-text);
+}
+.sign-num.done {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.sign-message {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border-left: 3px solid var(--accent-500);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: var(--surface-2);
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.sign-message-from {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--muted);
+  white-space: normal;
+}
+.sign-doc-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.sign-doc-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--r-md);
+  background: var(--brand-50);
+  color: var(--brand-600);
+}
+.sign-doc-text {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.sign-doc-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.sign-doc-hint {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.sign-preview {
+  margin-top: var(--sp-3);
+}
+.sign-preview summary {
+  cursor: pointer;
+  color: var(--link);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+}
+.sign-text {
+  max-height: 360px;
+  overflow: auto;
+  margin: var(--sp-2) 0 0;
+  white-space: pre-wrap;
+  font-family: var(--font);
+  font-size: var(--fs-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+}
+.consent-text {
+  max-height: 340px;
+  overflow: auto;
+  padding: var(--sp-1) var(--sp-4);
+  margin-bottom: var(--sp-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.consent-text h3 {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+.sign-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 var(--sp-2) 26px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.sign-hint[hidden] {
+  display: none;
+}
+.form-actions.left {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: var(--sp-4);
+}
+.sign-label {
+  margin: var(--sp-4) 0;
+}
+.sign-label input {
+  max-width: 420px;
+  font-size: var(--fs-lg);
+}
+.sig-wrap {
+  position: relative;
+  max-width: 480px;
+}
+.sig-pad {
+  display: block;
+  width: 100%;
+  aspect-ratio: 10 / 3;
+  height: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-input);
+  border-radius: var(--r-md);
+  touch-action: none;
+  cursor: crosshair;
+}
+.sig-line {
+  position: absolute;
+  left: var(--sp-4);
+  right: var(--sp-4);
+  bottom: 22%;
+  border-top: 1px solid var(--border-strong);
+  padding-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--faint);
+  pointer-events: none;
+}
+.sig-clear {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.public .check-line {
+  margin: var(--sp-2) 0;
+}
+
+@media (max-width: 640px) {
+  .public-head {
+    padding: var(--sp-4) var(--sp-4) 76px;
+  }
+  .public-monogram {
+    width: 34px;
+    height: 34px;
+  }
+  .public-firm {
+    font-size: var(--fs-lg);
+  }
+  .public-secure span {
+    display: none;
+  }
+  .public-card {
+    margin: -60px var(--sp-3) 0;
+    padding: var(--sp-5) var(--sp-4);
+  }
+  .pay-amount {
+    font-size: 30px;
+  }
+  .pay-summary-facts > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .test-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .pay-list > li,
+  .sign-list > li {
+    flex-wrap: wrap;
+  }
+}
