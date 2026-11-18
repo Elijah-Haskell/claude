@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS activity (
   id INTEGER PRIMARY KEY,
   at TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),
-  matter_id INTEGER REFERENCES matters(id) ON DELETE CASCADE,
+  matter_id INTEGER REFERENCES matters(id),   -- no cascade: a matter with history can't be deleted
   task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
   kind TEXT NOT NULL,
   detail TEXT
